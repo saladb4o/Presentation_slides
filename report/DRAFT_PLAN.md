@@ -120,7 +120,9 @@ That distinction is the section.
 4. **§6**, then trim to budget.
 5. **§5 last**, when the guest-lecture notes exist.
 6. **References**, RMIT Harvard, from `03_SOURCES` — the Harvard string is already
-   built for all 22 sources, so this is transcription, not composition.
+   built for all 23 sources, so this is transcription, not composition.
+   Two of them (NB2, IMR1) are flagged REFERENCE_ONLY: they support argument
+   but no workbook value, so cite them only if the prose actually uses them.
 7. **AI Use and Validation Appendix**, from `08_AI_LOG`.
 
 ---
@@ -160,6 +162,7 @@ Class group is still a placeholder.
 | §5 guest lecture content | **Hard blocker** — 8 marks, cannot be drafted |
 | Class group code for the filename | Needed |
 | SDG choice | SDG 8 recommended, awaiting your call |
-| Open v4 in real Excel | Charts verified structurally, never seen rendered |
+| Open the workbook in real Excel | Charts verified structurally and audited in the raw XML, never seen rendered. 11 charts, F5_EU27 (28 bars) and F9 most worth checking |
 | 16 `u`-flagged tin00110 values | Spot-check against the Eurostat databrowser |
 | Figure 6 expansion | **Done** — n=18, complete on X; nine states still lack the turnover measure |
+| Workbook audit | **Done** — independent audit of the .xlsx; data and statistics clean, seven traceability defects fixed, five new checks added |
