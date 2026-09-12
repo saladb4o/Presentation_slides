@@ -53,7 +53,7 @@ half-audited benefit. That sentence does more work than any other in the report.
 |---|---|---|---|---|
 | — | Title block, no abstract | — | — | — |
 | 1 | Context and the policy instrument | 300 | Table 1 (09_POLICY) | LOV nr 528/2012; citizens mandatory 1 Nov 2014; MitID required 22 Sep 2022; NemID retired 31 Oct 2023 |
-| 2 | Adoption → economic effect | 480 | **F1**, **F2**, **F6**, **F9** | Branches 2,025 → 665 (**−67.2%**, 2004–2024); cash 23% → **9%** (2017–2025); wallets **32%**; F6 **n=18**, slope **+0.602** (se 0.105, **t=5.75**), **R² 0.674**; institutions **−76.7%** vs employment **−29.4%** (1991–2024), staff per institution **233 → 706** |
+| 2 | Adoption → economic effect | 480 | **F1**, **F2**, **F6**, **F9** | Branches 2,025 → 665 (**−67.2%**, 2004–2024); cash 23% → **9%** (2017–2025); wallets **32%**; F6 **n=18**, slope **+0.602** (se 0.105, **t=5.75**, **95% CI [0.380, 0.824]**), **R² 0.674**; institutions **−76.7%** vs employment **−29.4%** (1991–2024), staff per institution **233 → 706** |
 | 3 | Denmark's digital economy vs the EU + SDG | 420 | **F3**, **F7** | E-sales turnover DK 17.05 → **33.31%** vs EU 16.43 → **19.49%**; SME digital intensity **92.45%** vs 71.39%; DPS citizen score **82.2 vs 84.64** (−2.44) |
 | 4 | Who is left behind | 420 | **F4**, **F10** | **4.7%** formally exempt (238,479 citizens) vs **16.5%** in difficulty vs **22%** upper-bound disadvantaged; skills 92.06% (16–24) vs **67.81%** (55–74); DK leads the EU in **all three** bands, gradient **24.25pp** vs EU **31.95pp** |
 | 5 | Guest lecture question | 320 | — | **BLOCKED** — needs the speaker's content |
@@ -75,7 +75,8 @@ against the other two.
 regression showing more adoption → more economic effect. F6 is now a genuine
 regression: **n=18**, slope **+0.602 pp of enterprise turnover per pp of consumer
 adoption**, standard error 0.105, **t = 5.75** on 16 degrees of freedom, **R² =
-0.674**. Quote all four.
+0.674**, **95% CI [0.380, 0.824]**. Quote the interval, not just the point estimate —
+on n=18 the point estimate alone overstates what is known.
 
 The tail-selection story is now an *asset* rather than a caveat, and §2 should
 spend two sentences on it. The earlier six-country sample drawn from a press
@@ -84,8 +85,28 @@ cross-section the slope barely moved while the fit fell by 0.18. That is a
 demonstration of selection bias measured on the report's own data — worth more
 than the R² itself.
 
-Denmark's residual is **+4.34pp**: it converts consumer adoption into enterprise
-e-commerce better than the EU pattern predicts. That is a finding §3 can use.
+**Denmark's residual is NOT a finding — do not use it.** An earlier version of this
+plan claimed Denmark "converts consumer adoption into enterprise e-commerce better
+than the EU pattern predicts." The residual distribution does not support that.
+Denmark's **+4.34pp** is **+0.97 residual standard errors** (RMSE 4.45) and ranks
+**4th of 18** — Belgium **+7.69**, Ireland **+6.31** and Italy **+5.51** all sit
+further above the line. A residual inside one standard error is ordinary. The
+defensible sentence is: *Denmark sits above the fitted line but within one standard
+error of it — consistent with the EU pattern, not exceptional to it.* F6 now carries
+this as a live row ("Denmark: residual in standard errors") so the claim cannot
+quietly return.
+
+**Two robustness results worth a sentence each in §2:**
+
+- **The missingness is not selective.** The nine states lacking Y average **75.67**
+  on adoption against the plotted eighteen's **77.23** — a difference of −1.57pp,
+  **p ≈ 0.71**. The dropped countries are indistinguishable from the plotted ones on
+  X, so the sample is missing on *Y availability*, not selected on the axis. This is
+  the direct answer to the obvious objection after the tail-selection discussion,
+  and F6 computes it live.
+- **The slope is stable under leave-one-out**, ranging **[0.516, 0.672]** across all
+  18 drops — never near zero, never sign-flipping. Ireland is most influential
+  (−0.086).
 
 **§3 carries the SDG.** Recommendation: **SDG 8** (Target 8.2, productivity through
 technological upgrading) — it sits on the e-sales and SME-intensity evidence the
@@ -165,4 +186,6 @@ Class group is still a placeholder.
 | Open the workbook in real Excel | Charts verified structurally and audited in the raw XML, never seen rendered. 11 charts, F5_EU27 (28 bars) and F9 most worth checking |
 | 16 `u`-flagged tin00110 values | Spot-check against the Eurostat databrowser |
 | Figure 6 expansion | **Done** — n=18, complete on X; nine states still lack the turnover measure |
+| Denmark residual overclaim | **Fixed** — was +0.97 SE and rank 4 of 18; claim cut from the plan and a live standardised-residual row added to F6 |
+| `compiled_date` provenance | **Fixed** — column renamed from `extraction_date`; it is a build constant, not a per-value retrieval date. Limitation entry added |
 | Workbook audit | **Done** — independent audit of the .xlsx; data and statistics clean, seven traceability defects fixed, five new checks added |

@@ -53,7 +53,7 @@ for name in EXPECTED:
 m = wb["02_MASTER"]
 headers = [c.value for c in m[1]]
 check(headers[:12] == ["obs_id", "series_code", "indicator", "geo", "year", "value",
-                       "unit", "denominator", "flag", "source_id", "extraction_date",
+                       "unit", "denominator", "flag", "source_id", "compiled_date",
                        "notes"], f"MASTER headers differ: {headers}")
 
 src_ids = {r[0].value for r in wb["03_SOURCES"].iter_rows(min_row=2, max_col=1)
@@ -70,7 +70,7 @@ for r in rows:
     check(bool(unit), f"obs {obs_id}: missing unit")
     check(bool(denom), f"obs {obs_id}: missing denominator")
     check(isinstance(val, (int, float)), f"obs {obs_id}: non-numeric value {val!r}")
-    check(bool(acc), f"obs {obs_id}: missing extraction_date")
+    check(bool(acc), f"obs {obs_id}: missing compiled_date")
     key = (code, geo, year)
     check(key not in seen, f"duplicate observation {key}")
     seen.add(key)
@@ -104,7 +104,8 @@ for name in FIG_SHEETS:
     bad = [f for f in formulas if "02_MASTER" not in f
            and not any(k in f for k in ("SLOPE(", "RSQ(", "CORREL(",
                                         "INTERCEPT(", "COUNT(", "STEYX(",
-                                        "DEVSQ("))]
+                                        "DEVSQ(", "TINV(", "AVERAGE(",
+                                        "TTEST("))]
     check(not bad, f"{name}: formulas not referencing MASTER: {bad[:3]}")
 
 # 6. CALC sheet is all formulas
@@ -151,7 +152,8 @@ for name in FIG_SHEETS + ["05_CALC"]:
                 # their own. Anything else with no lookup is a bug.
                 check(any(k in c.value for k in ("SLOPE(", "RSQ(", "CORREL(",
                                                  "INTERCEPT(", "COUNT(",
-                                                 "STEYX(", "DEVSQ(")),
+                                                 "STEYX(", "DEVSQ(", "TINV(",
+                                                 "AVERAGE(", "TTEST(")),
                       f"{name}!{c.coordinate}: formula has no parsable lookup")
                 continue
             for code, year in pairs:

@@ -370,8 +370,15 @@ def sheet_readme(wb):
 def sheet_master(wb):
     ws = wb.create_sheet("02_MASTER")
     cols = ["obs_id", "series_code", "indicator", "geo", "year", "value", "unit",
-            "denominator", "flag", "source_id", "extraction_date", "notes"]
+            "denominator", "flag", "source_id", "compiled_date", "notes"]
     header_row(ws, 1, cols, [8, 22, 46, 7, 7, 11, 12, 40, 6, 10, 14, 54])
+    # NOT an extraction date. This is one build-time constant written to every
+    # row, so it records when the workbook was compiled, not when each value was
+    # retrieved from its authority - those retrievals happened across several
+    # working sessions. The column was called extraction_date until an audit
+    # pointed out that the name asserted per-observation provenance the data
+    # does not carry. Retrieval dates per value would need an eleventh field in
+    # dataset.py, recorded at the time of retrieval; see 07_LIMITATIONS.
 
     for i, row in enumerate(OBS, start=1):
         code, ind, geo, year, val, unit, denom, flag, src, note = row
@@ -1228,6 +1235,19 @@ def sheet_f6(wb):
          "Slope divided by its standard error, on n-2 degrees of freedom. "
          "Above about 2.1 the slope is distinguishable from zero at the 5% "
          "level on this sample size."),
+        ("Slope 95% confidence interval, lower",
+         f"=SLOPE({yr},{xr})-TINV(0.05,COUNT({xr})-2)"
+         f"*(STEYX({yr},{xr})/SQRT(DEVSQ({xr})))", N_THREE,
+         "Lower bound. The interval excludes zero, which is the claim the "
+         "t-statistic makes in interval form."),
+        ("Slope 95% confidence interval, upper",
+         f"=SLOPE({yr},{xr})+TINV(0.05,COUNT({xr})-2)"
+         f"*(STEYX({yr},{xr})/SQRT(DEVSQ({xr})))", N_THREE,
+         "Upper bound. Quote the interval, not just the point estimate - on "
+         "n=18 the point estimate alone overstates what is known."),
+        ("Residual standard error (RMSE)", f"=STEYX({yr},{xr})", N_DEC,
+         "Typical vertical distance of a country from the line. The yardstick "
+         "for judging whether any one country's residual is unusual."),
         ("Denmark: actual Y", lookup("DK.ECM.ENT.TRN", 2024), N_DEC,
          "Denmark's observed value."),
         ("Denmark: fitted Y",
@@ -1237,8 +1257,17 @@ def sheet_f6(wb):
          f"={lookup('DK.ECM.ENT.TRN', 2024)[1:]}-(INTERCEPT({yr},{xr})"
          f"+SLOPE({yr},{xr})*{lookup('DK.ECM.IND.BUY', 2024)[1:]})",
          N_SIGNED,
-         "Positive: Denmark converts adoption into commercial activity better "
-         "than the EU pattern predicts. Negative: worse."),
+         "Distance from the line, in percentage points. On its own this says "
+         "little - read the next row instead."),
+        ("Denmark: residual in standard errors",
+         f"=({lookup('DK.ECM.ENT.TRN', 2024)[1:]}-(INTERCEPT({yr},{xr})"
+         f"+SLOPE({yr},{xr})*{lookup('DK.ECM.IND.BUY', 2024)[1:]}))"
+         f"/STEYX({yr},{xr})", N_SIGNED,
+         "THE TEST THAT MATTERS. Denmark sits above the line, but by less than "
+         "one residual standard error, and three countries sit further above "
+         "it. Denmark is CONSISTENT WITH the EU pattern, not exceptional to "
+         "it. Do not claim Denmark converts adoption into commercial activity "
+         "better than the pattern predicts - this figure does not support it."),
     ]
     for label, formula, fmt, reading in stats:
         ws.cell(row=r, column=1, value=label).font = T_BODY
@@ -1313,8 +1342,10 @@ def sheet_f6(wb):
         ws.cell(row=r, column=1,
                 value="AWAITING DATA - not plotted").font = T_SUB
         r += 1
-        header_row(ws, r, ["country", "code", "missing"], [20, 8, 74])
+        header_row(ws, r, ["country", "code", "missing",
+                           "X: adoption (%)"], [20, 8, 74, 16])
         r += 1
+        awaiting_x_first = r + len(awaiting_x)
         for geo in awaiting_x:
             ws.cell(row=r, column=1, value=COUNTRIES[geo]).font = T_BODY
             ws.cell(row=r, column=2, value=geo).font = T_MONO
@@ -1332,8 +1363,46 @@ def sheet_f6(wb):
                         value=f"Y - add {geo}.ECM.ENT.TRN for 2024 (Eurostat "
                               f"tin00110)")
             c.font, c.fill = T_SMALL, F_GAP
+            # These countries lack Y, but they DO hold X - and that is testable
+            # evidence, not merely a to-do list. If the nine dropped states sat
+            # systematically high or low on adoption, the n=18 sample would be
+            # selected on X and the whole tail-selection argument above would
+            # collapse into the same error in a new costume.
+            xc = ws.cell(row=r, column=4, value=lookup(f"{geo}.ECM.IND.BUY",
+                                                       2024))
+            xc.font, xc.fill, xc.number_format = T_BODY, F_CALC, N_DEC
+            for j in range(1, 5):
+                ws.cell(row=r, column=j).border = BOX
+            r += 1
+
+        # --- is the missingness selective? ----------------------------------
+        ax = f"$D${awaiting_x_first}:$D${r - 1}"
+        r += 1
+        ws.cell(row=r, column=1,
+                value="IS THE MISSINGNESS SELECTIVE?").font = T_SUB
+        r += 1
+        for label, formula, reading in [
+            ("Mean adoption, plotted", f"=AVERAGE({xr})",
+             "Average X across the countries actually in the regression."),
+            ("Mean adoption, awaiting", f"=AVERAGE({ax})",
+             "Average X across the countries dropped for want of Y."),
+            ("Difference", f"=AVERAGE({ax})-AVERAGE({xr})",
+             "Percentage points. Near zero is the result you want."),
+            ("p-value, two-sample t-test", f"=TTEST({xr},{ax},2,2)",
+             "THE TEST. A large p-value means the dropped countries are not "
+             "distinguishable from the plotted ones on adoption, so the sample "
+             "is missing on Y availability rather than selected on X. This is "
+             "what separates this figure from the tail-selected version it "
+             "replaced - there, selection WAS on the axis."),
+        ]:
+            ws.cell(row=r, column=1, value=label).font = T_BODY
+            c = ws.cell(row=r, column=2, value=formula)
+            c.font, c.fill, c.number_format = T_BODY, F_CALC, N_THREE
+            rd = ws.cell(row=r, column=3, value=reading)
+            rd.font, rd.alignment = T_SMALL, WRAP
             for j in range(1, 4):
                 ws.cell(row=r, column=j).border = BOX
+            ws.row_dimensions[r].height = 30
             r += 1
 
     source_note(ws, r + 1,
@@ -1878,6 +1947,18 @@ def sheet_limitations(wb):
     title_block(ws, "Data quality statement", "Read before citing any value.")
 
     items = [
+        ("Compiled date is not a per-value retrieval date",
+         "02_MASTER carries a compiled_date column holding a single build-time "
+         "constant, identical on all 113 rows. It records when this workbook "
+         "was generated, NOT when each value was retrieved from its authority - "
+         "those retrievals were made across several working sessions on "
+         "different days. The column was named extraction_date until an audit "
+         "of the generated file found that the name claimed per-observation "
+         "provenance the data does not hold. It is renamed rather than "
+         "back-filled, because inventing plausible retrieval dates would be "
+         "precisely the fabrication this workbook exists to avoid. Recording "
+         "true retrieval dates requires capturing them at retrieval time, in "
+         "dataset.py, which is the correct fix and is not retrospective."),
         ("No inferential statistics",
          "The longest series here has six observations. Regression, cointegration "
          "and Granger-causality procedures require far more, and any such result on "
