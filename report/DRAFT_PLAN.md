@@ -53,7 +53,7 @@ half-audited benefit. That sentence does more work than any other in the report.
 |---|---|---|---|---|
 | — | Title block, no abstract | — | — | — |
 | 1 | Context and the policy instrument | 300 | Table 1 (09_POLICY) | LOV nr 528/2012; citizens mandatory 1 Nov 2014; MitID required 22 Sep 2022; NemID retired 31 Oct 2023 |
-| 2 | Adoption → economic effect | 480 | **F1**, **F2**, **F6** | Branches 2,025 → 665 (**−67.2%**, 2004–2024); cash 23% → **9%** of in-store payments (2017–2025); wallets **32%**; F6 cross-section, slope reported, **R² withheld** |
+| 2 | Adoption → economic effect | 480 | **F1**, **F2**, **F6** | Branches 2,025 → 665 (**−67.2%**, 2004–2024); cash 23% → **9%** of in-store payments (2017–2025); wallets **32%**; F6 now **n=18**, slope **+0.602** (se 0.105, **t=5.75**), **R² 0.674** |
 | 3 | Denmark's digital economy vs the EU + SDG | 420 | **F3**, **F7** | E-sales turnover DK 17.05 → **33.31%** vs EU 16.43 → **19.49%**; SME digital intensity **92.45%** vs 71.39%; DPS citizen score **82.2 vs 84.64** (−2.44) |
 | 4 | Who is left behind | 420 | **F4** | **4.7%** formally exempt (238,479 citizens) vs **16.5%** in difficulty vs **22%** upper-bound disadvantaged; skills 92.06% (16–24) vs **67.81%** (55–74) |
 | 5 | Guest lecture question | 320 | — | **BLOCKED** — needs the speaker's content |
@@ -63,11 +63,20 @@ half-audited benefit. That sentence does more work than any other in the report.
 ### Notes on the harder sections
 
 **§2 is the lecturer's exhibit.** The requirement was an x–y relationship or a
-regression showing more adoption → more economic effect. F6 is that chart. But the
-sample is six countries selected from both tails, which inflates r and R² by
-construction — so the draft **reports the slope and the direction, states the
-selection problem in one sentence, and does not quote R²**. That restraint is
-worth more marks than a fake 0.9.
+regression showing more adoption → more economic effect. F6 is now a genuine
+regression: **n=18**, slope **+0.602 pp of enterprise turnover per pp of consumer
+adoption**, standard error 0.105, **t = 5.75** on 16 degrees of freedom, **R² =
+0.674**. Quote all four.
+
+The tail-selection story is now an *asset* rather than a caveat, and §2 should
+spend two sentences on it. The earlier six-country sample drawn from a press
+release reported **R² 0.853 with a slope of +0.655**; on the complete
+cross-section the slope barely moved while the fit fell by 0.18. That is a
+demonstration of selection bias measured on the report's own data — worth more
+than the R² itself.
+
+Denmark's residual is **+4.34pp**: it converts consumer adoption into enterprise
+e-commerce better than the EU pattern predicts. That is a finding §3 can use.
 
 **§3 carries the SDG.** Recommendation: **SDG 8** (Target 8.2, productivity through
 technological upgrading) — it sits on the e-sales and SME-intensity evidence the
@@ -140,4 +149,4 @@ Class group is still a placeholder.
 | SDG choice | SDG 8 recommended, awaiting your call |
 | Open v4 in real Excel | Charts verified structurally, never seen rendered |
 | 16 `u`-flagged tin00110 values | Spot-check against the Eurostat databrowser |
-| Figure 6 expansion (`isoc_ec_ib20`, 2024) | Optional — raises n from 6 to ~18 and removes the tail-selection bias |
+| Figure 6 expansion | **Done** — n=18, complete on X; nine states still lack the turnover measure |

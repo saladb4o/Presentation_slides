@@ -65,14 +65,23 @@ the pass silently:
 
 Append rows to `OBS` in `dataset.py` using the existing 10-column shape, add any
 new source to `SOURCES` in `sources.py`, then rebuild and verify. To extend the
-EU cross-section on `F5_EU8`, add rows under series codes matching
+EU cross-section on `F5_EU27`, add rows under series codes matching
 `XX.ECM.IND.BUY`; the sheet and its chart expand automatically.
 
-To extend the Figure 6 cross-section, retrieve Eurostat `isoc_ec_ib20` for 2024
-for all 27 member states. `F6_ADOPT_BENEFIT` names every country still missing
-and the exact series code for each, and recomputes the pairing at build time —
-so adding rows moves countries into the plotted table automatically. Doing this
-also removes the tail-selection bias documented on that sheet.
+The adoption measure (`XX.ECM.IND.BUY`, 2024) is now complete for all 27 member
+states from the `isoc_ec_ib20` databrowser extract (`ES7`), so `F5_EU27` is a
+full EU ranking and Figure 6 no longer carries a tail-selection bias. What
+remains incomplete is the outcome measure: nine member states hold adoption but
+not `XX.ECM.ENT.TRN`, and `F6_ADOPT_BENEFIT` names each one with its exact
+series code. `cross_section()` in `dataset.py` recomputes the pairing at build
+time, so adding those rows moves countries into the plotted table, raises `n`,
+and updates the OLS statistics without touching the build script.
+
+Prefer a databrowser extract to a press release. A press release names the
+countries that make a story — the top, the bottom, a couple of movers — which is
+a sample drawn from the tails. `F6_ADOPT_BENEFIT` keeps the measured cost of
+having done that once: the tail-only sample reported R² 0.853 against 0.674 on
+the complete cross-section, while the slope moved only from +0.655 to +0.602.
 
 ## Corrections are recorded, not erased
 

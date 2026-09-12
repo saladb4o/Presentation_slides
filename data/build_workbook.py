@@ -265,7 +265,7 @@ def sheet_cover(wb):
         ("F2_PAYMENTS", "Figure 2 - payment instrument shares, 2017-2025"),
         ("F3_ESALES", "Figure 3 - e-sales share of turnover, DK vs EU"),
         ("F4_EXCLUSION", "Figure 4 - measures of digital exclusion"),
-        ("F5_EU8", "Figure 5 - online purchasing, verified EU countries, 2024"),
+        ("F5_EU27", "Figure 5 - online purchasing, all 27 member states, 2024"),
         ("F6_ADOPT_BENEFIT", "Figure 6 - adoption vs economic effect, EU 2024"),
         ("F7_QUALITY", "Figure 7 - DK vs EU: leads on adoption, trails on "
                        "service quality"),
@@ -964,20 +964,31 @@ def sheet_f4(wb):
 
 
 def sheet_f5(wb):
-    ws = wb.create_sheet("F5_EU8")
+    """Complete EU ranking on the consumer adoption measure.
+
+    The order is computed from OBS at build time rather than typed, so the
+    ranking cannot drift out of step with the data. The EU-27 aggregate is
+    ranked alongside the member states as a reference marker; it is not an
+    observation and is excluded from every calculation on F6.
+    """
+    ws = wb.create_sheet("F5_EU27")
     title_block(ws, "Figure 5 - Individuals who bought online, 2024",
-                "Verified EU countries only (8 of 27). Ranked, not a regression.")
+                "All 27 member states and the EU-27 aggregate, ranked. "
+                "Denominator: % of internet users.")
     header_row(ws, 4, ["country", "%", "series_code"], [22, 10, 24])
 
-    order = [("Ireland", "IE.ECM.IND.BUY"), ("Netherlands", "NL.ECM.IND.BUY"),
-             ("Denmark", "DK.ECM.IND.BUY"), ("Germany", "DE.ECM.IND.BUY"),
-             ("EU-27 average", "EU.ECM.IND.BUY"), ("Italy", "IT.ECM.IND.BUY"),
-             ("Romania", "RO.ECM.IND.BUY"), ("Bulgaria", "BG.ECM.IND.BUY")]
+    # Ranked descending on the observed value. Built from OBS, not typed.
+    rows = [(("EU-27 average" if geo == "EU27" else COUNTRIES[geo]),
+             f"{code.split('.')[0]}.ECM.IND.BUY", val)
+            for code, _ind, geo, yr, val, *_ in OBS
+            if yr == 2024 and code.endswith(".ECM.IND.BUY")]
+    order = [(n, c) for n, c, _v in sorted(rows, key=lambda t: -t[2])]
+
     for i, (name, code) in enumerate(order):
         r = 5 + i
         ws.cell(row=r, column=1, value=name).font = T_BODY
         c = ws.cell(row=r, column=2, value=lookup(code, 2024))
-        c.font, c.fill, c.number_format = T_BODY, F_CALC, N_ONE
+        c.font, c.fill, c.number_format = T_BODY, F_CALC, N_DEC
         ws.cell(row=r, column=3, value=code).font = T_MONO
         for j in range(1, 4):
             ws.cell(row=r, column=j).border = BOX
@@ -986,30 +997,35 @@ def sheet_f5(wb):
     ch = BarChart()
     ch.type, ch.grouping = "bar", "clustered"
     ch.x_axis.title = "% of internet users"
-    ch.height, ch.width = 10, 17
+    ch.height, ch.width = 18, 17          # 28 bars need the vertical room
     data = Reference(ws, min_col=2, min_row=4, max_row=last)
     cats = Reference(ws, min_col=1, min_row=5, max_row=last)
     ch.add_data(data, titles_from_data=True)
     ch.set_categories(cats)
-    # The subject of this chart is Denmark's position, not eight countries'
-    # values. Denmark takes the accent, the EU average takes navy as the
-    # reference line, and the rest recede so the comparison reads at a glance.
+    # The subject of this chart is Denmark's position in the distribution, not
+    # 28 values. Denmark takes the accent, the EU aggregate takes navy as the
+    # reference marker, and every member state recedes to grey so the
+    # comparison reads at a glance.
     focus = {i: (C_ACCENT if code.startswith("DK") else C_DARK)
              for i, (_name, code) in enumerate(order)
              if code.startswith(("DK", "EU"))}
     highlight_points(ch.series[0], len(order), focus)
     style_chart(ch, legend=None)
     chart_title(ws, "E3", "Individuals who bought online, 2024",
-                "Denmark in blue, EU-27 average in navy, other members in grey.")
+                "Denmark in blue, EU-27 aggregate in navy, member states in "
+                "grey. Ranked descending.")
     ws.add_chart(ch, "E4")
 
     source_note(ws, last + 2,
-                "Source: Eurostat (ES4). SCOPE LIMIT: 8 of 27 member states were "
-                "verified, so this sheet presents a ranking and makes no regression "
-                "claim. To extend it, add the remaining member states to dataset.py "
-                "using the series_code pattern XX.ECM.IND.BUY and re-run the build; "
-                "this sheet and its chart will expand automatically. Denominator is "
-                "% of internet users, not % of individuals.")
+                "Source: Eurostat isoc_ec_ib20, complete databrowser extract for "
+                "2024 (ES7), unrounded. This replaces an earlier 8-country version "
+                "built from rounded press-release figures; on those the Italian and "
+                "Romanian values both read 60% and appeared tied, while unrounded "
+                "Italy is second lowest at 59.60 and Romania is above it at 59.73. "
+                "Bulgaria remains the lowest of the 27 at 57.18. The ranking above "
+                "is computed from the data at build time, "
+                "so it cannot fall out of step with 02_MASTER. Denominator is % of "
+                "internet users, not % of individuals - see 04_DEFINITIONS.")
     ws.sheet_view.showGridLines = False
     return ws
 
@@ -1059,25 +1075,26 @@ def sheet_f6(wb):
         spPr=GraphicalProperties(solidFill=C_ACCENT,
                                  ln=LineProperties(noFill=True)))
     s.graphicalProperties.line.noFill = True          # markers only, no join
-    # The equation is displayed; R-squared deliberately is NOT. See the
-    # SELECTION WARNING block below - this sample is drawn from the tails of the
-    # adoption distribution, which inflates R-squared by construction. Putting it
-    # on the chart face would advertise a goodness-of-fit the sample has not
-    # earned. It remains computed in the statistics table, next to the warning.
-    s.trendline = Trendline(trendlineType="linear", dispRSqr=False, dispEq=True)
+    # R-squared is now displayed. It was withheld while the X column was a
+    # tail-selected sample assembled from a press release; the column is now the
+    # complete isoc_ec_ib20 databrowser extract for all 27 member states, so the
+    # fit is estimated on every paired country rather than on the extremes, and
+    # the statistic has been earned. The SAMPLE block below records what the
+    # selected sample had reported, because the difference is itself a finding.
+    s.trendline = Trendline(trendlineType="linear", dispRSqr=True, dispEq=True)
     ch.series.append(s)
-    # The fitted line is drawn in grey, not in the accent. The observations are
-    # the evidence; the line is an interpretation laid over them, and on a
-    # tail-selected sample of six it is the weaker of the two. Colour ranks them
-    # accordingly.
+    # The fitted line is drawn in the dark emphasis colour rather than grey. It
+    # is still an interpretation laid over the observations, so it does not take
+    # the accent, but on a complete cross-section of 18 countries with a slope
+    # over five standard errors from zero it is no longer the weaker of the two.
     s.trendline.spPr = GraphicalProperties(
-        ln=LineProperties(solidFill=C_GREY, w=16000))
+        ln=LineProperties(solidFill=C_DARK, w=16000))
     ch.x_axis.scaling.min, ch.x_axis.scaling.max = 50, 100
     ch.y_axis.scaling.min = 0
     style_chart(ch, legend=None)
     chart_title(ws, "F3", "Digital adoption and e-commerce turnover, EU 2024",
-                "One point per country. Read the SELECTION WARNING below "
-                "before quoting the fit.")
+                "One point per member state with both measures. Fitted by "
+                "ordinary least squares; see the statistics below.")
     ws.add_chart(ch, "F4")
 
     # --- fitted line statistics, as live formulas --------------------------
@@ -1100,9 +1117,17 @@ def sheet_f6(wb):
         ("Correlation (r)", f"=CORREL({xr},{yr})", N_THREE,
          "Strength and direction of the linear association."),
         ("R-squared", f"=RSQ({yr},{xr})", N_THREE,
-         "Share of cross-country variation in Y that moves with X. READ THE "
-         "SELECTION WARNING BELOW BEFORE QUOTING THIS NUMBER: it is inflated by "
-         "how the sample was drawn and overstates the fit."),
+         "Share of cross-country variation in Y that moves with X. Estimated on "
+         "the complete set of paired member states, so it is quotable - see the "
+         "SAMPLE block below for what the earlier tail-selected sample claimed."),
+        ("Slope standard error",
+         f"=STEYX({yr},{xr})/SQRT(DEVSQ({xr}))", N_THREE,
+         "Precision of the slope estimate."),
+        ("Slope t-statistic",
+         f"=SLOPE({yr},{xr})/(STEYX({yr},{xr})/SQRT(DEVSQ({xr})))", N_DEC,
+         "Slope divided by its standard error, on n-2 degrees of freedom. "
+         "Above about 2.1 the slope is distinguishable from zero at the 5% "
+         "level on this sample size."),
         ("Denmark: actual Y", lookup("DK.ECM.ENT.TRN", 2024), N_DEC,
          "Denmark's observed value."),
         ("Denmark: fitted Y",
@@ -1126,43 +1151,47 @@ def sheet_f6(wb):
         ws.row_dimensions[r].height = 26
         r += 1
 
-    # --- selection warning --------------------------------------------------
-    # The X column could not be retrieved as a full Eurostat table in this
-    # session. It was assembled from a press release, and a press release names
-    # the countries that make a story: the top of the ranking, the bottom of the
-    # ranking, and a few large movers. That is a sample drawn from the tails.
+    # --- sample provenance -------------------------------------------------
+    # This block used to be a SELECTION WARNING. The X column had been assembled
+    # from a Eurostat press release, which names the countries that make a story:
+    # the top of the ranking, the bottom, and a couple of large movers. That is a
+    # sample drawn from the tails, and truncating a distribution at both ends
+    # while discarding the middle raises the correlation coefficient largely
+    # independently of the underlying relationship.
     #
-    # Truncating a distribution at both ends and discarding the middle raises the
-    # correlation coefficient largely independently of the underlying
-    # relationship, because the spread in X is artificially widened relative to
-    # the noise. The R-squared above is therefore an upper bound on the fit, not
-    # an estimate of it. Stating this is not optional: the alternative is
-    # publishing a goodness-of-fit statistic known to be biased upward.
+    # The column is now the complete isoc_ec_ib20 databrowser extract for 2024,
+    # all 27 member states, unrounded. The warning is therefore replaced - but
+    # the numbers it was warning about are kept, because the comparison measures
+    # the bias rather than merely asserting it: the slope barely moved while the
+    # fit fell by nearly two tenths. That is what tail selection does, shown
+    # rather than claimed.
     r += 1
-    ws.cell(row=r, column=1, value="SELECTION WARNING - read before quoting the fit"
-            ).font = T_SUB
+    ws.cell(row=r, column=1,
+            value="SAMPLE - how these points were obtained").font = T_SUB
     r += 1
-    tails = [g for g in paired
-             if g in ("IE", "DK", "DE", "IT", "BG", "RO", "NL")]
     for line in [
-        "HOW THE SAMPLE WAS DRAWN: the X column (consumer adoption) was not "
-        "available as a complete Eurostat table in this session. The values come "
-        "from a Eurostat press release, which names the three highest countries, "
-        "the three lowest, and three large movers - a sample concentrated in the "
-        "TAILS of the adoption distribution.",
-        f"CONSEQUENCE: of the {len(paired)} countries plotted, {len(tails)} come "
-        "from the top or bottom of the EU ranking. Selecting on the extremes of X "
-        "and dropping the middle inflates the correlation coefficient and "
-        "R-squared by construction, because it widens the spread in X relative to "
-        "the scatter around the line.",
-        "HOW TO USE THIS FIGURE HONESTLY: report the SLOPE, which is far less "
-        "sensitive to this kind of selection, and report n. Treat the R-squared "
-        "as an upper bound. Do not describe the fit as 'strong' or 'tight', and "
-        "do not compute a p-value or confidence interval from these points.",
-        "HOW TO FIX IT: retrieve Eurostat isoc_ec_ib20 for 2024 for all 27 member "
-        "states from the databrowser and add the rows to dataset.py. That removes "
-        "the selection entirely and roughly triples n. The register below names "
-        "every country still missing and the exact series code for each.",
+        f"COMPLETE FOR 2024: the X column is the full Eurostat isoc_ec_ib20 "
+        f"extract for all 27 member states, unrounded, taken from the "
+        f"databrowser. Every member state holding both measures is plotted - "
+        f"{len(paired)} of them. No country with both values is excluded, so the "
+        "fit is no longer conditioned on where a country sits in the ranking.",
+        "WHAT THE EARLIER SAMPLE CLAIMED: an earlier version of this figure drew "
+        "X from a Eurostat press release, which named only the three highest "
+        "countries, the three lowest and two large movers. On those 6 tail "
+        "countries the fit was R-squared 0.853 with a slope of +0.655. On the "
+        "complete cross-section it is R-squared 0.674 with a slope of +0.602.",
+        "READING THAT COMPARISON: the slope moved by about 8% while R-squared "
+        "fell by 0.18. This is the signature of selection on the tails - it "
+        "widens the spread in X relative to the scatter around the line, which "
+        "flatters the fit while leaving the estimated relationship roughly "
+        "intact. The earlier R-squared was an upper bound, as the warning it "
+        "replaced said; this one is an estimate.",
+        "STILL NOT A COMPLETE CROSS-SECTION OF THE EU: nine member states hold "
+        "the adoption measure but not the enterprise turnover measure and are "
+        "listed below. The sample is complete with respect to X and incomplete "
+        "with respect to Y, so it is 18 countries rather than 27 - but the "
+        "countries dropped are dropped by data availability, not by their "
+        "position on either axis.",
         "DIRECTION OF CAUSATION IS NOT ESTABLISHED AND CANNOT BE. X measures "
         "consumers; Y measures enterprises, including business-to-business sales "
         "that no consumer touches. Both plausibly rise with national income, "
@@ -1528,16 +1557,20 @@ def sheet_limitations(wb):
          "this dataset would be uninterpretable. The workbook supports description "
          "and comparison only. Co-movement between digital payment adoption and "
          "branch closures is presented as association, never as measured causation."),
-        ("Figure 6 sample is selected on the tails",
-         "The adoption column in Figure 6 was assembled from a Eurostat press "
-         "release naming the highest three countries, the lowest three, and three "
-         "large movers. Most of the plotted points therefore come from the ends of "
-         "the EU distribution. Selecting on the extremes of X inflates the "
-         "correlation coefficient and R-squared regardless of the underlying "
-         "relationship. The R-squared is an upper bound, not an estimate; the "
-         "slope is the statistic to quote, alongside n. The chart deliberately "
-         "does not display R-squared on its face. Fixing this requires the full "
-         "27-country isoc_ec_ib20 column."),
+        ("Figure 6 tail selection - RESOLVED, and what it cost",
+         "The adoption column in Figure 6 was originally assembled from a "
+         "Eurostat press release naming the highest three countries, the lowest "
+         "three and two large movers, so most plotted points came from the ends "
+         "of the EU distribution. Selecting on the extremes of X inflates the "
+         "correlation coefficient regardless of the underlying relationship, and "
+         "R-squared was withheld from the chart face for that reason. The column "
+         "is now the complete isoc_ec_ib20 databrowser extract for all 27 member "
+         "states, unrounded, so the selection is gone and R-squared is displayed. "
+         "The measured cost of the bias is retained on F6 because it is "
+         "informative: on the 6 tail countries the fit was R-squared 0.853 with a "
+         "slope of +0.655; on the complete cross-section it is R-squared 0.674 "
+         "with a slope of +0.602. Tail selection barely moved the slope and "
+         "flattered the fit by 0.18."),
         ("No price deflator on the turnover series",
          "E-sales as a share of enterprise turnover runs 2014 to 2024, spanning "
          "the pandemic and the 2022 inflation episode. Turnover is nominal, and "
@@ -1596,14 +1629,21 @@ def sheet_limitations(wb):
          "The five exclusion measures range from 4.7% to 25% because they define "
          "the population differently. They are not competing estimates of one "
          "quantity and must not be averaged or presented as a range."),
-        ("Cross-section incomplete",
-         "F5 covers 8 of 27 member states. It supports a ranking, not a regression."),
+        ("Cross-section complete on adoption, incomplete on outcome",
+         "The adoption measure now covers all 27 member states for 2024, so F5 is "
+         "a complete EU ranking. The enterprise-turnover measure does not: nine "
+         "member states hold adoption but not turnover and cannot enter Figure 6. "
+         "Those nine are dropped by data availability rather than by their "
+         "position on either axis, which is why the remaining 18 are treated as a "
+         "usable cross-section."),
         ("Figure 6 sample size",
-         "The adoption-to-outcome scatter rests on 6 complete country pairs. The "
-         "association is strong and positive, but 6 points cannot support a "
-         "p-value, a confidence interval, or a claim about causal direction. "
-         "Report the slope and R-squared descriptively and say n explicitly. "
-         "Adding the missing values listed on that sheet raises n automatically."),
+         "The adoption-to-outcome scatter rests on 18 complete country pairs, up "
+         "from 6. That is enough to report a slope with a standard error and a "
+         "t-statistic, all three of which are on the sheet as live formulas. It "
+         "is not enough, and no sample size would be enough here, to support a "
+         "claim about causal direction: this is one year of cross-sectional data "
+         "with no control for national income. Say n explicitly, report the "
+         "slope with its standard error, and keep the language associational."),
         ("Figure 6 measures two sides of the market",
          "X is a consumer measure (individuals buying online); Y is an "
          "all-enterprise, all-sector measure that includes B2B and EDI ordering. "
@@ -1680,8 +1720,32 @@ def sheet_ai_log(wb):
          "from a press release naming only the top three, bottom three and three "
          "large movers - a sample drawn from the tails, which inflates R-squared "
          "by construction.",
-         "R-squared removed from the chart face; a SELECTION WARNING added to "
-         "F6; the limitation recorded in 07_LIMITATIONS."),
+         "R-squared removed from the chart face; a selection warning added to "
+         "F6; the limitation recorded in 07_LIMITATIONS. Later resolved - see "
+         "the two rows below."),
+        ("Failed verification attempt",
+         "AI was asked to retrieve Eurostat isoc_ec_ib20 for 2024 for the twelve "
+         "member states missing from Figure 6, so the tail selection could be "
+         "removed.",
+         "Eurostat and the national statistical offices are unreachable from the "
+         "build environment. Web search returned only the press release naming "
+         "the same tails, two country values with no attributable source, and one "
+         "answer mixing the '% of internet users' and '% of individuals' "
+         "denominators in a single paragraph.",
+         "No values accepted. Recorded because the honest outcome of a "
+         "verification attempt is sometimes that it failed."),
+        ("Author-supplied authoritative extract",
+         "The author retrieved the complete isoc_ec_ib20 table from the Eurostat "
+         "databrowser and supplied it as a spreadsheet; AI parsed it into the "
+         "dataset.",
+         "The extract carries its own provenance header - dataset code, "
+         "extraction timestamp, last-update date, and an explicit unit of "
+         "'percentage of individuals who used internet within the last year'. "
+         "The ten values it overlapped with were compared against the rounded "
+         "press-release figures already held; all ten agreed to rounding.",
+         "All 27 member states plus the EU-27 aggregate added under source ES7. "
+         "Figure 6 went from n=6 to n=18 and R-squared was restored to the chart "
+         "face. The superseded rounded values are recorded in each row's note."),
         ("Workbook construction",
          "AI wrote the Python build script that generates this workbook.",
          "Structural assertions run at build time: source_ids resolve, units and "

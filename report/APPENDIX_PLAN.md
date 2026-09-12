@@ -97,12 +97,27 @@ scheme's own 2026 pages showing pools open and a further pool opening
 *and* the argument. Recorded in `09_POLICY` and `07_LIMITATIONS`; a verification
 check **fails the build** if that record is ever removed.
 
-**(iii) A statistically flattering sample, self-audited.** Figure 6's adoption
-column had been assembled from a press release naming only the top three, bottom
-three and three large movers — **a sample drawn from both tails, which inflates
-R² by construction**. R² was removed from the chart face, a selection warning
-added to F6, and the limitation recorded. The chart now reports direction and
-slope only.
+**(iii) A statistically flattering sample, self-audited — then fixed, and the
+bias measured.** Figure 6's adoption column had been assembled from a press
+release naming only the top three, bottom three and two large movers — **a sample
+drawn from both tails, which inflates R² by construction**. R² was withheld from
+the chart face and the limitation recorded. The author then retrieved the
+complete `isoc_ec_ib20` table from the Eurostat databrowser, which closed the
+gap: **n rose from 6 to 18** and R² was restored.
+
+This is the strongest of the three, because the correction is *quantified* rather
+than asserted. The tail-only sample reported **R² 0.853, slope +0.655**; the
+complete cross-section gives **R² 0.674, slope +0.602**. The slope moved by about
+8% while the fit fell by 0.18 — the signature of selection on the tails, measured
+on the report's own data. Both results are kept on F6, and a verification check
+fails the build if either number is removed.
+
+A fourth case is worth one sentence: a **failed** verification. AI was asked to
+retrieve the twelve missing values and could not — Eurostat was unreachable, and
+search returned only the same press-release tails, two values with no
+attributable source, and one answer mixing the `% of internet users` and `% of
+individuals` denominators. Nothing was accepted. The honest outcome of a
+verification attempt is sometimes that it failed, and that is logged too.
 
 If space allows, one sentence noting that the AI-written verification suite also
 caught two defects in AI-written build code (uncoloured chart markers, eight
@@ -123,8 +138,11 @@ what could still be wrong **despite** the protocol:
   confirm the publication was correct.
 - **16 `u`-flagged values** (low reliability, Eurostat) are retained and
   flagged, not corrected.
-- Figure 6's sample remains tail-selected — the fix (`isoc_ec_ib20`, all 27
-  countries) is identified but not applied.
+- Figure 6 is complete on adoption but **not on the outcome measure**: nine
+  member states are absent because they lack enterprise-turnover data, so n=18
+  rather than 27.
+- The Danish adoption series **mixes precisions** — 2024 is unrounded from the
+  databrowser, 2019–2021 are rounded press-release figures.
 - No sampling error is reported anywhere in the workbook.
 
 End on the standard, and let it be judged against: *corrections are recorded,

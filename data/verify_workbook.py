@@ -20,12 +20,12 @@ PATH = os.path.join(
 EXPECTED = [
     "00_COVER", "01_README", "02_MASTER", "03_SOURCES", "04_DEFINITIONS",
     "05_CALC", "F1_BRANCHES", "F2_PAYMENTS", "F3_ESALES", "F4_EXCLUSION",
-    "F5_EU8", "F6_ADOPT_BENEFIT", "F7_QUALITY", "F8_SMVDIGITAL", "09_POLICY",
+    "F5_EU27", "F6_ADOPT_BENEFIT", "F7_QUALITY", "F8_SMVDIGITAL", "09_POLICY",
     "06_RETAIL_GAP", "07_LIMITATIONS", "08_AI_LOG",
 ]
 
 FIG_SHEETS = ["F1_BRANCHES", "F2_PAYMENTS", "F3_ESALES", "F4_EXCLUSION",
-              "F5_EU8", "F6_ADOPT_BENEFIT", "F7_QUALITY", "F8_SMVDIGITAL"]
+              "F5_EU27", "F6_ADOPT_BENEFIT", "F7_QUALITY", "F8_SMVDIGITAL"]
 
 failures = []
 checks = 0
@@ -59,7 +59,7 @@ src_ids = {r[0].value for r in wb["03_SOURCES"].iter_rows(min_row=2, max_col=1)
 check(len(src_ids) > 0, "SOURCES sheet has no source_ids")
 
 rows = list(m.iter_rows(min_row=2, values_only=True))
-check(len(rows) == 92, f"expected 92 observations, found {len(rows)}")
+check(len(rows) == 110, f"expected 110 observations, found {len(rows)}")
 
 seen = set()
 for r in rows:
@@ -101,7 +101,8 @@ for name in FIG_SHEETS:
     check(len(formulas) > 0, f"{name}: no formulas found")
     bad = [f for f in formulas if "02_MASTER" not in f
            and not any(k in f for k in ("SLOPE(", "RSQ(", "CORREL(",
-                                        "INTERCEPT(", "COUNT("))]
+                                        "INTERCEPT(", "COUNT(", "STEYX(",
+                                        "DEVSQ("))]
     check(not bad, f"{name}: formulas not referencing MASTER: {bad[:3]}")
 
 # 6. CALC sheet is all formulas
@@ -144,7 +145,8 @@ for name in FIG_SHEETS + ["05_CALC"]:
                 # ranges of lookup cells rather than performing a lookup of
                 # their own. Anything else with no lookup is a bug.
                 check(any(k in c.value for k in ("SLOPE(", "RSQ(", "CORREL(",
-                                                 "INTERCEPT(", "COUNT(")),
+                                                 "INTERCEPT(", "COUNT(",
+                                                 "STEYX(", "DEVSQ(")),
                       f"{name}!{c.coordinate}: formula has no parsable lookup")
                 continue
             for code, year in pairs:
@@ -157,7 +159,7 @@ check(resolved >= 40, f"only {resolved} lookups resolved; expected more")
 
 # 8. charts present
 expected_charts = {"F1_BRANCHES": 1, "F2_PAYMENTS": 2, "F3_ESALES": 1,
-                   "F4_EXCLUSION": 1, "F5_EU8": 1,
+                   "F4_EXCLUSION": 1, "F5_EU27": 1,
                    "F6_ADOPT_BENEFIT": 1, "F7_QUALITY": 1, "F8_SMVDIGITAL": 1}
 for name, n in expected_charts.items():
     check(len(wb[name]._charts) == n,
@@ -201,16 +203,29 @@ f6 = wb["F6_ADOPT_BENEFIT"]
 check(len(f6._charts) == 1, "F6 should have exactly one chart")
 tl = f6._charts[0].series[0].trendline
 check(tl is not None, "F6 trendline missing")
-check(not tl.dispRSqr,
-      "F6 chart displays R-squared on its face; the sample is tail-selected "
-      "and the statistic is inflated by construction")
+# R-squared was withheld while X was a tail-selected press-release sample. X is
+# now the complete isoc_ec_ib20 extract, so the statistic is earned and must be
+# shown - withholding it now would understate a fit the sample supports.
+check(tl.dispRSqr,
+      "F6 does not display R-squared; the cross-section is complete on X, so "
+      "the statistic is earned and should be on the chart face")
 f6_text = " ".join(str(c.value) for row in f6.iter_rows() for c in row
                    if isinstance(c.value, str))
-check("SELECTION WARNING" in f6_text,
-      "F6 has no SELECTION WARNING block")
-for phrase in ("tails", "upper bound", "isoc_ec_ib20"):
+check("SAMPLE - how these points were obtained" in f6_text,
+      "F6 has no sample-provenance block")
+# The superseded tail-only result is kept deliberately: it measures the bias
+# rather than asserting it. Losing it would turn a demonstration back into a
+# claim, so the numbers are pinned here.
+for phrase in ("tails", "isoc_ec_ib20", "0.853", "0.674", "+0.655", "+0.602"):
     check(phrase in f6_text.lower(),
-          f"F6 selection warning does not mention {phrase!r}")
+          f"F6 provenance block does not mention {phrase!r}")
+# n must have actually grown; a silent regression to the old sample would
+# otherwise leave every surrounding sentence wrong.
+n_cell = [c.value for row in f6.iter_rows() for c in row
+          if isinstance(c.value, str) and c.value.startswith("=COUNT(")]
+check(len(n_cell) == 1, "F6 should have exactly one n formula")
+check("$C$5:$C$22" in n_cell[0],
+      f"F6 n formula does not span 18 paired countries: {n_cell[0]}")
 
 # 11. The withdrawn SMV:Digital defunding claim must be recorded, not erased.
 # A correction that leaves no trace is indistinguishable from never having made

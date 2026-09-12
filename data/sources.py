@@ -264,6 +264,24 @@ SOURCES = {
             "Copenhagen, accessed 12 September 2026."
         ),
     ),
+    "ES7": dict(
+        authority="Eurostat",
+        title=(
+            "Internet purchases by individuals (2020 onwards) - custom extraction, "
+            "all individuals, last online purchase in the 12 months, percentage of "
+            "individuals who used internet within the last year, 2024"
+        ),
+        dataset_code="isoc_ec_ib20",
+        url="https://ec.europa.eu/eurostat/databrowser/view/isoc_ec_ib20/default/table?lang=en",
+        accessed=ACCESSED,
+        harvard=(
+            "Eurostat 2026, Internet purchases by individuals (2020 onwards), "
+            "dataset isoc_ec_ib20, Statistical Office of the European Union, "
+            "Luxembourg, data last updated 17 April 2026, accessed 12 September 2026, "
+            "<https://ec.europa.eu/eurostat/databrowser/view/isoc_ec_ib20/default/"
+            "table?lang=en>."
+        ),
+    ),
     "DST1": dict(
         authority="Danmarks Statistik",
         title="Detailomsaetningsindeks (retail trade turnover index)",

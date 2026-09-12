@@ -81,30 +81,92 @@ OBS = [
      "%", "% of individuals", "b", "ES1",
      "BREAK: denominator is % of individuals. Highest in EU that year."),
     ("DK.ECM.IND.BUY", "Individuals who bought online in last 12 months", "DK", 2020, 90.0,
-     "%", "% of internet users", "", "ES2", ""),
+     "%", "% of internet users", "", "ES2",
+     "Rounded, from a Eurostat news release. Only the 2024 cross-section is "
+     "available here unrounded, so this series mixes precisions across years."),
     ("DK.ECM.IND.BUY", "Individuals who bought online in last 12 months", "DK", 2021, 92.0,
-     "%", "% of internet users", "", "ES3", ""),
-    ("DK.ECM.IND.BUY", "Individuals who bought online in last 12 months", "DK", 2024, 91.0,
-     "%", "% of internet users", "", "ES4", ""),
+     "%", "% of internet users", "", "ES3",
+     "Rounded, from a Eurostat news release. See the 2020 note on mixed precision."),
+
+    # ------------------------------------------------------------------
+    # 2024 cross-section, COMPLETE: all 27 member states plus the EU-27
+    # aggregate, from the isoc_ec_ib20 databrowser export (ES7). Unrounded,
+    # and superseding the ten rounded figures previously taken from the
+    # Eurostat press release, which named only the top three, bottom three
+    # and two large movers. Each superseded value is recorded in the note
+    # field of its row rather than erased.
+    # ------------------------------------------------------------------
+    ("EU.ECM.IND.BUY", "Individuals who bought online in last 12 months", "EU27", 2024, 76.58,
+     "%", "% of internet users", "", "ES7", ""),
+    ("AT.ECM.IND.BUY", "Individuals who bought online in last 12 months", "AT", 2024, 74.18,
+     "%", "% of internet users", "", "ES7", ""),
+    ("BE.ECM.IND.BUY", "Individuals who bought online in last 12 months", "BE", 2024, 78.98,
+     "%", "% of internet users", "", "ES7", ""),
+    ("BG.ECM.IND.BUY", "Individuals who bought online in last 12 months", "BG", 2024, 57.18,
+     "%", "% of internet users", "", "ES7",
+     "Lowest of the 27, as the press release reported. Supersedes the "
+     "rounded 57%."),
+    ("CY.ECM.IND.BUY", "Individuals who bought online in last 12 months", "CY", 2024, 68.16,
+     "%", "% of internet users", "", "ES7", ""),
+    ("CZ.ECM.IND.BUY", "Individuals who bought online in last 12 months", "CZ", 2024, 86.21,
+     "%", "% of internet users", "", "ES7", ""),
+    ("DE.ECM.IND.BUY", "Individuals who bought online in last 12 months", "DE", 2024, 82.53,
+     "%", "% of internet users", "", "ES7",
+     "Supersedes the rounded 83%."),
+    ("DK.ECM.IND.BUY", "Individuals who bought online in last 12 months", "DK", 2024, 90.86,
+     "%", "% of internet users", "", "ES7",
+     "Supersedes the rounded 91% taken from the Eurostat press release."),
+    ("EE.ECM.IND.BUY", "Individuals who bought online in last 12 months", "EE", 2024, 78.72,
+     "%", "% of internet users", "", "ES7", ""),
+    ("EL.ECM.IND.BUY", "Individuals who bought online in last 12 months", "EL", 2024, 74.66,
+     "%", "% of internet users", "", "ES7", ""),
+    ("ES.ECM.IND.BUY", "Individuals who bought online in last 12 months", "ES", 2024, 71.54,
+     "%", "% of internet users", "", "ES7", ""),
+    ("FI.ECM.IND.BUY", "Individuals who bought online in last 12 months", "FI", 2024, 80.4,
+     "%", "% of internet users", "", "ES7", ""),
+    ("FR.ECM.IND.BUY", "Individuals who bought online in last 12 months", "FR", 2024, 84.37,
+     "%", "% of internet users", "", "ES7", ""),
+    ("HR.ECM.IND.BUY", "Individuals who bought online in last 12 months", "HR", 2024, 70.07,
+     "%", "% of internet users", "", "ES7", ""),
+    ("HU.ECM.IND.BUY", "Individuals who bought online in last 12 months", "HU", 2024, 78.87,
+     "%", "% of internet users", "", "ES7",
+     "Supersedes the rounded 79%."),
+    ("IE.ECM.IND.BUY", "Individuals who bought online in last 12 months", "IE", 2024, 95.79,
+     "%", "% of internet users", "", "ES7",
+     "Highest in EU. Supersedes the rounded 96%."),
+    ("IT.ECM.IND.BUY", "Individuals who bought online in last 12 months", "IT", 2024, 59.6,
+     "%", "% of internet users", "", "ES7",
+     "Second lowest of the 27. Supersedes the rounded 60%, which tied Italy "
+     "with Romania; unrounded Italy is below Romania, so they are not tied."),
+    ("LT.ECM.IND.BUY", "Individuals who bought online in last 12 months", "LT", 2024, 71.96,
+     "%", "% of internet users", "", "ES7",
+     "Supersedes the rounded 72%."),
+    ("LU.ECM.IND.BUY", "Individuals who bought online in last 12 months", "LU", 2024, 81.34,
+     "%", "% of internet users", "", "ES7", ""),
+    ("LV.ECM.IND.BUY", "Individuals who bought online in last 12 months", "LV", 2024, 69.35,
+     "%", "% of internet users", "", "ES7", ""),
+    ("MT.ECM.IND.BUY", "Individuals who bought online in last 12 months", "MT", 2024, 73.2,
+     "%", "% of internet users", "", "ES7", ""),
+    ("NL.ECM.IND.BUY", "Individuals who bought online in last 12 months", "NL", 2024, 94.42,
+     "%", "% of internet users", "", "ES7",
+     "Supersedes the rounded 94%."),
+    ("PL.ECM.IND.BUY", "Individuals who bought online in last 12 months", "PL", 2024, 75.07,
+     "%", "% of internet users", "", "ES7", ""),
+    ("PT.ECM.IND.BUY", "Individuals who bought online in last 12 months", "PT", 2024, 66.64,
+     "%", "% of internet users", "", "ES7", ""),
+    ("RO.ECM.IND.BUY", "Individuals who bought online in last 12 months", "RO", 2024, 59.73,
+     "%", "% of internet users", "", "ES7",
+     "Supersedes the rounded 60%. See the Italy note on the tie."),
+    ("SE.ECM.IND.BUY", "Individuals who bought online in last 12 months", "SE", 2024, 89.89,
+     "%", "% of internet users", "", "ES7", ""),
+    ("SI.ECM.IND.BUY", "Individuals who bought online in last 12 months", "SI", 2024, 72.39,
+     "%", "% of internet users", "", "ES7", ""),
+    ("SK.ECM.IND.BUY", "Individuals who bought online in last 12 months", "SK", 2024, 85.13,
+     "%", "% of internet users", "", "ES7", ""),
 
     ("EU.ECM.IND.BUY", "Individuals who bought online in last 12 months", "EU27", 2014, 59.0,
      "%", "% of internet users", "", "ES4", ""),
-    ("EU.ECM.IND.BUY", "Individuals who bought online in last 12 months", "EU27", 2024, 77.0,
-     "%", "% of internet users", "", "ES4", ""),
 
-    # 2024 cross-section, verified countries only (8 of 27).
-    ("IE.ECM.IND.BUY", "Individuals who bought online in last 12 months", "IE", 2024, 96.0,
-     "%", "% of internet users", "", "ES4", "Highest in EU."),
-    ("NL.ECM.IND.BUY", "Individuals who bought online in last 12 months", "NL", 2024, 94.0,
-     "%", "% of internet users", "", "ES4", ""),
-    ("DE.ECM.IND.BUY", "Individuals who bought online in last 12 months", "DE", 2024, 83.0,
-     "%", "% of internet users", "", "ES4", "Ranked 8th in EU."),
-    ("IT.ECM.IND.BUY", "Individuals who bought online in last 12 months", "IT", 2024, 60.0,
-     "%", "% of internet users", "", "ES4", ""),
-    ("RO.ECM.IND.BUY", "Individuals who bought online in last 12 months", "RO", 2024, 60.0,
-     "%", "% of internet users", "", "ES4", ""),
-    ("BG.ECM.IND.BUY", "Individuals who bought online in last 12 months", "BG", 2024, 57.0,
-     "%", "% of internet users", "", "ES4", "Lowest in EU."),
 
     # ------------------------------------------------------------------
     # E-commerce, enterprises - Eurostat
@@ -120,11 +182,6 @@ OBS = [
     ("IE.ECM.ENT.TRN", "E-sales as share of enterprise turnover", "IE", 2024, 38.25,
      "%", "% of total enterprise turnover", "", "ES5", "Highest in EU."),
 
-    # Additional 2024 adoption values named in the Eurostat press release.
-    ("HU.ECM.IND.BUY", "Individuals who bought online in last 12 months", "HU", 2024, 79.0,
-     "%", "% of internet users", "", "ES4", "Rose 37pp from 42% in 2014."),
-    ("LT.ECM.IND.BUY", "Individuals who bought online in last 12 months", "LT", 2024, 72.0,
-     "%", "% of internet users", "", "ES4", "Rose 36pp from 36% in 2014."),
 
     # ------------------------------------------------------------------
     # E-sales share of enterprise turnover, EU cross-section 2024.
