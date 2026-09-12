@@ -53,14 +53,23 @@ half-audited benefit. That sentence does more work than any other in the report.
 |---|---|---|---|---|
 | — | Title block, no abstract | — | — | — |
 | 1 | Context and the policy instrument | 300 | Table 1 (09_POLICY) | LOV nr 528/2012; citizens mandatory 1 Nov 2014; MitID required 22 Sep 2022; NemID retired 31 Oct 2023 |
-| 2 | Adoption → economic effect | 480 | **F1**, **F2**, **F6** | Branches 2,025 → 665 (**−67.2%**, 2004–2024); cash 23% → **9%** of in-store payments (2017–2025); wallets **32%**; F6 now **n=18**, slope **+0.602** (se 0.105, **t=5.75**), **R² 0.674** |
+| 2 | Adoption → economic effect | 480 | **F1**, **F2**, **F6**, **F9** | Branches 2,025 → 665 (**−67.2%**, 2004–2024); cash 23% → **9%** (2017–2025); wallets **32%**; F6 **n=18**, slope **+0.602** (se 0.105, **t=5.75**), **R² 0.674**; institutions **−76.7%** vs employment **−29.4%** (1991–2024), staff per institution **233 → 706** |
 | 3 | Denmark's digital economy vs the EU + SDG | 420 | **F3**, **F7** | E-sales turnover DK 17.05 → **33.31%** vs EU 16.43 → **19.49%**; SME digital intensity **92.45%** vs 71.39%; DPS citizen score **82.2 vs 84.64** (−2.44) |
-| 4 | Who is left behind | 420 | **F4** | **4.7%** formally exempt (238,479 citizens) vs **16.5%** in difficulty vs **22%** upper-bound disadvantaged; skills 92.06% (16–24) vs **67.81%** (55–74) |
+| 4 | Who is left behind | 420 | **F4**, **F10** | **4.7%** formally exempt (238,479 citizens) vs **16.5%** in difficulty vs **22%** upper-bound disadvantaged; skills 92.06% (16–24) vs **67.81%** (55–74); DK leads the EU in **all three** bands, gradient **24.25pp** vs EU **31.95pp** |
 | 5 | Guest lecture question | 320 | — | **BLOCKED** — needs the speaker's content |
 | 6 | Recommendation and limitations | 160 | **F8** | SMV:Digital: ~7,000 projects, **65%** invested further, 2% no plans — the only control-group evidence in the workbook |
 |   | **Total** | **2,100** | 7 of 9 figures cited | |
 
 ### Notes on the harder sections
+
+**§2 gains a real economic magnitude from F9.** The branch count alone shows
+disruption; F9 shows what kind. Institutions fell **−76.7%** while employment fell
+only **−29.4%** over the same 1991–2024 window, so staff per institution rose
+**233 → 706 (+203%)**. Consolidation concentrated banking rather than shedding it —
+a scale and concentration effect, and a stronger claim about economic consequence
+than a falling branch count. One discipline the sheet enforces: branches start in
+2004, so **−67.2% is not on the same window** and must never be differenced
+against the other two.
 
 **§2 is the lecturer's exhibit.** The requirement was an x–y relationship or a
 regression showing more adoption → more economic effect. F6 is now a genuine
@@ -89,9 +98,13 @@ the contrarian angle.**
 **§4 must not overclaim.** Denmark's weakest age band, 55–74 at **67.81%**, still
 beats the EU average *for that same band* (42.60%) by just over 25pp. So Danish
 exclusion is **not a skills deficit** — it is a mandate calibrated above the bottom
-of its own distribution. Note that the 42.60% comparator currently lives in a
-`note` field, not as its own observation: if §4 cites it, promote it to a real
-`EU.SKL.5574` row in `02_MASTER` first, per the tracing rule above. The gap between 4.7%
+of its own distribution.
+
+F10 makes this visually and adds a second finding: Denmark's internal age
+gradient is **24.25pp** against the EU's **31.95pp**. Denmark leads at every age
+*and* has the milder gradient, so the excluded population cannot be attributed to
+an unusually steep Danish skills cliff. The 42.60% comparator has been promoted
+from a `note` field to a real `EU.SKL.5574` observation, so it is now citable. The gap between 4.7%
 relieved and 16.5% struggling is an *administrative* gap, not a capability one.
 That distinction is the section.
 
