@@ -22,7 +22,7 @@ from openpyxl.utils import get_column_letter
 
 from dataset import (COUNTRIES, OBS, POLICY_EVENTS, cross_section,
                      policy_events_for, validate)
-from sources import ACCESSED, SOURCES
+from sources import ACCESSED, REFERENCE_ONLY, SOURCES
 
 OUT = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
@@ -402,7 +402,14 @@ def sheet_sources(wb):
                [10, 30, 44, 24, 56, 12, 76])
     r = 2
     for sid, s in SOURCES.items():
-        vals = [sid, s["authority"], s["title"], s["dataset_code"], s["url"],
+        # Mark bibliography-only sources on the face of the sheet. An entry that
+        # no observation uses otherwise reads as an oversight; saying so is the
+        # difference between a documented scope and a loose end.
+        title = s["title"]
+        if sid in REFERENCE_ONLY:
+            title = ("[REFERENCE ONLY - supports argument in the report; no "
+                     "workbook value depends on it] ") + title
+        vals = [sid, s["authority"], title, s["dataset_code"], s["url"],
                 s["accessed"], s["harvard"]]
         for j, v in enumerate(vals, start=1):
             c = ws.cell(row=r, column=j, value=v)
@@ -419,6 +426,17 @@ def sheet_definitions(wb):
     header_row(ws, 1,
                ["series_code", "what it measures", "what it excludes / watch for"],
                [24, 62, 72])
+    note = ws.cell(row=2, column=1,
+                   value="PREFIXES: definitions below are written against the "
+                         "DK.* codes. The same definition applies to the "
+                         "identical indicator for any other geography - "
+                         "EU.*, and the member-state codes AT.* through SE.* "
+                         "used in F5_EU27 and F6_ADOPT_BENEFIT. Only the "
+                         "geography changes; the measure and its denominator "
+                         "do not.")
+    note.font, note.alignment, note.fill = T_SMALL, WRAP, F_GAP
+    ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=3)
+    ws.row_dimensions[2].height = 30
     defs = [
         ("DK.PAY.CASH.POS",
          "Cash as a share of the NUMBER of payments made at physical points of sale.",
@@ -473,8 +491,83 @@ def sheet_definitions(wb):
          "reuse.",
          "Covers two WEEE categories only. Denominator is waste COLLECTED, not "
          "waste generated."),
+        ("DK.PAY.DIG.POS.NUM, DK.PAY.DIG.POS.VAL",
+         "Digital share of physical-retail payments, by NUMBER and by VALUE "
+         "respectively.",
+         "Two different denominators. The value share exceeds the number share "
+         "because cash survives in small transactions. Never quote one as the "
+         "other, and never average them."),
+        ("DK.FIN.INST",
+         "Number of financial institutions (credit institutions) operating in "
+         "Denmark.",
+         "Base year 1991. Do NOT difference against DK.FIN.BRCH, which starts in "
+         "2004 - see F9_CONSOLIDATION."),
+        ("DK.FIN.EMP",
+         "Number of persons employed by Danish banks.",
+         "Base year 1991, so comparable with DK.FIN.INST but NOT with the branch "
+         "series. Falls far less than institutions - that asymmetry is the finding "
+         "in F9_CONSOLIDATION, not a data error."),
+        ("DK.SKL.1624, DK.SKL.2554, DK.SKL.5574\n(EU.SKL.1624, EU.SKL.2554, EU.SKL.5574)",
+         "Individuals with at least basic overall digital skills, by age band. "
+         "EU.SKL.* are the matching EU-27 comparators.",
+         "Age bands, not a time series - all three are the same reference year. "
+         "The DIGCOMP methodology was revised in 2021; do not join to pre-2021 "
+         "skills figures."),
+        ("DK.DGP.EXMP.N",
+         "Citizens formally exempt from Digital Post, as a HEADCOUNT.",
+         "A count, not a rate. Converting between this and DK.DGP.EXMP requires "
+         "DK.POP.TOT and an assumption about the 15+ denominator - see "
+         "07_LIMITATIONS."),
+        ("DK.DGP.EXMP.7584, DK.DGP.EXMP.85P",
+         "Digital Post exemption rate within the 75-84 and 85+ age bands.",
+         "Denominator is the age group, not the population. These are far above "
+         "the headline 4.7% and must not be compared with it directly."),
+        ("DK.DGX.NOUSE",
+         "Individuals who do not use digital public services at all.",
+         "Non-use, not inability. Includes those with no need to transact as well "
+         "as those unable to."),
+        ("DK.DGX.DISADV.LO, DK.DGX.DISADV.HI",
+         "Lower and upper bound of the 'digitally disadvantaged' adult population.",
+         "A RANGE published as a range. Quote both bounds; citing either alone "
+         "misrepresents the source's own uncertainty."),
+        ("DK.POP.TOT",
+         "Resident population of Denmark.",
+         "Used only as a denominator for converting headcounts to rates. Total "
+         "residents, not the 15+ base the exemption rate actually uses."),
+        ("DK.TRU.DPS",
+         "Share of the population expressing trust in digital public solutions.",
+         "Self-reported attitude, not behaviour. High trust coexists with the "
+         "exclusion measures in F4 - the two are not in contradiction."),
+        ("DK.TRU.DGP.SEC",
+         "Share of the population perceiving Digital Post as secure.",
+         "Narrower than DK.TRU.DPS: one service, not the whole system. Do not "
+         "treat the two as one series."),
+        ("DK.ENT.DII",
+         "SMEs reaching at least basic digital intensity (DII).",
+         "A composite threshold count of adopted technologies, not an intensity of "
+         "use. A firm clears it by adopting breadth cheaply."),
+        ("DK.ENT.AI, DK.ENT.AI.LRG, DK.ENT.AI.SME",
+         "Enterprises adopting AI: all, large (250+) and SMEs (10-249).",
+         "The headline rate is close to the SME rate because SMEs dominate by "
+         "count. The large-firm gap is the real dispersion - report the split, not "
+         "just the average."),
+        ("DK.GOV.DPS.XB",
+         "eGovernment Benchmark score for CROSS-BORDER citizen services.",
+         "Scored against a different service basket from DK.GOV.DPS.CIT. Lower is "
+         "not evidence of decline; it is a different test."),
+        ("DK.GOV.DGP.SAVE.PLAN, DK.GOV.DGP.SAVE.VERIF",
+         "Digital Post annual public saving: as projected, and as verifiable by "
+         "audit.",
+         "The pair exists to be compared - the verified figure is well under half "
+         "the projection. Never cite the projection alone as a realised saving."),
+        ("DK.SME.SMVD.PROJ, DK.SME.SMVD.INV, DK.SME.SMVD.NOINV",
+         "SMV:Digital programme: projects supported, and participants who did or "
+         "did not invest further.",
+         "Self-reported by participants, with no control group. Cannot support a "
+         "causal claim about the programme - see the withdrawn claim in "
+         "07_LIMITATIONS and 08_AI_LOG."),
     ]
-    r = 2
+    r = 3
     for code, what, watch in defs:
         ws.cell(row=r, column=1, value=code).font = T_MONO
         for j, v in [(2, what), (3, watch)]:
@@ -587,8 +680,11 @@ def sheet_calc(wb):
         ws.cell(row=r, column=1, value=label).font = T_BODY
         c = ws.cell(row=r, column=2, value=formula)
         c.font, c.fill = T_BODY, F_CALC
-        c.number_format = "0.0%" if unit == "%" else (
-            "#,##0" if unit == "count" else "0.00")
+        # Four-part formats throughout, as everywhere else in the workbook: a
+        # two-part format renders a missing input as an empty cell, which reads
+        # as zero. The en-dash says "no value" out loud.
+        c.number_format = N_PCT if unit == "%" else (
+            N_INT if unit == "count" else N_DEC)
         ws.cell(row=r, column=3, value=unit).font = T_SMALL
         h = ws.cell(row=r, column=4, value=how)
         h.font, h.alignment = T_SMALL, WRAP
@@ -1241,7 +1337,7 @@ def sheet_f6(wb):
             r += 1
 
     source_note(ws, r + 1,
-                f"Sources: Eurostat isoc_ec_ib20 (ES4) for X; Eurostat tin00110 "
+                f"Sources: Eurostat isoc_ec_ib20 (ES7) for X; Eurostat tin00110 "
                 f"(ES5, ES6) for Y. "
                 f"WHY A CROSS-SECTION: the Danish adoption and outcome series "
                 f"share almost no observation years - the best time-series "
@@ -1746,7 +1842,7 @@ def sheet_gap(wb):
     for k, v in [
         ("Status", "NOT RETRIEVED"),
         ("Indicator", "Retail trade turnover, volume index (mangdeindeks)"),
-        ("Authority", "Danmarks Statistik; also available via Eurostat sts_trtu_a"),
+        ("Authority", "Danmarks Statistik (DST1); also available via Eurostat sts_trtu_a"),
         ("Filters required",
          "geo=DK; nace_r2=G47; indic_bt=VOL; s_adj=SCA; unit=I21 (2021=100)"),
         ("Why not retrieved",
@@ -2033,10 +2129,10 @@ def main():
     sheet_f8(wb)
     sheet_f9(wb)
     sheet_f10(wb)
-    sheet_policy(wb)
     sheet_gap(wb)
     sheet_limitations(wb)
     sheet_ai_log(wb)
+    sheet_policy(wb)
 
     wb.properties.title = "Denmark: Digital Adoption and Policy Outcomes"
     wb.properties.subject = COURSE

@@ -21,8 +21,8 @@ EXPECTED = [
     "00_COVER", "01_README", "02_MASTER", "03_SOURCES", "04_DEFINITIONS",
     "05_CALC", "F1_BRANCHES", "F2_PAYMENTS", "F3_ESALES", "F4_EXCLUSION",
     "F5_EU27", "F6_ADOPT_BENEFIT", "F7_QUALITY", "F8_SMVDIGITAL",
-    "F9_CONSOLIDATION", "F10_SKILLS", "09_POLICY",
-    "06_RETAIL_GAP", "07_LIMITATIONS", "08_AI_LOG",
+    "F9_CONSOLIDATION", "F10_SKILLS", "06_RETAIL_GAP", "07_LIMITATIONS", "08_AI_LOG",
+    "09_POLICY",
 ]
 
 FIG_SHEETS = ["F1_BRANCHES", "F2_PAYMENTS", "F3_ESALES", "F4_EXCLUSION",
@@ -128,6 +128,9 @@ check(r2019[7] != r2020[7], "2019 and 2020 denominators are identical")
 # year) pair a formula asks for actually exists in MASTER. This catches the real
 # risk - a mistyped series code or year silently rendering as a blank cell.
 import re
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from sources import REFERENCE_ONLY
 
 LOOKUP_RE = re.compile(
     r"COUNTIFS\('02_MASTER'!\$B:\$B,\"([^\"]+)\",'02_MASTER'!\$E:\$E,(\d{4})\)"
@@ -318,6 +321,99 @@ for name in FIG_SHEETS:
             check(c.number_format.count(";") == 3,
                   f"{name}!{c.coordinate}: number format {c.number_format!r} "
                   f"is not four-part; a missing value would render blank")
+
+# 15. Same four-part rule on 05_CALC. Found by audit: the calc sheet was using
+# bare "0.00"/"0.0%"/"#,##0", so a missing input would have rendered as an empty
+# cell there while every figure sheet showed an en-dash.
+ws = wb["05_CALC"]
+for row in ws.iter_rows(min_row=2):
+    for c in row:
+        if isinstance(c.value, str) and c.value.startswith("=") and c.column == 2:
+            check(c.number_format.count(";") == 3,
+                  f"05_CALC!{c.coordinate}: number format "
+                  f"{c.number_format!r} is not four-part")
+
+# 16. Every series family in MASTER must be documented in 04_DEFINITIONS.
+# Found by audit: 35 of 113 observations sat on families with no definition
+# entry, including the series behind F9 and F10. Traceability is the whole
+# claim this workbook makes, so an undocumented series is a defect, not a gap.
+defs_text = " ".join(str(c.value) for row in wb["04_DEFINITIONS"].iter_rows()
+                     for c in row if c.value)
+families = set()
+for r in range(2, m.max_row + 1):
+    code = m.cell(row=r, column=2).value
+    if code:
+        families.add(".".join(code.split(".")[1:]))
+for fam in sorted(families):
+    check(fam in defs_text,
+          f"series family {fam} has no entry in 04_DEFINITIONS")
+
+# 17. A figure's source note must name every source its own data carries.
+# Found by audit: F6 credited X to ES4 - the superseded rounded press release
+# whose tail selection that very sheet criticises - while the data carried ES7.
+# Checking that source_ids resolve is not enough; the prose has to agree with
+# the data it sits under.
+sources = wb["03_SOURCES"]
+sid_list = [str(sources.cell(row=r, column=1).value)
+            for r in range(2, sources.max_row + 1)
+            if sources.cell(row=r, column=1).value]
+SID_RE = re.compile(r"\b(" + "|".join(sorted(sid_list, key=len, reverse=True)) + r")\b")
+LOOK_RE = re.compile(r"'02_MASTER'!\$B:\$B,\"([^\"]+)\","
+                     r"'02_MASTER'!\$E:\$E,(\d+)\)")
+src_of = {}
+for r in range(2, m.max_row + 1):
+    code = m.cell(row=r, column=2).value
+    if code:
+        src_of[(code, m.cell(row=r, column=5).value)] = \
+            m.cell(row=r, column=10).value
+for name in FIG_SHEETS:
+    ws = wb[name]
+    used, cited = set(), set()
+    for row in ws.iter_rows():
+        for c in row:
+            if isinstance(c.value, str) and c.value.startswith("="):
+                for mt in LOOK_RE.finditer(c.value):
+                    got = src_of.get((mt.group(1), int(mt.group(2))))
+                    if got:
+                        used.add(got)
+            elif isinstance(c.value, str):
+                cited.update(SID_RE.findall(c.value))
+    for sid in sorted(used - cited):
+        check(False,
+              f"{name} draws on {sid} but never names it in prose; a marker "
+              f"tracing that value has nowhere to go")
+
+# 18. Every declared source must be reachable from something. Found by audit:
+# three sources were declared, attached to no observation and cited nowhere.
+all_cited = set()
+for ws in wb:
+    if ws.title == "03_SOURCES":
+        continue
+    for row in ws.iter_rows():
+        for c in row:
+            if isinstance(c.value, str):
+                all_cited.update(SID_RE.findall(c.value))
+used_by_obs = {m.cell(row=r, column=10).value
+               for r in range(2, m.max_row + 1)
+               if m.cell(row=r, column=2).value}
+for sid in sid_list:
+    check(sid in all_cited or sid in used_by_obs or sid in REFERENCE_ONLY,
+          f"source {sid} is declared but carries no observation, is cited "
+          f"nowhere, and is not declared REFERENCE_ONLY - remove it or cite it")
+
+# 19. (code,year) must be unique. Every figure lookup is a SUMIFS on those two
+# keys, so a duplicate pair would be silently SUMMED into a doubled value that
+# looks entirely plausible on the chart.
+seen_keys = {}
+for r in range(2, m.max_row + 1):
+    code = m.cell(row=r, column=2).value
+    if not code:
+        continue
+    key = (code, m.cell(row=r, column=5).value)
+    check(key not in seen_keys,
+          f"duplicate (series_code, year) {key} at rows "
+          f"{seen_keys.get(key)} and {r}: SUMIFS lookups would double it")
+    seen_keys[key] = r
 
 # ---------------------------------------------------------------- report ---
 print(f"{checks} checks run")

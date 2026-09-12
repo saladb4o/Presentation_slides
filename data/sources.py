@@ -294,3 +294,15 @@ SOURCES = {
         ),
     ),
 }
+
+# Sources held for the report's reference list that no workbook observation uses
+# and no figure note cites. They are declared here rather than left to look like
+# oversights: an audit flagged them as orphans, and the honest answer is that
+# they support argument in the written report, not any number in this file.
+# A source may sit here ONLY if nothing in the workbook depends on it; anything
+# a figure actually draws on must be cited in that figure's source note.
+REFERENCE_ONLY = frozenset({
+    "NB2",   # Nationalbank on offline-payment resilience - context for F2/F9.
+    "IMR1",  # Danish Institute for Human Rights on the digital welfare state -
+             # corroborates the F4 exclusion argument without supplying a value.
+})
