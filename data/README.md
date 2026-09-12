@@ -38,6 +38,29 @@ python3 verify_workbook.py
 a formula performs resolves to a real observation — a mistyped series code would
 otherwise render as a silent blank cell.
 
+## Presentation conventions
+
+Chart styling follows the conventions used in professional financial-analysis
+workbooks, and `verify_workbook.py` enforces them so a later edit cannot undo
+the pass silently:
+
+- **Chart titles live in cells**, not on chart objects — they align to the sheet
+  grid, stay editable, and avoid openpyxl's inconsistent title rendering.
+- **Colour routes attention rather than distinguishing categories.** A four-step
+  ramp (`E8E8E8` / `A3A3A3` / `2E6DB4` accent / `1F3A5F` navy). Denmark takes the
+  accent; comparators recede into grey. Every chart must use the accent
+  somewhere — a chart with no subject fails verification.
+- **No chart chrome**: no style presets, no gridlines, axis lines hidden, legends
+  at the bottom, `gapWidth=80`.
+- **Four-part number formats**: positive; negative; zero; text. Because
+  `lookup()` returns `""` for an absent observation, the text section makes a
+  gap render as an en-dash rather than an empty cell — a gap should look like a
+  gap, not like an oversight.
+
+  *Caveat:* a genuine zero also renders as an en-dash. No series in this dataset
+  has a meaningful zero, so this is safe here; it would not be in a workbook
+  that did.
+
 ## Adding data
 
 Append rows to `OBS` in `dataset.py` using the existing 10-column shape, add any

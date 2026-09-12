@@ -223,6 +223,84 @@ check("defunded" in all_text,
 check(not any("defund" in str(r[11] or "") for r in rows),
       "a defunding claim survives in MASTER notes")
 
+# 12. Chart styling conventions. These are enforced rather than merely applied
+# because a later edit that re-adds an Excel style preset or a chart-object
+# title would undo the whole presentation pass silently - the workbook would
+# still build, still verify, and just look generic again.
+ACCENT, GREY, DARK, PALE = "2E6DB4", "A3A3A3", "1F3A5F", "E8E8E8"
+PALETTE = {ACCENT, GREY, DARK, PALE}
+
+for name, n_charts in expected_charts.items():
+    ws = wb[name]
+    for i, ch in enumerate(ws._charts):
+        where = f"{name} chart[{i}]"
+        # Titles live in cells, not on chart objects.
+        check(ch.title is None, f"{where}: has a chart-object title; "
+                                f"titles belong in a cell above the chart")
+        check(ch.style is None, f"{where}: carries an Excel style preset")
+        for ax_name in ("x_axis", "y_axis"):
+            ax = getattr(ch, ax_name, None)
+            if ax is None:
+                continue
+            check(ax.majorGridlines is None, f"{where}: {ax_name} has gridlines")
+            check(ax.spPr is not None and ax.spPr.ln is not None
+                  and ax.spPr.ln.noFill,
+                  f"{where}: {ax_name} line is not hidden")
+        if ch.legend is not None:
+            check(ch.legend.position == "b",
+                  f"{where}: legend is not at the bottom")
+
+        # Every chart uses the palette and nothing else.
+        used = set()
+        for s in ch.series:
+            g = s.graphicalProperties
+            if g is not None and g.solidFill is not None:
+                used.add(g.solidFill if isinstance(g.solidFill, str)
+                         else g.solidFill.srgbClr)
+            for dp in (s.data_points or []):
+                if dp.spPr is not None and dp.spPr.solidFill is not None:
+                    f = dp.spPr.solidFill
+                    used.add(f if isinstance(f, str) else f.srgbClr)
+            if s.marker is not None and s.marker.spPr is not None \
+                    and s.marker.spPr.solidFill is not None:
+                f = s.marker.spPr.solidFill
+                used.add(f if isinstance(f, str) else f.srgbClr)
+        used.discard(None)
+        check(used, f"{where}: no series colour set; it will render in "
+                    f"Excel's default palette")
+        check(used <= PALETTE,
+              f"{where}: colours outside the palette: {sorted(used - PALETTE)}")
+        check(ACCENT in used,
+              f"{where}: the accent colour is absent - nothing in this chart "
+              f"is marked as its subject")
+
+# 13. Every chart has a title cell directly above its anchor. openpyxl records
+# the anchor zero-indexed, so the title row is the anchor row (1-indexed) minus
+# one - i.e. the cell immediately above where the chart is placed.
+for name in expected_charts:
+    ws = wb[name]
+    for i, ch in enumerate(ws._charts):
+        frm = ch.anchor._from
+        title_cell = ws.cell(row=frm.row, column=frm.col + 1)
+        check(isinstance(title_cell.value, str) and title_cell.value.strip(),
+              f"{name} chart[{i}]: no title cell at {title_cell.coordinate} "
+              f"(directly above the chart anchor)")
+
+# 14. Missing values must render as an en-dash, not as an empty cell. lookup()
+# returns "" for an absent observation, which lands in the text section of the
+# four-part format - so the format must define that section.
+for name in FIG_SHEETS:
+    ws = wb[name]
+    for row in ws.iter_rows(min_row=5):
+        for c in row:
+            if not (isinstance(c.value, str) and c.value.startswith("=")):
+                continue
+            if c.column == 1:
+                continue
+            check(c.number_format.count(";") == 3,
+                  f"{name}!{c.coordinate}: number format {c.number_format!r} "
+                  f"is not four-part; a missing value would render blank")
+
 # ---------------------------------------------------------------- report ---
 print(f"{checks} checks run")
 if failures:

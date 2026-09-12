@@ -13,6 +13,8 @@ from datetime import date
 from openpyxl import Workbook
 from openpyxl.chart import BarChart, Reference, ScatterChart, Series
 from openpyxl.chart.marker import Marker
+from openpyxl.chart.series import DataPoint
+from openpyxl.chart.shapes import GraphicalProperties
 from openpyxl.chart.trendline import Trendline
 from openpyxl.drawing.line import LineProperties
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
@@ -49,6 +51,34 @@ T_SUB = Font(name="Calibri", size=11, bold=True, color=NAVY)
 T_BODY = Font(name="Calibri", size=10, color=INK)
 T_SMALL = Font(name="Calibri", size=9, color="FF5A5A5A")
 T_MONO = Font(name="Consolas", size=9, color=INK)
+
+# --- chart palette --------------------------------------------------------
+# Four steps, ordered as a value ramp rather than a categorical set. Grey
+# carries the series the reader is not meant to look at; the accent carries the
+# one they are. Nothing is coloured for variety - colour routes attention.
+#
+# Chart colours are bare RGB (no leading alpha byte), unlike the cell fills
+# above, because DrawingML and the styles API disagree about the format.
+C_PALE = "E8E8E8"     # context, furthest back
+C_GREY = "A3A3A3"     # context
+C_ACCENT = "2E6DB4"   # focus - Denmark, or the single series in view
+C_DARK = "1F3A5F"     # emphasis - matches NAVY
+
+# Number formats, four-part: positive; negative; zero; text.
+#
+# The fourth section is the one that earns its place. lookup() returns "" for an
+# observation that does not exist, which lands in the text section - so a gap
+# renders as an en-dash instead of an empty cell. A gap should look like a gap,
+# not like an oversight.
+#
+# CAVEAT, recorded on 01_README: a genuine zero also renders as an en-dash.
+# No series in this dataset has a meaningful zero, so this is safe here; it
+# would not be safe in a workbook that did.
+N_DEC = '_(#,##0.00_);\\(#,##0.00\\);_("–"_);_("–"_)'
+N_INT = '_(#,##0_);\\(#,##0\\);_("–"_);_("–"_)'
+N_ONE = '_(#,##0.0_);\\(#,##0.0\\);_("–"_);_("–"_)'
+N_THREE = '_(#,##0.000_);\\(#,##0.000\\);_("–"_);_("–"_)'
+N_SIGNED = '_(+#,##0.00_);_(-#,##0.00_);_("–"_);_("–"_)'
 
 THIN = Side(style="thin", color="FFBFBFBF")
 BOX = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
@@ -87,6 +117,91 @@ def lookup(series, year):
 def L(series, year):
     """`lookup` with the leading '=' stripped, for embedding inside a formula."""
     return lookup(series, year)[1:]
+
+
+def style_chart(ch, legend="b"):
+    """Strip Excel's default chart chrome.
+
+    openpyxl's `style` presets produce the look everyone recognises as a default
+    Excel chart. Removing the preset, the gridlines and the axis lines leaves the
+    data as the only thing drawn, which is the point: every pixel that is not a
+    value is competing with one that is.
+
+    The axis LINES are hidden while the axes themselves are kept - tick labels
+    still render, so the chart loses its frame without losing its scale.
+
+    Pass legend=None for a single-series chart, where a legend restates the
+    title and earns nothing.
+    """
+    ch.style = None
+    for ax in (ch.x_axis, ch.y_axis):
+        if ax is None:
+            continue
+        ax.majorGridlines = None
+        ax.spPr = GraphicalProperties(ln=LineProperties(noFill=True))
+
+    if legend is None:
+        ch.legend = None
+    elif ch.legend is not None:
+        # Bottom, never right: a right-hand legend eats horizontal plot width,
+        # which is the axis carrying the comparison in every chart here.
+        ch.legend.position = legend
+        ch.legend.overlay = False
+
+    if isinstance(ch, BarChart):
+        # Excel defaults to gapWidth 150, which leaves bars thinner than the
+        # space between them and makes the whitespace the dominant shape.
+        ch.gapWidth = 80
+        if ch.grouping == "stacked":
+            ch.overlap = 100
+        elif ch.grouping == "clustered" and len(ch.series) > 1:
+            ch.overlap = -27
+    return ch
+
+
+def paint(series, rgb, line=False):
+    """Solid-fill a series in one palette colour."""
+    series.graphicalProperties = GraphicalProperties(solidFill=rgb)
+    if not line:
+        series.graphicalProperties.ln = LineProperties(noFill=True)
+    return series
+
+
+def highlight_points(series, n_points, focus, base=C_GREY, accent=C_ACCENT):
+    """Grey every bar except the ones named in `focus`.
+
+    `focus` maps a zero-based point index to a colour. This is what turns a
+    ranked bar chart from eight identically coloured bars into a chart with a
+    subject: Denmark in the accent, the EU average in navy, everyone else
+    receding into grey.
+    """
+    paint(series, base)
+    series.data_points = [
+        DataPoint(idx=i,
+                  spPr=GraphicalProperties(
+                      solidFill=focus.get(i, base),
+                      ln=LineProperties(noFill=True)))
+        for i in range(n_points)
+    ]
+    return series
+
+
+def chart_title(ws, cell, text, note=None):
+    """Write a chart's title into a cell instead of onto the chart.
+
+    openpyxl renders chart titles inconsistently and they cannot be aligned to
+    the sheet grid. A title in a cell aligns with everything else, stays
+    editable by the reader, and can carry a units caption beneath it.
+    """
+    c = ws[cell]
+    c.value = text
+    c.font = Font(name="Calibri", size=11, bold=True, color=NAVY)
+    c.fill = PatternFill("solid", fgColor="FFE7F2FF")
+    c.alignment = Alignment(vertical="center")
+    if note:
+        below = ws.cell(row=c.row + 1, column=c.column, value=note)
+        below.font = T_SMALL
+    return c
 
 
 def source_note(ws, row, text):
@@ -533,24 +648,28 @@ def sheet_f1(wb):
         r = 5 + i
         ws.cell(row=r, column=1, value=y).font = T_BODY
         c = ws.cell(row=r, column=2, value=lookup("DK.FIN.BRCH", y))
-        c.font, c.number_format = T_BODY, "#,##0"
+        c.font, c.number_format = T_BODY, N_INT
     _style_view(ws, 5, 4 + len(years), 2)
 
     last = 4 + len(years)
     ch = ScatterChart()
-    ch.title = "Bank branches in Denmark, 2004-2024"
-    ch.style = 2
     ch.x_axis.title = "Year"
     ch.y_axis.title = "Number of branches"
     ch.height, ch.width = 9, 17
     xs = Reference(ws, min_col=1, min_row=5, max_row=last)
     ys = Reference(ws, min_col=2, min_row=4, max_row=last)
     s = Series(ys, xs, title_from_data=True)
-    s.marker = Marker(symbol="circle", size=7)
-    s.graphicalProperties.line = LineProperties(w=22000)
+    s.marker = Marker(symbol="circle", size=7,
+                      spPr=GraphicalProperties(
+                          solidFill=C_ACCENT,
+                          ln=LineProperties(noFill=True)))
+    s.graphicalProperties.line = LineProperties(w=22000, solidFill=C_ACCENT)
     ch.series.append(s)
     ch.x_axis.scaling.min, ch.x_axis.scaling.max = 2002, 2026
     ch.y_axis.scaling.min = 0
+    style_chart(ch, legend=None)
+    chart_title(ws, "D3", "Bank branches in Denmark, 2004-2024",
+                "Count of retail branches. Uneven year spacing, numeric X axis.")
     ws.add_chart(ch, "D4")
 
     source_note(ws, last + 2,
@@ -584,25 +703,28 @@ def sheet_f2(wb):
         r = 6 + i
         ws.cell(row=r, column=1, value=y).font = T_BODY
         c = ws.cell(row=r, column=2, value=lookup("DK.PAY.CASH.POS", y))
-        c.font, c.number_format = T_BODY, "0.0"
+        c.font, c.number_format = T_BODY, N_ONE
     _style_view(ws, 6, 5 + len(years), 2)
     lastA = 5 + len(years)
 
     chA = ScatterChart()
-    chA.title = "Cash share of in-store payments, 2017-2025"
-    chA.style = 2
     chA.x_axis.title = "Year"
     chA.y_axis.title = "% of number of payments"
     chA.height, chA.width = 8, 15
     xs = Reference(ws, min_col=1, min_row=6, max_row=lastA)
     ys = Reference(ws, min_col=2, min_row=5, max_row=lastA)
     s = Series(ys, xs, title_from_data=True)
-    s.marker = Marker(symbol="circle", size=7)
-    s.graphicalProperties.line = LineProperties(w=22000)
+    s.marker = Marker(symbol="circle", size=7,
+                      spPr=GraphicalProperties(
+                          solidFill=C_ACCENT,
+                          ln=LineProperties(noFill=True)))
+    s.graphicalProperties.line = LineProperties(w=22000, solidFill=C_ACCENT)
     chA.series.append(s)
     chA.x_axis.scaling.min, chA.x_axis.scaling.max = 2016, 2026
     chA.y_axis.scaling.min, chA.y_axis.scaling.max = 0, 25
-    chA.legend = None
+    style_chart(chA, legend=None)
+    chart_title(ws, "D4", "Cash share of in-store payments, 2017-2025",
+                "% of the number of payments made in physical retail.")
     ws.add_chart(chA, "D5")
 
     # --- Panel B: 2025 composition -----------------------------------------
@@ -618,22 +740,24 @@ def sheet_f2(wb):
         rr = headB + 1 + i
         ws.cell(row=rr, column=1, value=label).font = T_BODY
         c = ws.cell(row=rr, column=2, value=lookup(code, 2025))
-        c.font, c.fill, c.number_format = T_BODY, F_CALC, "0.0"
+        c.font, c.fill, c.number_format = T_BODY, F_CALC, N_ONE
         for j in (1, 2):
             ws.cell(row=rr, column=j).border = BOX
     lastB = headB + len(comp)
 
     chB = BarChart()
     chB.type, chB.grouping = "bar", "clustered"
-    chB.title = "Composition of in-store payments, 2025"
-    chB.style = 2
     chB.x_axis.title = "% of number of payments"
     chB.height, chB.width = 7, 15
     data = Reference(ws, min_col=2, min_row=headB, max_row=lastB)
     cats = Reference(ws, min_col=1, min_row=headB + 1, max_row=lastB)
     chB.add_data(data, titles_from_data=True)
     chB.set_categories(cats)
-    chB.legend = None
+    # Cash is the subject of this figure, so cash is the only coloured bar.
+    highlight_points(chB.series[0], len(comp), {2: C_ACCENT})
+    style_chart(chB, legend=None)
+    chart_title(ws, f"D{headB - 1}", "Composition of in-store payments, 2025",
+                "Sums to 95%; the residual is other digital instruments.")
     ws.add_chart(chB, f"D{headB}")
 
     # --- Memo: different denominator ---------------------------------------
@@ -645,7 +769,7 @@ def sheet_f2(wb):
     for y in (2019, 2023, 2025):
         ws.cell(row=r, column=1, value=y).font = T_BODY
         c = ws.cell(row=r, column=2, value=lookup("DK.PAY.WLT.OWN", y))
-        c.font, c.fill, c.number_format = T_BODY, F_FLAG, "0.0"
+        c.font, c.fill, c.number_format = T_BODY, F_FLAG, N_ONE
         for j in (1, 2):
             ws.cell(row=r, column=j).border = BOX
         r += 1
@@ -675,14 +799,12 @@ def sheet_f3(wb):
     for i, y in enumerate([2014, 2024]):
         r = 5 + i
         ws.cell(row=r, column=1, value=y).font = T_BODY
-        ws.cell(row=r, column=2, value=lookup("DK.ECM.ENT.TRN", y)).number_format = "0.00"
-        ws.cell(row=r, column=3, value=lookup("EU.ECM.ENT.TRN", y)).number_format = "0.00"
+        ws.cell(row=r, column=2, value=lookup("DK.ECM.ENT.TRN", y)).number_format = N_DEC
+        ws.cell(row=r, column=3, value=lookup("EU.ECM.ENT.TRN", y)).number_format = N_DEC
     _style_view(ws, 5, 6, 3)
 
     ch = BarChart()
     ch.type, ch.grouping = "col", "clustered"
-    ch.title = "E-sales as % of enterprise turnover"
-    ch.style = 2
     ch.y_axis.title = "% of turnover"
     ch.x_axis.title = "Year"
     ch.height, ch.width = 9, 15
@@ -690,6 +812,11 @@ def sheet_f3(wb):
     cats = Reference(ws, min_col=1, min_row=5, max_row=6)
     ch.add_data(data, titles_from_data=True)
     ch.set_categories(cats)
+    paint(ch.series[0], C_ACCENT)   # Denmark
+    paint(ch.series[1], C_GREY)     # EU-27, context
+    style_chart(ch)
+    chart_title(ws, "E3", "E-sales as % of enterprise turnover, DK vs EU-27",
+                "Denmark in blue; the EU average in grey.")
     ws.add_chart(ch, "E4")
 
     r = 9
@@ -707,7 +834,7 @@ def sheet_f3(wb):
     for label, formula, note in ctx:
         ws.cell(row=r, column=1, value=label).font = T_BODY
         c = ws.cell(row=r, column=2, value=formula)
-        c.font, c.fill, c.number_format = T_BODY, F_CALC, "0.00"
+        c.font, c.fill, c.number_format = T_BODY, F_CALC, N_DEC
         ws.cell(row=r, column=3, value=note).font = T_SMALL
         for j in range(1, 4):
             ws.cell(row=r, column=j).border = BOX
@@ -750,7 +877,7 @@ def sheet_f4(wb):
         r = 5 + i
         ws.cell(row=r, column=1, value=label).font = T_BODY
         c = ws.cell(row=r, column=2, value=formula)
-        c.font, c.fill, c.number_format = T_BODY, F_CALC, "0.0"
+        c.font, c.fill, c.number_format = T_BODY, F_CALC, N_ONE
         ws.cell(row=r, column=3, value=basis).font = T_SMALL
         ws.cell(row=r, column=4, value=src).font = T_MONO
         for j in range(1, 5):
@@ -759,15 +886,17 @@ def sheet_f4(wb):
 
     ch = BarChart()
     ch.type, ch.grouping = "bar", "clustered"
-    ch.title = "Measures of digital exclusion, Denmark"
-    ch.style = 2
     ch.x_axis.title = "% of population"
     ch.height, ch.width = 10, 18
     data = Reference(ws, min_col=2, min_row=4, max_row=last)
     cats = Reference(ws, min_col=1, min_row=5, max_row=last)
     ch.add_data(data, titles_from_data=True)
     ch.set_categories(cats)
-    ch.legend = None
+    paint(ch.series[0], C_ACCENT)
+    style_chart(ch, legend=None)
+    chart_title(ws, "F3", "Measures of digital exclusion, Denmark",
+                "Five definitions of the same phenomenon; they are nested, "
+                "not contradictory.")
     ws.add_chart(ch, "F4")
 
     r = last + 2
@@ -778,7 +907,7 @@ def sheet_f4(wb):
     for label, code in [("Age 75-84", "DK.DGP.EXMP.7584"), ("Age 85+", "DK.DGP.EXMP.85P")]:
         ws.cell(row=r, column=1, value=label).font = T_BODY
         c = ws.cell(row=r, column=2, value=lookup(code, 2022))
-        c.font, c.fill, c.number_format = T_BODY, F_FLAG, "0.0"
+        c.font, c.fill, c.number_format = T_BODY, F_FLAG, N_ONE
         for j in (1, 2):
             ws.cell(row=r, column=j).border = BOX
         r += 1
@@ -812,7 +941,7 @@ def sheet_f4(wb):
     for label, formula, note in heads:
         ws.cell(row=r, column=1, value=label).font = T_BODY
         c = ws.cell(row=r, column=2, value=formula)
-        c.font, c.fill, c.number_format = T_BODY, F_CALC, "#,##0"
+        c.font, c.fill, c.number_format = T_BODY, F_CALC, N_INT
         ws.cell(row=r, column=3, value=note).font = T_SMALL
         ws.cell(row=r, column=3).alignment = WRAP
         for j in range(1, 4):
@@ -848,7 +977,7 @@ def sheet_f5(wb):
         r = 5 + i
         ws.cell(row=r, column=1, value=name).font = T_BODY
         c = ws.cell(row=r, column=2, value=lookup(code, 2024))
-        c.font, c.fill, c.number_format = T_BODY, F_CALC, "0.0"
+        c.font, c.fill, c.number_format = T_BODY, F_CALC, N_ONE
         ws.cell(row=r, column=3, value=code).font = T_MONO
         for j in range(1, 4):
             ws.cell(row=r, column=j).border = BOX
@@ -856,15 +985,22 @@ def sheet_f5(wb):
 
     ch = BarChart()
     ch.type, ch.grouping = "bar", "clustered"
-    ch.title = "Individuals who bought online in last 12 months, 2024"
-    ch.style = 2
     ch.x_axis.title = "% of internet users"
     ch.height, ch.width = 10, 17
     data = Reference(ws, min_col=2, min_row=4, max_row=last)
     cats = Reference(ws, min_col=1, min_row=5, max_row=last)
     ch.add_data(data, titles_from_data=True)
     ch.set_categories(cats)
-    ch.legend = None
+    # The subject of this chart is Denmark's position, not eight countries'
+    # values. Denmark takes the accent, the EU average takes navy as the
+    # reference line, and the rest recede so the comparison reads at a glance.
+    focus = {i: (C_ACCENT if code.startswith("DK") else C_DARK)
+             for i, (_name, code) in enumerate(order)
+             if code.startswith(("DK", "EU"))}
+    highlight_points(ch.series[0], len(order), focus)
+    style_chart(ch, legend=None)
+    chart_title(ws, "E3", "Individuals who bought online, 2024",
+                "Denmark in blue, EU-27 average in navy, other members in grey.")
     ws.add_chart(ch, "E4")
 
     source_note(ws, last + 2,
@@ -906,21 +1042,22 @@ def sheet_f6(wb):
         cx = ws.cell(row=r, column=3, value=lookup(f"{geo}.ECM.IND.BUY", 2024))
         cy = ws.cell(row=r, column=4, value=lookup(f"{geo}.ECM.ENT.TRN", 2024))
         for c in (cx, cy):
-            c.font, c.fill, c.number_format = T_BODY, F_CALC, "0.00"
+            c.font, c.fill, c.number_format = T_BODY, F_CALC, N_DEC
         for j in range(1, 5):
             ws.cell(row=r, column=j).border = BOX
     first, last = 5, 4 + len(paired)
 
     ch = ScatterChart()
-    ch.title = "Digital adoption and e-commerce turnover, EU 2024"
-    ch.style = 2
     ch.x_axis.title = "Individuals who bought online (% of internet users)"
     ch.y_axis.title = "E-sales as % of enterprise turnover"
     ch.height, ch.width = 11, 18
     xs = Reference(ws, min_col=3, min_row=first, max_row=last)
     ys = Reference(ws, min_col=4, min_row=4, max_row=last)
     s = Series(ys, xs, title_from_data=True)
-    s.marker = Marker(symbol="circle", size=9)
+    s.marker = Marker(
+        symbol="circle", size=9,
+        spPr=GraphicalProperties(solidFill=C_ACCENT,
+                                 ln=LineProperties(noFill=True)))
     s.graphicalProperties.line.noFill = True          # markers only, no join
     # The equation is displayed; R-squared deliberately is NOT. See the
     # SELECTION WARNING block below - this sample is drawn from the tails of the
@@ -929,9 +1066,18 @@ def sheet_f6(wb):
     # earned. It remains computed in the statistics table, next to the warning.
     s.trendline = Trendline(trendlineType="linear", dispRSqr=False, dispEq=True)
     ch.series.append(s)
+    # The fitted line is drawn in grey, not in the accent. The observations are
+    # the evidence; the line is an interpretation laid over them, and on a
+    # tail-selected sample of six it is the weaker of the two. Colour ranks them
+    # accordingly.
+    s.trendline.spPr = GraphicalProperties(
+        ln=LineProperties(solidFill=C_GREY, w=16000))
     ch.x_axis.scaling.min, ch.x_axis.scaling.max = 50, 100
     ch.y_axis.scaling.min = 0
-    ch.legend = None
+    style_chart(ch, legend=None)
+    chart_title(ws, "F3", "Digital adoption and e-commerce turnover, EU 2024",
+                "One point per country. Read the SELECTION WARNING below "
+                "before quoting the fit.")
     ws.add_chart(ch, "F4")
 
     # --- fitted line statistics, as live formulas --------------------------
@@ -943,29 +1089,29 @@ def sheet_f6(wb):
     header_row(ws, r, ["statistic", "value", "reading"], [26, 14, 74])
     r += 1
     stats = [
-        ("n (countries)", f"=COUNT({xr})", "0",
+        ("n (countries)", f"=COUNT({xr})", N_INT,
          "Number of complete X-Y pairs. Expands automatically as data is added."),
-        ("Slope", f"=SLOPE({yr},{xr})", "0.000",
+        ("Slope", f"=SLOPE({yr},{xr})", N_THREE,
          "Percentage points of enterprise turnover per percentage point of "
          "consumer adoption."),
-        ("Intercept", f"=INTERCEPT({yr},{xr})", "0.00",
+        ("Intercept", f"=INTERCEPT({yr},{xr})", N_DEC,
          "Not interpretable - no country has zero adoption, so this is far "
          "outside the observed range."),
-        ("Correlation (r)", f"=CORREL({xr},{yr})", "0.000",
+        ("Correlation (r)", f"=CORREL({xr},{yr})", N_THREE,
          "Strength and direction of the linear association."),
-        ("R-squared", f"=RSQ({yr},{xr})", "0.000",
+        ("R-squared", f"=RSQ({yr},{xr})", N_THREE,
          "Share of cross-country variation in Y that moves with X. READ THE "
          "SELECTION WARNING BELOW BEFORE QUOTING THIS NUMBER: it is inflated by "
          "how the sample was drawn and overstates the fit."),
-        ("Denmark: actual Y", lookup("DK.ECM.ENT.TRN", 2024), "0.00",
+        ("Denmark: actual Y", lookup("DK.ECM.ENT.TRN", 2024), N_DEC,
          "Denmark's observed value."),
         ("Denmark: fitted Y",
          f"=INTERCEPT({yr},{xr})+SLOPE({yr},{xr})*{lookup('DK.ECM.IND.BUY', 2024)[1:]}",
-         "0.00", "What the line predicts for Denmark's adoption level."),
+         N_DEC, "What the line predicts for Denmark's adoption level."),
         ("Denmark: residual",
          f"={lookup('DK.ECM.ENT.TRN', 2024)[1:]}-(INTERCEPT({yr},{xr})"
          f"+SLOPE({yr},{xr})*{lookup('DK.ECM.IND.BUY', 2024)[1:]})",
-         "+0.00;-0.00",
+         N_SIGNED,
          "Positive: Denmark converts adoption into commercial activity better "
          "than the EU pattern predicts. Negative: worse."),
     ]
@@ -1172,10 +1318,10 @@ def sheet_f7(wb):
     for label, dk, eu, unit in rows:
         ws.cell(row=r, column=1, value=label).font = T_BODY
         c = ws.cell(row=r, column=2, value=dk)
-        c.font, c.fill, c.number_format = T_BODY, F_CALC, "0.00"
+        c.font, c.fill, c.number_format = T_BODY, F_CALC, N_DEC
         if eu:
             c = ws.cell(row=r, column=3, value=eu)
-            c.font, c.fill, c.number_format = T_BODY, F_CALC, "0.00"
+            c.font, c.fill, c.number_format = T_BODY, F_CALC, N_DEC
         ws.cell(row=r, column=4, value=unit).font = T_SMALL
         for j in range(1, 5):
             ws.cell(row=r, column=j).border = BOX
@@ -1184,14 +1330,18 @@ def sheet_f7(wb):
 
     ch = BarChart()
     ch.type, ch.grouping = "bar", "clustered"
-    ch.title = "Denmark vs EU-27 average"
-    ch.style = 2
     ch.x_axis.title = "% or benchmark score"
     ch.height, ch.width = 10, 18
     data = Reference(ws, min_col=2, max_col=3, min_row=4, max_row=last)
     cats = Reference(ws, min_col=1, min_row=5, max_row=last)
     ch.add_data(data, titles_from_data=True)
     ch.set_categories(cats)
+    paint(ch.series[0], C_ACCENT)   # Denmark
+    paint(ch.series[1], C_GREY)     # EU-27, context
+    style_chart(ch)
+    chart_title(ws, "F3", "Denmark vs EU-27 average",
+                "Denmark in blue, EU average in grey. Note the direction "
+                "reverses on the bottom two rows.")
     ws.add_chart(ch, "F4")
 
     r = last + 2
@@ -1218,7 +1368,7 @@ def sheet_f7(wb):
     for label, formula, note in gaps:
         ws.cell(row=r, column=1, value=label).font = T_BODY
         c = ws.cell(row=r, column=2, value=formula)
-        c.font, c.fill, c.number_format = T_BODY, F_CALC, "0.00"
+        c.font, c.fill, c.number_format = T_BODY, F_CALC, N_DEC
         ws.cell(row=r, column=3, value=note).font = T_SMALL
         ws.cell(row=r, column=3).alignment = WRAP
         for j in range(1, 4):
@@ -1269,7 +1419,7 @@ def sheet_f8(wb):
         ws.cell(row=r, column=1, value=label).font = T_BODY
         c = ws.cell(row=r, column=2, value=formula)
         c.font, c.fill = T_BODY, F_CALC
-        c.number_format = "#,##0" if unit == "count" else "0.0"
+        c.number_format = N_INT if unit == "count" else N_ONE
         ws.cell(row=r, column=3, value=unit).font = T_SMALL
         for j in range(1, 4):
             ws.cell(row=r, column=j).border = BOX
@@ -1278,15 +1428,17 @@ def sheet_f8(wb):
 
     ch = BarChart()
     ch.type, ch.grouping = "bar", "clustered"
-    ch.title = "SMV:Digital participant outcomes"
-    ch.style = 2
     ch.x_axis.title = "% of participating enterprises / count"
     ch.height, ch.width = 8, 16
     data = Reference(ws, min_col=2, min_row=4, max_row=last)
     cats = Reference(ws, min_col=1, min_row=5, max_row=last)
     ch.add_data(data, titles_from_data=True)
     ch.set_categories(cats)
-    ch.legend = None
+    paint(ch.series[0], C_ACCENT)
+    style_chart(ch, legend=None)
+    chart_title(ws, "E3", "SMV:Digital participant outcomes",
+                "Participation measures only. No effect size is plotted "
+                "because none was verified.")
     ws.add_chart(ch, "E4")
 
     r = last + 2
