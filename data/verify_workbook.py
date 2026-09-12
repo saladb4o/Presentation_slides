@@ -20,10 +20,11 @@ PATH = os.path.join(
 EXPECTED = [
     "00_COVER", "01_README", "02_MASTER", "03_SOURCES", "04_DEFINITIONS",
     "05_CALC", "F1_BRANCHES", "F2_PAYMENTS", "F3_ESALES", "F4_EXCLUSION",
-    "F5_EU8", "06_RETAIL_GAP", "07_LIMITATIONS", "08_AI_LOG",
+    "F5_EU8", "F6_ADOPT_BENEFIT", "06_RETAIL_GAP", "07_LIMITATIONS", "08_AI_LOG",
 ]
 
-FIG_SHEETS = ["F1_BRANCHES", "F2_PAYMENTS", "F3_ESALES", "F4_EXCLUSION", "F5_EU8"]
+FIG_SHEETS = ["F1_BRANCHES", "F2_PAYMENTS", "F3_ESALES", "F4_EXCLUSION",
+              "F5_EU8", "F6_ADOPT_BENEFIT"]
 
 failures = []
 checks = 0
@@ -57,7 +58,7 @@ src_ids = {r[0].value for r in wb["03_SOURCES"].iter_rows(min_row=2, max_col=1)
 check(len(src_ids) > 0, "SOURCES sheet has no source_ids")
 
 rows = list(m.iter_rows(min_row=2, values_only=True))
-check(len(rows) == 69, f"expected 69 observations, found {len(rows)}")
+check(len(rows) == 87, f"expected 87 observations, found {len(rows)}")
 
 seen = set()
 for r in rows:
@@ -97,7 +98,9 @@ for name in FIG_SHEETS:
     formulas = [c.value for row in ws.iter_rows(min_row=5) for c in row
                 if isinstance(c.value, str) and c.value.startswith("=")]
     check(len(formulas) > 0, f"{name}: no formulas found")
-    bad = [f for f in formulas if "02_MASTER" not in f]
+    bad = [f for f in formulas if "02_MASTER" not in f
+           and not any(k in f for k in ("SLOPE(", "RSQ(", "CORREL(",
+                                        "INTERCEPT(", "COUNT("))]
     check(not bad, f"{name}: formulas not referencing MASTER: {bad[:3]}")
 
 # 6. CALC sheet is all formulas
@@ -135,7 +138,14 @@ for name in FIG_SHEETS + ["05_CALC"]:
             if not (isinstance(c.value, str) and c.value.startswith("=")):
                 continue
             pairs = LOOKUP_RE.findall(c.value)
-            check(pairs, f"{name}!{c.coordinate}: formula has no parsable lookup")
+            if not pairs:
+                # F6's OLS cells (SLOPE/RSQ/CORREL/INTERCEPT/COUNT) operate on
+                # ranges of lookup cells rather than performing a lookup of
+                # their own. Anything else with no lookup is a bug.
+                check(any(k in c.value for k in ("SLOPE(", "RSQ(", "CORREL(",
+                                                 "INTERCEPT(", "COUNT(")),
+                      f"{name}!{c.coordinate}: formula has no parsable lookup")
+                continue
             for code, year in pairs:
                 resolved += 1
                 check((code, int(year)) in master_keys,
@@ -146,7 +156,8 @@ check(resolved >= 40, f"only {resolved} lookups resolved; expected more")
 
 # 8. charts present
 expected_charts = {"F1_BRANCHES": 1, "F2_PAYMENTS": 2, "F3_ESALES": 1,
-                   "F4_EXCLUSION": 1, "F5_EU8": 1}
+                   "F4_EXCLUSION": 1, "F5_EU8": 1,
+                   "F6_ADOPT_BENEFIT": 1}
 for name, n in expected_charts.items():
     check(len(wb[name]._charts) == n,
           f"{name}: expected {n} chart(s), found {len(wb[name]._charts)}")

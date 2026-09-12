@@ -13,11 +13,12 @@ from datetime import date
 from openpyxl import Workbook
 from openpyxl.chart import BarChart, Reference, ScatterChart, Series
 from openpyxl.chart.marker import Marker
+from openpyxl.chart.trendline import Trendline
 from openpyxl.drawing.line import LineProperties
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-from dataset import OBS, validate
+from dataset import COUNTRIES, OBS, cross_section, validate
 from sources import ACCESSED, SOURCES
 
 OUT = os.path.join(
@@ -144,6 +145,7 @@ def sheet_cover(wb):
         ("F3_ESALES", "Figure 3 - e-sales share of turnover, DK vs EU"),
         ("F4_EXCLUSION", "Figure 4 - measures of digital exclusion"),
         ("F5_EU8", "Figure 5 - online purchasing, verified EU countries, 2024"),
+        ("F6_ADOPT_BENEFIT", "Figure 6 - adoption vs economic effect, EU 2024"),
         ("06_RETAIL_GAP", "Documented gap - retail volume index not retrieved"),
         ("07_LIMITATIONS", "Data quality statement - read before citing"),
         ("08_AI_LOG", "AI use and validation log"),
@@ -757,6 +759,153 @@ def sheet_f5(wb):
     return ws
 
 
+def sheet_f6(wb):
+    """The adoption-to-economic-effect exhibit.
+
+    This is the chart the assessment brief asks for: adoption on X, an economic
+    magnitude on Y, one point per country, with a fitted line. It has to be a
+    cross-section rather than a Danish time series because the Danish adoption
+    and outcome series share almost no observation years - the best time-series
+    pairing anywhere in the dataset is n=2.
+    """
+    ws = wb.create_sheet("F6_ADOPT_BENEFIT")
+    title_block(ws, "Figure 6 - Does more digital adoption mean more economic activity?",
+                "EU cross-section, 2024. X = consumer adoption. Y = share of "
+                "enterprise turnover from e-sales.")
+
+    paired, awaiting_x, awaiting_y = cross_section(2024)
+
+    header_row(ws, 4,
+               ["country", "code",
+                "X: individuals buying online (%)",
+                "Y: e-sales share of turnover (%)"],
+               [20, 8, 30, 30])
+    for i, geo in enumerate(paired):
+        r = 5 + i
+        ws.cell(row=r, column=1, value=COUNTRIES[geo]).font = T_BODY
+        ws.cell(row=r, column=2, value=geo).font = T_MONO
+        cx = ws.cell(row=r, column=3, value=lookup(f"{geo}.ECM.IND.BUY", 2024))
+        cy = ws.cell(row=r, column=4, value=lookup(f"{geo}.ECM.ENT.TRN", 2024))
+        for c in (cx, cy):
+            c.font, c.fill, c.number_format = T_BODY, F_CALC, "0.00"
+        for j in range(1, 5):
+            ws.cell(row=r, column=j).border = BOX
+    first, last = 5, 4 + len(paired)
+
+    ch = ScatterChart()
+    ch.title = "Digital adoption and e-commerce turnover, EU 2024"
+    ch.style = 2
+    ch.x_axis.title = "Individuals who bought online (% of internet users)"
+    ch.y_axis.title = "E-sales as % of enterprise turnover"
+    ch.height, ch.width = 11, 18
+    xs = Reference(ws, min_col=3, min_row=first, max_row=last)
+    ys = Reference(ws, min_col=4, min_row=4, max_row=last)
+    s = Series(ys, xs, title_from_data=True)
+    s.marker = Marker(symbol="circle", size=9)
+    s.graphicalProperties.line.noFill = True          # markers only, no join
+    s.trendline = Trendline(trendlineType="linear", dispRSqr=True, dispEq=True)
+    ch.series.append(s)
+    ch.x_axis.scaling.min, ch.x_axis.scaling.max = 50, 100
+    ch.y_axis.scaling.min = 0
+    ch.legend = None
+    ws.add_chart(ch, "F4")
+
+    # --- fitted line statistics, as live formulas --------------------------
+    xr = f"$C${first}:$C${last}"
+    yr = f"$D${first}:$D${last}"
+    r = last + 2
+    ws.cell(row=r, column=1, value="FITTED LINE (ordinary least squares)").font = T_SUB
+    r += 1
+    header_row(ws, r, ["statistic", "value", "reading"], [26, 14, 74])
+    r += 1
+    stats = [
+        ("n (countries)", f"=COUNT({xr})", "0",
+         "Number of complete X-Y pairs. Expands automatically as data is added."),
+        ("Slope", f"=SLOPE({yr},{xr})", "0.000",
+         "Percentage points of enterprise turnover per percentage point of "
+         "consumer adoption."),
+        ("Intercept", f"=INTERCEPT({yr},{xr})", "0.00",
+         "Not interpretable - no country has zero adoption, so this is far "
+         "outside the observed range."),
+        ("Correlation (r)", f"=CORREL({xr},{yr})", "0.000",
+         "Strength and direction of the linear association."),
+        ("R-squared", f"=RSQ({yr},{xr})", "0.000",
+         "Share of cross-country variation in Y that moves with X."),
+        ("Denmark: actual Y", lookup("DK.ECM.ENT.TRN", 2024), "0.00",
+         "Denmark's observed value."),
+        ("Denmark: fitted Y",
+         f"=INTERCEPT({yr},{xr})+SLOPE({yr},{xr})*{lookup('DK.ECM.IND.BUY', 2024)[1:]}",
+         "0.00", "What the line predicts for Denmark's adoption level."),
+        ("Denmark: residual",
+         f"={lookup('DK.ECM.ENT.TRN', 2024)[1:]}-(INTERCEPT({yr},{xr})"
+         f"+SLOPE({yr},{xr})*{lookup('DK.ECM.IND.BUY', 2024)[1:]})",
+         "+0.00;-0.00",
+         "Positive: Denmark converts adoption into commercial activity better "
+         "than the EU pattern predicts. Negative: worse."),
+    ]
+    for label, formula, fmt, reading in stats:
+        ws.cell(row=r, column=1, value=label).font = T_BODY
+        c = ws.cell(row=r, column=2, value=formula)
+        c.font, c.fill, c.number_format = T_BODY, F_CALC, fmt
+        rd = ws.cell(row=r, column=3, value=reading)
+        rd.font, rd.alignment = T_SMALL, WRAP
+        for j in range(1, 4):
+            ws.cell(row=r, column=j).border = BOX
+        ws.row_dimensions[r].height = 26
+        r += 1
+
+    # --- expansion register -------------------------------------------------
+    if awaiting_x or awaiting_y:
+        r += 1
+        ws.cell(row=r, column=1,
+                value="AWAITING DATA - not plotted").font = T_SUB
+        r += 1
+        header_row(ws, r, ["country", "code", "missing"], [20, 8, 74])
+        r += 1
+        for geo in awaiting_x:
+            ws.cell(row=r, column=1, value=COUNTRIES[geo]).font = T_BODY
+            ws.cell(row=r, column=2, value=geo).font = T_MONO
+            c = ws.cell(row=r, column=3,
+                        value=f"X - add {geo}.ECM.IND.BUY for 2024 (Eurostat "
+                              f"isoc_ec_ib20)")
+            c.font, c.fill = T_SMALL, F_GAP
+            for j in range(1, 4):
+                ws.cell(row=r, column=j).border = BOX
+            r += 1
+        for geo in awaiting_y:
+            ws.cell(row=r, column=1, value=COUNTRIES[geo]).font = T_BODY
+            ws.cell(row=r, column=2, value=geo).font = T_MONO
+            c = ws.cell(row=r, column=3,
+                        value=f"Y - add {geo}.ECM.ENT.TRN for 2024 (Eurostat "
+                              f"tin00110)")
+            c.font, c.fill = T_SMALL, F_GAP
+            for j in range(1, 4):
+                ws.cell(row=r, column=j).border = BOX
+            r += 1
+
+    source_note(ws, r + 1,
+                f"Sources: Eurostat isoc_ec_ib20 (ES4) for X; Eurostat tin00110 "
+                f"(ES5, ES6) for Y. "
+                f"WHY A CROSS-SECTION: the Danish adoption and outcome series "
+                f"share almost no observation years - the best time-series "
+                f"pairing in this dataset is n=2 - so a within-Denmark scatter "
+                f"of adoption against outcome cannot be drawn from verified "
+                f"data. "
+                f"SAMPLE: n={len(paired)} of 27 member states. This is a small "
+                f"sample; report the association descriptively and do not quote "
+                f"a p-value. Adding the missing values listed above raises n "
+                f"automatically on the next rebuild. "
+                f"WHAT Y MEASURES: tin00110 covers all enterprises with 10+ "
+                f"employees outside the financial sector, so it includes B2B and "
+                f"EDI ordering across every industry, not retail alone. X is a "
+                f"consumer measure. The two sit on different sides of the market, "
+                f"so a positive association is evidence that digital commerce is "
+                f"deep in an economy - not evidence that consumers buying online "
+                f"causes enterprise turnover.")
+    ws.sheet_view.showGridLines = False
+    return ws
+
+
 def sheet_gap(wb):
     ws = wb.create_sheet("06_RETAIL_GAP")
     ws.column_dimensions["A"].width = 26
@@ -832,6 +981,25 @@ def sheet_limitations(wb):
          "quantity and must not be averaged or presented as a range."),
         ("Cross-section incomplete",
          "F5 covers 8 of 27 member states. It supports a ranking, not a regression."),
+        ("Figure 6 sample size",
+         "The adoption-to-outcome scatter rests on 6 complete country pairs. The "
+         "association is strong and positive, but 6 points cannot support a "
+         "p-value, a confidence interval, or a claim about causal direction. "
+         "Report the slope and R-squared descriptively and say n explicitly. "
+         "Adding the missing values listed on that sheet raises n automatically."),
+        ("Figure 6 measures two sides of the market",
+         "X is a consumer measure (individuals buying online); Y is an "
+         "all-enterprise, all-sector measure that includes B2B and EDI ordering. "
+         "A positive association indicates that digital commerce runs deep in an "
+         "economy. It is not evidence that consumer purchasing causes enterprise "
+         "turnover, and must not be written as though it were."),
+        ("Mirror-sourced column",
+         "The 16 country-level e-sales turnover values flagged 'u' were retrieved "
+         "via search of Eurostat tin00110 rather than from the databrowser "
+         "directly. Two values in the same column (EU27 19.49 and Ireland 38.25) "
+         "are independently corroborated by source ES5, which supports the "
+         "column, but each value should be spot-checked against the databrowser "
+         "before final submission."),
         ("Search-based verification",
          "Direct access to statistical portals was blocked in the build environment. "
          "Values were verified against the issuing authority through search results "
@@ -926,6 +1094,7 @@ def main():
     sheet_f3(wb)
     sheet_f4(wb)
     sheet_f5(wb)
+    sheet_f6(wb)
     sheet_gap(wb)
     sheet_limitations(wb)
     sheet_ai_log(wb)

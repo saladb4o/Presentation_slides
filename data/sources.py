@@ -107,6 +107,21 @@ SOURCES = {
             "Commission, Luxembourg, accessed 12 September 2026."
         ),
     ),
+    "ES6": dict(
+        authority="Eurostat",
+        title=(
+            "Share of enterprises' turnover on e-commerce, by country "
+            "(country-level values retrieved via search of the Eurostat indicator)"
+        ),
+        dataset_code="tin00110",
+        url="https://ec.europa.eu/eurostat/databrowser/view/tin00110/default/table?lang=en",
+        accessed=ACCESSED,
+        harvard=(
+            "Eurostat 2025, Share of enterprises' turnover on e-commerce "
+            "(tin00110), European Commission, Luxembourg, accessed "
+            "12 September 2026."
+        ),
+    ),
     "EC1": dict(
         authority="European Commission",
         title=(

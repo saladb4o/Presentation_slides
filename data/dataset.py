@@ -120,6 +120,53 @@ OBS = [
     ("IE.ECM.ENT.TRN", "E-sales as share of enterprise turnover", "IE", 2024, 38.25,
      "%", "% of total enterprise turnover", "", "ES5", "Highest in EU."),
 
+    # Additional 2024 adoption values named in the Eurostat press release.
+    ("HU.ECM.IND.BUY", "Individuals who bought online in last 12 months", "HU", 2024, 79.0,
+     "%", "% of internet users", "", "ES4", "Rose 37pp from 42% in 2014."),
+    ("LT.ECM.IND.BUY", "Individuals who bought online in last 12 months", "LT", 2024, 72.0,
+     "%", "% of internet users", "", "ES4", "Rose 36pp from 36% in 2014."),
+
+    # ------------------------------------------------------------------
+    # E-sales share of enterprise turnover, EU cross-section 2024.
+    # Flagged 'u': these country-level values were retrieved via search of
+    # Eurostat tin00110 rather than from the databrowser directly. Two of them
+    # (EU27 19.49 and IE 38.25) are independently corroborated by source ES5,
+    # which raises confidence in the column, but every value should be
+    # spot-checked against the databrowser before final submission.
+    # ------------------------------------------------------------------
+    ("BE.ECM.ENT.TRN", "E-sales as share of enterprise turnover", "BE", 2024, 29.51,
+     "%", "% of total enterprise turnover", "u", "ES6", ""),
+    ("SE.ECM.ENT.TRN", "E-sales as share of enterprise turnover", "SE", 2024, 26.32,
+     "%", "% of total enterprise turnover", "u", "ES6", ""),
+    ("CZ.ECM.ENT.TRN", "E-sales as share of enterprise turnover", "CZ", 2024, 25.65,
+     "%", "% of total enterprise turnover", "u", "ES6", ""),
+    ("LU.ECM.ENT.TRN", "E-sales as share of enterprise turnover", "LU", 2024, 23.86,
+     "%", "% of total enterprise turnover", "u", "ES6", ""),
+    ("HU.ECM.ENT.TRN", "E-sales as share of enterprise turnover", "HU", 2024, 21.35,
+     "%", "% of total enterprise turnover", "u", "ES6", ""),
+    ("DE.ECM.ENT.TRN", "E-sales as share of enterprise turnover", "DE", 2024, 19.05,
+     "%", "% of total enterprise turnover", "u", "ES6", ""),
+    ("AT.ECM.ENT.TRN", "E-sales as share of enterprise turnover", "AT", 2024, 18.96,
+     "%", "% of total enterprise turnover", "u", "ES6", ""),
+    ("HR.ECM.ENT.TRN", "E-sales as share of enterprise turnover", "HR", 2024, 18.48,
+     "%", "% of total enterprise turnover", "u", "ES6", ""),
+    ("ES.ECM.ENT.TRN", "E-sales as share of enterprise turnover", "ES", 2024, 18.27,
+     "%", "% of total enterprise turnover", "u", "ES6", ""),
+    ("PL.ECM.ENT.TRN", "E-sales as share of enterprise turnover", "PL", 2024, 17.66,
+     "%", "% of total enterprise turnover", "u", "ES6", ""),
+    ("SI.ECM.ENT.TRN", "E-sales as share of enterprise turnover", "SI", 2024, 16.78,
+     "%", "% of total enterprise turnover", "u", "ES6", ""),
+    ("IT.ECM.ENT.TRN", "E-sales as share of enterprise turnover", "IT", 2024, 15.66,
+     "%", "% of total enterprise turnover", "u", "ES6", ""),
+    ("MT.ECM.ENT.TRN", "E-sales as share of enterprise turnover", "MT", 2024, 15.46,
+     "%", "% of total enterprise turnover", "u", "ES6", ""),
+    ("FR.ECM.ENT.TRN", "E-sales as share of enterprise turnover", "FR", 2024, 14.25,
+     "%", "% of total enterprise turnover", "u", "ES6", ""),
+    ("CY.ECM.ENT.TRN", "E-sales as share of enterprise turnover", "CY", 2024, 13.36,
+     "%", "% of total enterprise turnover", "u", "ES6", ""),
+    ("BG.ECM.ENT.TRN", "E-sales as share of enterprise turnover", "BG", 2024, 7.63,
+     "%", "% of total enterprise turnover", "u", "ES6", ""),
+
     ("DK.ECM.ENT.SHR", "Enterprises making e-sales", "DK", 2024, 38.78,
      "%", "% of enterprises", "", "ES5", "2nd in EU after Lithuania."),
     ("LT.ECM.ENT.SHR", "Enterprises making e-sales", "LT", 2024, 43.03,
@@ -218,6 +265,42 @@ OBS = [
     ("DK.SME.SMVD.NOINV", "Participants with no further investment plans", "DK", 2025, 2.0,
      "%", "% of participating enterprises", "", "DG3", ""),
 ]
+
+
+COUNTRIES = {
+    "AT": "Austria", "BE": "Belgium", "BG": "Bulgaria", "CY": "Cyprus",
+    "CZ": "Czechia", "DE": "Germany", "DK": "Denmark", "EE": "Estonia",
+    "EL": "Greece", "ES": "Spain", "FI": "Finland", "FR": "France",
+    "HR": "Croatia", "HU": "Hungary", "IE": "Ireland", "IT": "Italy",
+    "LT": "Lithuania", "LU": "Luxembourg", "LV": "Latvia", "MT": "Malta",
+    "NL": "Netherlands", "PL": "Poland", "PT": "Portugal", "RO": "Romania",
+    "SE": "Sweden", "SI": "Slovenia", "SK": "Slovakia",
+}
+
+
+def cross_section(year=2024):
+    """Split EU countries into complete (X and Y) and incomplete pairs.
+
+    X = XX.ECM.IND.BUY (adoption), Y = XX.ECM.ENT.TRN (economic outcome).
+    The EU27 aggregate is excluded - it is not an observation.
+
+    Returns (paired, awaiting_x, awaiting_y), each a list of ISO codes. The
+    split is recomputed at build time, so adding observations to OBS moves a
+    country into the plotted table automatically on the next rebuild.
+    """
+    have = {}
+    for code, _ind, geo, yr, *_ in OBS:
+        if yr != year or geo not in COUNTRIES:
+            continue
+        if code.endswith(".ECM.IND.BUY"):
+            have.setdefault(geo, {})["x"] = True
+        elif code.endswith(".ECM.ENT.TRN"):
+            have.setdefault(geo, {})["y"] = True
+
+    paired = sorted(c for c, d in have.items() if d.get("x") and d.get("y"))
+    awaiting_x = sorted(c for c, d in have.items() if d.get("y") and not d.get("x"))
+    awaiting_y = sorted(c for c, d in have.items() if d.get("x") and not d.get("y"))
+    return paired, awaiting_x, awaiting_y
 
 
 def validate():
