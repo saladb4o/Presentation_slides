@@ -38,6 +38,13 @@ Three moves:
    (16.5% in difficulty against 4.7% formally exempt) are all things a mandate
    cannot legislate into existence.
 
+**Where the spine lives: §1 states the promise, §6 collects on it.** An earlier
+version of this plan called the following "the empirical spine" and then allocated
+it to no section at all — the best fact in the report was homeless. §1 now ends on
+the ~DKK 1,000m projection (the promise that justified compelling 5.07m people),
+and §6 opens on the DKK 450m that survived audit. The report's first and last
+analytical moves are the two halves of one number.
+
 The **verified-savings finding is the empirical spine**: of the ~DKK 1bn/yr projected
 Digital Post saving, Rigsrevisionen could verify only **DKK 450m** — postage, paper,
 envelopes. The wage and overhead component was never substantiated; the
@@ -52,15 +59,33 @@ half-audited benefit. That sentence does more work than any other in the report.
 | § | Function | Words | Figure | Anchor numbers |
 |---|---|---|---|---|
 | — | Title block, no abstract | — | — | — |
-| 1 | Context and the policy instrument | 300 | Table 1 (09_POLICY) | LOV nr 528/2012; citizens mandatory 1 Nov 2014; MitID required 22 Sep 2022; NemID retired 31 Oct 2023 |
-| 2 | Adoption → economic effect | 480 | **F1**, **F2**, **F6**, **F9** | Branches 2,025 → 665 (**−67.2%**, 2004–2024); cash 23% → **9%** (2017–2025); wallets **32%**; F6 **n=18**, slope **+0.602** (se 0.105, **t=5.75**, **95% CI [0.380, 0.824]**), **R² 0.674**; institutions **−76.7%** vs employment **−29.4%** (1991–2024), staff per institution **233 → 706** |
-| 3 | Denmark's digital economy vs the EU + SDG | 420 | **F3**, **F7** | E-sales turnover DK 17.05 → **33.31%** vs EU 16.43 → **19.49%**; SME digital intensity **92.45%** vs 71.39%; DPS citizen score **82.2 vs 84.64** (−2.44) |
-| 4 | Who is left behind | 420 | **F4**, **F10** | **4.7%** formally exempt (238,479 citizens) vs **16.5%** in difficulty vs **22%** upper-bound disadvantaged; skills 92.06% (16–24) vs **67.81%** (55–74); DK leads the EU in **all three** bands, gradient **24.25pp** vs EU **31.95pp** |
-| 5 | Guest lecture question | 320 | — | **BLOCKED** — needs the speaker's content |
-| 6 | Recommendation and limitations | 160 | **F8** | SMV:Digital: ~7,000 projects, **65%** invested further, 2% no plans — the only control-group evidence in the workbook |
-|   | **Total** | **2,100** | 7 of 9 figures cited | |
+| 1 | Context, the instrument, and what it was supposed to buy | 290 | Table 1 (09_POLICY) | LOV nr 528/2012; citizens mandatory 1 Nov 2014; MitID required 22 Sep 2022; NemID retired 31 Oct 2023; **projected saving ~DKK 1,000m/yr** |
+| 2 | Adoption → economic effect | **580** | **F1**, **F2**, **F6**, **F9** | Branches 2,025 → 665 (**−67.2%**, 2004–2024); cash 23% → **9%** (2017–2025); wallets **32%**; F6 **n=18**, slope **+0.602** (se 0.105, **t=5.75**, **95% CI [0.380, 0.824]**), **R² 0.674**; institutions **−76.7%** vs employment **−29.4%** (1991–2024), staff per institution **233 → 706** |
+| 3 | Denmark vs the EU, innovation diffusion, SDG | 370 | **F3**, **F5**, **F7** | Intensity DK 17.05 → **33.31%** vs EU 16.43 → **19.49%**; breadth **38.78%** of enterprises (2nd of 27, behind LT 43.03); adoption **90.86%**, **3rd of 27**; **AI 42.03%** — large **74.52%** vs SME **40.99%**; SME digital intensity **92.45%**; DPS citizen score **82.2 vs 84.64** (−2.44) |
+| 4 | Who is left behind | 390 | **F4**, **F10** | **4.7%** formally exempt (238,479 citizens) vs **16.5%** in difficulty vs **22%** upper bound; **age 75–84 exempt 20%**, **age 85+ exempt 33%**; skills 92.06% (16–24) vs **67.81%** (55–74); gradient **24.25pp** vs EU **31.95pp** |
+| 5 | Guest lecture question | 300 | — | **BLOCKED** — needs the speaker's content |
+| 6 | Recommendation and limitations | 170 | **F8** | **Only DKK 450m of the ~1,000m was auditable — 55% unverified**; SMV:Digital ~7,000 projects, **65%** invested further, 2% no plans |
+|   | **Total** | **2,100** | 10 of 10 figures cited | |
 
 ### Notes on the harder sections
+
+**READ THIS BEFORE DRAFTING ANYTHING.** The assessment is a *Digital Policy and
+**Innovation** Report*. An earlier version of this plan used the word "innovation"
+zero times in its body: the spine ran compulsion → exclusion → unverified savings,
+which is a policy audit, not an innovation analysis. A marker holding a rubric will
+look for the innovation argument and find it only implied. **Every section must
+carry its innovation load explicitly**, and the mechanism that does it is this:
+
+> Compulsion built a *rail* — a single mandated identity and messaging
+> infrastructure. Rails are innovation infrastructure: they lower the fixed cost of
+> building on top. The Danish question is therefore not whether the mandate worked,
+> but **who was able to build on what it created** — and the answer is uneven.
+
+That sentence converts the whole report into an innovation argument without
+changing a single number. §2 is diffusion into banking and payments, §3 is
+diffusion across firm sizes, §4 is the population the diffusion did not reach, §6
+recommends how to widen it.
+
 
 **§2 gains a real economic magnitude from F9.** The branch count alone shows
 disruption; F9 shows what kind. Institutions fell **−76.7%** while employment fell
@@ -108,6 +133,34 @@ quietly return.
   18 drops — never near zero, never sign-flipping. Ireland is most influential
   (−0.086).
 
+**§3 must disambiguate "breadth", or an examiner will.** The thesis says Denmark is
+"close to complete in breadth". That is true of CITIZENS (90.86% bought online in
+2024, 3rd of 27; Digital Post is compulsory) and false of ENTERPRISES: only
+**38.78% of Danish enterprises make any e-sales at all**. The word was carrying two
+different subjects in one argument, which is the kind of slip a marker enjoys
+finding. Two disciplines follow:
+
+1. **Say which population you mean, every time.** "Citizen breadth is near-complete;
+   enterprise breadth is not."
+2. **There is NO EU-27 average for enterprise breadth in this dataset.** The only
+   comparator held is Lithuania at 43.03%, the EU's highest, with Denmark 2nd. Do
+   not write "vs the EU" for this series — write "2nd of 27, behind Lithuania".
+
+The disambiguated version is a better finding than the blurred one: **Denmark has
+the EU's second-highest share of enterprises selling online and that share is still
+under two in five, while the firms that do sell online generate a third of all
+turnover that way (33.31% against an EU 19.49%).** Depth without breadth, stated
+precisely. That is the intensity/breadth divergence the thesis needs.
+
+**§3 also carries the innovation-diffusion argument.** AI adoption is the cleanest
+diffusion evidence in the workbook and no earlier version of this plan budgeted a
+word for it: **42.03%** of enterprises overall, but **74.52%** of large firms
+against **40.99%** of SMEs — a **33.5pp gap**. Denmark's SMEs clear the basic
+digital-intensity threshold almost universally (**92.45%**), so this is not a
+connectivity or literacy failure. The rail was built; large firms had the
+complementary capital to build on it and SMEs did not. That is an innovation
+finding, it is the bridge to §6's recommendation, and it costs about 80 words.
+
 **§3 carries the SDG.** Recommendation: **SDG 8** (Target 8.2, productivity through
 technological upgrading) — it sits on the e-sales and SME-intensity evidence the
 report already builds, so the SDG paragraph costs ~60 words instead of a new
@@ -115,6 +168,15 @@ argument. The alternative, **SDG 12** on ICT waste (DK **15.37%** vs EU **80.23%
 is a far more arresting contrast and a genuine Danish failure — but it is orthogonal
 to the thesis and would need its own 150 words to justify. **SDG 8 unless you want
 the contrarian angle.**
+
+**§4 must lead with the age bands, not the aggregate.** The strongest exclusion
+numbers in the workbook were unused by earlier versions of this plan: the Digital
+Post exemption rate is **20% among citizens aged 75–84 and 33% among those aged
+85+**. One in three of the oldest cohort sits formally outside a system the state
+made mandatory. That is far more vivid than 4.7%, and it reframes the aggregate
+correctly — 4.7% is small because the affected population is small, not because
+exclusion is rare where it bites. Note the vintage: the age bands are 2022 and the
+headline rate is 2026, so present them as complementary, never as a trend.
 
 **§4 must not overclaim.** Denmark's weakest age band, 55–74 at **67.81%**, still
 beats the EU average *for that same band* (42.60%) by just over 25pp. So Danish
@@ -134,7 +196,14 @@ That distinction is the section.
 ## 3. Drafting sequence
 
 1. **§2 first** — the lecturer's stated requirement, and the section whose numbers
-   are hardest. Everything else is easier once the spine holds.
+   are hardest. It now carries **580 words**, up from 480, because an audit of the
+   budget found it holding ten distinct analytical moves (branches, cash, wallets,
+   six regression statistics, the tail-selection comparison, the missingness test,
+   the jackknife, the causation disclaimer, F9's asymmetry and F9's base-year
+   caveat) at 48 words each. That is below the length of a single statistic plus its
+   caveat. The extra 100 words are funded from §3 (−50), §4 (−30), §5 (−20) and
+   §1 (−10). **If §2 still overruns, cut F2 to one sentence** — payments are the
+   least load-bearing of its four figures.
 2. **§4 second** — the most memorable evidence; write it while fresh.
 3. **§3**, then **§1** — context is easiest to write last, and shortest when written
    backwards from the argument it has to set up.
@@ -174,6 +243,13 @@ That distinction is the section.
 
 Class group is still a placeholder.
 
+**Caption word count is an unresolved risk.** Ten figures at roughly 25 words of
+caption each is ~250 words. If RMIT counts in-text captions toward the limit,
+2,100 + 250 = **2,350, over the 2,200 ceiling**. Confirm against the brief before
+drafting. If captions count, drop to the six figures that carry argument (F1, F4,
+F6, F9, F10 and one of F3/F5) and cite the rest as "full series in the accompanying
+workbook, sheet Fn" without a numbered figure.
+
 ---
 
 ## 6. Blockers and pre-submission checks
@@ -183,6 +259,10 @@ Class group is still a placeholder.
 | §5 guest lecture content | **Hard blocker** — 8 marks, cannot be drafted |
 | Class group code for the filename | Needed |
 | SDG choice | SDG 8 recommended, awaiting your call |
+| Do captions count toward the word limit? | **Needed** — decides whether 10 figures is viable or 6 |
+| Word budget re-cut | **Done** — §2 480→580, funded from §3/§4/§5/§1; total unchanged at 2,100 |
+| Innovation framing | **Done** — the "rail" mechanism now governs every section; AI diffusion budgeted into §3 |
+| "Breadth" equivocation | **Done** — citizen vs enterprise breadth separated; no EU comparator exists for enterprise breadth |
 | Open the workbook in real Excel | Charts verified structurally and audited in the raw XML, never seen rendered. 11 charts, F5_EU27 (28 bars) and F9 most worth checking |
 | 16 `u`-flagged tin00110 values | Spot-check against the Eurostat databrowser |
 | Figure 6 expansion | **Done** — n=18, complete on X; nine states still lack the turnover measure |
