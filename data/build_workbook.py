@@ -1600,8 +1600,18 @@ def sheet_f8(wb):
     error this workbook was rebuilt to avoid.
     """
     ws = wb.create_sheet("F8_SMVDIGITAL")
-    title_block(ws, "Figure 8 - SMV:Digital, the one policy with a control group",
-                "Danmarks Statistik matched-comparison evaluation, June 2025.")
+    # The title used to read "the one policy with a control group". An audit
+    # caught that against 04_DEFINITIONS, which says of these same three series:
+    # "Self-reported by participants, with no control group." Both statements
+    # were defensible about DIFFERENT things - the EVALUATION used a matched
+    # comparison, but the three values PLOTTED HERE are participation and
+    # self-report measures that do not come from it, and whose effect sizes are
+    # deliberately absent. A title claiming a control group over numbers that
+    # have none lends them credibility they have not earned, which is the exact
+    # move this workbook exists to refuse.
+    title_block(ws, "Figure 8 - SMV:Digital participation (not the effect estimate)",
+                "Danmarks Statistik evaluation, June 2025. The evaluation used a "
+                "matched comparison; the three values below do not come from it.")
     header_row(ws, 4, ["measure", "value", "unit"], [52, 14, 30])
 
     rows = [
@@ -1641,16 +1651,26 @@ def sheet_f8(wb):
 
     r = last + 2
     ws.cell(row=r, column=1,
-            value="WHY THIS IS THE STRONGEST EVIDENCE IN THE WORKBOOK").font = T_SUB
+            value="WHAT THIS FIGURE SHOWS - AND WHAT IT DOES NOT").font = T_SUB
     r += 1
     for line in [
-        "The evaluation was carried out by Danmarks Statistik, which compared "
-        "participating firms against comparable firms that did not participate. "
-        "Participants showed higher revenue AND higher employment.",
-        "That is a comparison group. Nothing else in this workbook has one. "
-        "Figure 6's cross-section can show that adoption and commercial activity "
-        "move together across countries; it cannot rule out that richer countries "
-        "simply do more of both. A matched comparison can.",
+        "WHAT THE PLOTTED NUMBERS ARE: participation counts and participant "
+        "self-reports. 'Invested further' is a share OF PARTICIPANTS, with no "
+        "comparison group behind it. Read alone, these three values cannot "
+        "support any causal claim about the programme, and 04_DEFINITIONS says "
+        "so on the same series.",
+        "WHAT THE EVALUATION SEPARATELY FOUND: Danmarks Statistik compared "
+        "participating firms against comparable non-participants and reported "
+        "higher revenue AND higher employment among participants. That matched "
+        "comparison is the strongest research DESIGN behind any source in this "
+        "workbook - Figure 6's cross-section cannot rule out that richer "
+        "countries simply do more of both, and a matched comparison can.",
+        "WHY THE TWO ARE KEPT APART: the design belongs to the evaluation, not "
+        "to these three numbers. Citing the figure as 'the one policy with a "
+        "control group' - as this sheet's title did until an audit caught it - "
+        "borrows the evaluation's credibility for values that do not carry it. "
+        "If the report wants the causal claim, it must cite the evaluation's own "
+        "effect sizes, which means retrieving and verifying them first.",
         "LIMIT: the effect sizes are not reproduced here because they were not "
         "verified against the evaluation itself. The direction of the finding is "
         "sourced; the magnitude is not, and must not be invented.",

@@ -1,8 +1,16 @@
 # Drafting plan — ECON1596/1597 Assessment 2
 **Denmark · Digital Policy and Innovation Report · 2,000 words ±10% · due 17 Sep 2026**
 
-Target length **2,100 words** of body prose. References, figure captions, the AI Use
-and Validation Appendix and the workbook are outside the count.
+Target **2,100 words TOTAL, captions included** — body prose ~1,980 plus ~120 words
+of caption across eight figures. References, the AI Use and Validation Appendix and
+the workbook sit outside the count.
+
+**This changed after an audit.** The earlier plan targeted 2,100 words of *body* on
+the assumption captions were excluded. They may be counted. At a 2,100 body the
+ceiling of 2,200 leaves **100 words of caption — four figures at 25 words**, against
+a plan that cited ten. Targeting the top of the band left no room for the thing that
+gets counted last. The budget below is therefore a TOTAL, with 100 words of margin
+against the 2,200 ceiling rather than zero.
 
 ---
 
@@ -59,13 +67,15 @@ half-audited benefit. That sentence does more work than any other in the report.
 | § | Function | Words | Figure | Anchor numbers |
 |---|---|---|---|---|
 | — | Title block, no abstract | — | — | — |
-| 1 | Context, the instrument, and what it was supposed to buy | 290 | Table 1 (09_POLICY) | LOV nr 528/2012; citizens mandatory 1 Nov 2014; MitID required 22 Sep 2022; NemID retired 31 Oct 2023; **projected saving ~DKK 1,000m/yr** |
-| 2 | Adoption → economic effect | **580** | **F1**, **F2**, **F6**, **F9** | Branches 2,025 → 665 (**−67.2%**, 2004–2024); cash 23% → **9%** (2017–2025); wallets **32%**; F6 **n=18**, slope **+0.602** (se 0.105, **t=5.75**, **95% CI [0.380, 0.824]**), **R² 0.674**; institutions **−76.7%** vs employment **−29.4%** (1991–2024), staff per institution **233 → 706** |
-| 3 | Denmark vs the EU, innovation diffusion, SDG | 370 | **F3**, **F5**, **F7** | Intensity DK 17.05 → **33.31%** vs EU 16.43 → **19.49%**; breadth **38.78%** of enterprises (2nd of 27, behind LT 43.03); adoption **90.86%**, **3rd of 27**; **AI 42.03%** — large **74.52%** vs SME **40.99%**; SME digital intensity **92.45%**; DPS citizen score **82.2 vs 84.64** (−2.44) |
-| 4 | Who is left behind | 390 | **F4**, **F10** | **4.7%** formally exempt (238,479 citizens) vs **16.5%** in difficulty vs **22%** upper bound; **age 75–84 exempt 20%**, **age 85+ exempt 33%**; skills 92.06% (16–24) vs **67.81%** (55–74); gradient **24.25pp** vs EU **31.95pp** |
-| 5 | Guest lecture question | 300 | — | **BLOCKED** — needs the speaker's content |
-| 6 | Recommendation and limitations | 170 | **F8** | **Only DKK 450m of the ~1,000m was auditable — 55% unverified**; SMV:Digital ~7,000 projects, **65%** invested further, 2% no plans |
-|   | **Total** | **2,100** | 10 of 10 figures cited | |
+| 1 | Context, the instrument, and what it was supposed to buy | 270 | Table 1 (09_POLICY) | LOV nr 528/2012; citizens mandatory 1 Nov 2014; MitID required 22 Sep 2022; NemID retired 31 Oct 2023; **projected saving ~DKK 1,000m/yr** |
+| 2 | Adoption → economic effect | **550** | **F1**, **F6**, **F9** (F2 in prose) | Branches 2,025 → 665 (**−67.2%**, 2004–2024); cash 23% → **9%**, wallets **32%** (prose, sheet F2); F6 **n=18**, slope **+0.602** (se 0.105, **t=5.75**, **95% CI [0.380, 0.824]**), **R² 0.674**; institutions **−76.7%** vs employment **−29.4%**, staff per institution **233 → 706** |
+| 3 | Denmark vs the EU, innovation diffusion, SDG | 350 | **F3**, **F7** (F5 in prose) | Intensity DK 17.05 → **33.31%** vs EU 16.43 → **19.49%**; breadth **38.78%** of enterprises (2nd of 27, behind LT 43.03); adoption **90.86%**, **3rd of 27** (prose, sheet F5); **AI 42.03%** — large **74.52%** vs SME **40.99%**; SME digital intensity **92.45%**; DPS score **82.2 vs 84.64** (−2.44) |
+| 4 | Who is left behind | 370 | **F4**, **F10** | **4.7%** formally exempt (238,479 citizens) vs **16.5%** in difficulty vs **22%** upper bound; **age 75–84 exempt 20%**, **age 85+ exempt 33%**; skills 92.06% (16–24) vs **67.81%** (55–74); gradient **24.25pp** vs EU **31.95pp** |
+| 5 | Guest lecture question | 280 | — | **BLOCKED** — needs the speaker's content |
+| 6 | Recommendation and limitations | 160 | **F8** | **Only DKK 450m of the ~1,000m was auditable — 55% unverified**; SMV:Digital ~7,000 projects, **65%** invested further (participant self-report — see F8's framing note) |
+|   | **Body subtotal** | **1,980** | 8 numbered figures | |
+|   | **Captions** (8 × ~15w) | **120** | | |
+|   | **TOTAL** | **2,100** | ceiling 2,200 — **100 words of margin** | |
 
 ### Notes on the harder sections
 
@@ -196,14 +206,15 @@ That distinction is the section.
 ## 3. Drafting sequence
 
 1. **§2 first** — the lecturer's stated requirement, and the section whose numbers
-   are hardest. It now carries **580 words**, up from 480, because an audit of the
+   are hardest. It now carries **550 words**, up from 480, because an audit of the
    budget found it holding ten distinct analytical moves (branches, cash, wallets,
    six regression statistics, the tail-selection comparison, the missingness test,
    the jackknife, the causation disclaimer, F9's asymmetry and F9's base-year
    caveat) at 48 words each. That is below the length of a single statistic plus its
-   caveat. The extra 100 words are funded from §3 (−50), §4 (−30), §5 (−20) and
-   §1 (−10). **If §2 still overruns, cut F2 to one sentence** — payments are the
-   least load-bearing of its four figures.
+   caveat. It now carries **550** in a budget that also had to find 120 words for
+   captions. **F2 has already been cut to prose** — payments were the least
+   load-bearing of its four figures — so §2 now runs three figures and one
+   sentence of payments data.
 2. **§4 second** — the most memorable evidence; write it while fresh.
 3. **§3**, then **§1** — context is easiest to write last, and shortest when written
    backwards from the argument it has to set up.
@@ -238,17 +249,33 @@ That distinction is the section.
 ## 5. Format
 
 `Assignment 2 ECON1596 _ [class group] _ s4040040.docx` — Times New Roman 12,
-1.5 spacing, justified, 1-inch margins, numbered sections, figures captioned
-**"Figure n — title. Source: … Full series in accompanying workbook, sheet Fn."**
+1.5 spacing, justified, 1-inch margins, numbered sections, figures captioned in the
+**compressed 15-word form** below.
 
 Class group is still a placeholder.
 
-**Caption word count is an unresolved risk.** Ten figures at roughly 25 words of
-caption each is ~250 words. If RMIT counts in-text captions toward the limit,
-2,100 + 250 = **2,350, over the 2,200 ceiling**. Confirm against the brief before
-drafting. If captions count, drop to the six figures that carry argument (F1, F4,
-F6, F9, F10 and one of F3/F5) and cite the rest as "full series in the accompanying
-workbook, sheet Fn" without a numbered figure.
+**Captions are assumed to count.** Eight numbered figures at ~15 words each is
+~120 words. Ten figures at a conventional 25-word caption is 250, which puts the
+report over the ceiling on its own.
+
+**Numbered figures — eight:** F1, F3, F4, F6, F7, F8, F9, F10.
+
+**Dropped to prose — F2 and F5.** Their numbers stay in the argument; they simply
+lose a numbered figure and a caption. This is the fallback §2 already carried, so
+the two decisions are consistent. Cash 23% → 9% and wallets 32% are a sentence in
+§2; Denmark's 3rd-of-27 adoption rank is a clause in §3. Both cite the workbook
+sheet instead:
+
+> *(full series in the accompanying workbook, sheet F2_PAYMENTS)*
+
+**Compressed caption template — target 15 words, not 25:**
+
+> *Figure 6 — Adoption and e-commerce turnover, EU 2024. Eurostat isoc_ec_ib20,
+> tin00110. Workbook F6.*
+
+The long form — "Source: … Full series in accompanying workbook, sheet Fn." — runs
+25+ words and costs 80 words across eight figures for no added information. The
+workbook is where provenance lives; the caption only has to point at it.
 
 ---
 
@@ -259,8 +286,8 @@ workbook, sheet Fn" without a numbered figure.
 | §5 guest lecture content | **Hard blocker** — 8 marks, cannot be drafted |
 | Class group code for the filename | Needed |
 | SDG choice | SDG 8 recommended, awaiting your call |
-| Do captions count toward the word limit? | **Needed** — decides whether 10 figures is viable or 6 |
-| Word budget re-cut | **Done** — §2 480→580, funded from §3/§4/§5/§1; total unchanged at 2,100 |
+| Captions counted? | **Resolved by assuming yes** — 8 numbered figures, 15-word captions, 100 words of margin. If the brief says captions are EXCLUDED, restore F2 and F5 as figures and give §2 and §3 their 120 words back |
+| Word budget re-cut | **Done (twice)** — §2 480→550; budget restated as a TOTAL including captions after the caption risk was resolved against the plan |
 | Innovation framing | **Done** — the "rail" mechanism now governs every section; AI diffusion budgeted into §3 |
 | "Breadth" equivocation | **Done** — citizen vs enterprise breadth separated; no EU comparator exists for enterprise breadth |
 | Open the workbook in real Excel | Charts verified structurally and audited in the raw XML, never seen rendered. 11 charts, F5_EU27 (28 bars) and F9 most worth checking |
