@@ -205,7 +205,9 @@ That distinction is the section.
 
 ## 3. Drafting sequence
 
-1. **§2 first** — the lecturer's stated requirement, and the section whose numbers
+1. **§2 — DRAFTED.** `report/draft/S2_adoption_effect.md`, 554 words against a 550
+   budget, plus three captions at 14.7 words average. Every number re-derived from
+   MASTER independently of the workbook formulas. The lecturer's stated requirement,
    are hardest. It now carries **550 words**, up from 480, because an audit of the
    budget found it holding ten distinct analytical moves (branches, cash, wallets,
    six regression statistics, the tail-selection comparison, the missingness test,
@@ -283,6 +285,7 @@ workbook is where provenance lives; the caption only has to point at it.
 
 | Item | Status |
 |---|---|
+| §2 draft | **Done** — 554 words + 3 captions = 598 of the 2,100 total |
 | §5 guest lecture content | **Hard blocker** — 8 marks, cannot be drafted |
 | Class group code for the filename | Needed |
 | SDG choice | SDG 8 recommended, awaiting your call |
