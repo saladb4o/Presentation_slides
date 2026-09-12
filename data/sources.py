@@ -205,6 +205,65 @@ SOURCES = {
             "Retsinformation, Copenhagen, accessed 12 September 2026."
         ),
     ),
+    "RR1": dict(
+        authority="Rigsrevisionen (Danish National Audit Office)",
+        title=(
+            "Beretning om besparelsespotentialet ved obligatorisk Digital Post "
+            "paa ca. 1 mia. kr. om aaret, January 2016"
+        ),
+        dataset_code="",
+        url="https://www.rigsrevisionen.dk/revisionssager-arkiv/2016/jan/beretning-om-besparelsespotentialet-ved-obligatorisk-digital-post-paa-ca-1-mia-kr-om-aaret",
+        accessed=ACCESSED,
+        harvard=(
+            "Rigsrevisionen 2016, Beretning om besparelsespotentialet ved "
+            "obligatorisk Digital Post paa ca. 1 mia. kr. om aaret, National Audit "
+            "Office of Denmark, Copenhagen, accessed 12 September 2026."
+        ),
+    ),
+    "RI2": dict(
+        authority="Finanstilsynet (Danish Financial Supervisory Authority)",
+        title="Kontantreglen - lov om betalinger section 81",
+        dataset_code="Lov om betalinger, ss 81",
+        url="https://www.finanstilsynet.dk/finansielle-temaer/betalingstjenester-og-e-penge/kontantreglen",
+        accessed=ACCESSED,
+        harvard=(
+            "Finanstilsynet 2025, Kontantreglen, Danish Financial Supervisory "
+            "Authority, Copenhagen, accessed 12 September 2026."
+        ),
+    ),
+    "DG4": dict(
+        authority="Digitaliseringsstyrelsen (Danish Agency for Digital Government)",
+        title="Digital Post - lovgivning, and the MitID transition news archive",
+        dataset_code="",
+        url="https://digst.dk/it-loesninger/digital-post/lovgivning/",
+        accessed=ACCESSED,
+        harvard=(
+            "Digitaliseringsstyrelsen 2025, Digital Post - lovgivning, Agency for "
+            "Digital Government, Copenhagen, accessed 12 September 2026."
+        ),
+    ),
+    "SMV1": dict(
+        authority="SMV:Digital (Danish SME digitalisation grant scheme)",
+        title="Tilskudspuljer i 2026",
+        dataset_code="",
+        url="https://smvdigital.dk/content/ydelser/tilskudspuljer-i-2026/8efa07f4-5032-47f4-b7fa-bab57412b762/",
+        accessed=ACCESSED,
+        harvard=(
+            "SMV:Digital 2026, Tilskudspuljer i 2026, SMV:Digital, Copenhagen, "
+            "accessed 12 September 2026."
+        ),
+    ),
+    "DST2": dict(
+        authority="Danmarks Statistik",
+        title="Befolkningstal (population figures)",
+        dataset_code="StatBank FOLK1A",
+        url="https://www.dst.dk/da/Statistik/emner/borgere/befolkning/befolkningstal",
+        accessed=ACCESSED,
+        harvard=(
+            "Danmarks Statistik 2026, Befolkningstal, Statistics Denmark, "
+            "Copenhagen, accessed 12 September 2026."
+        ),
+    ),
     "DST1": dict(
         authority="Danmarks Statistik",
         title="Detailomsaetningsindeks (retail trade turnover index)",

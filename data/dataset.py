@@ -264,7 +264,121 @@ OBS = [
      "%", "% of participating enterprises", "", "DG3", ""),
     ("DK.SME.SMVD.NOINV", "Participants with no further investment plans", "DK", 2025, 2.0,
      "%", "% of participating enterprises", "", "DG3", ""),
+
+    # ------------------------------------------------------------------
+    # Magnitudes. Every other observation in this file is a ratio; without a
+    # level, a share cannot support a statement about how much of anything
+    # there is. These four rows are what let 05_CALC convert shares into
+    # headcounts and kroner.
+    # ------------------------------------------------------------------
+    ("DK.POP.TOT", "Resident population", "DK", 2026, 6025603,
+     "count", "persons resident in Denmark", "", "DST2", "As at 1 January 2026."),
+
+    ("DK.DGP.EXMP.N", "Citizens formally exempt from Digital Post", "DK", 2025, 256000,
+     "count", "citizens aged 15+ resident in Denmark", "e", "DG1",
+     "April 2025; source states approx. 256,000."),
+    ("DK.DGP.EXMP.N", "Citizens formally exempt from Digital Post", "DK", 2026, 238479,
+     "count", "citizens aged 15+ resident in Denmark", "", "DG1",
+     "Q1 2026. Paired with the 4.7% rate, implies a 15+ base of about 5.07m."),
+
+    # ------------------------------------------------------------------
+    # The fiscal case for mandatory Digital Post, and how much of it the
+    # national audit office could actually verify. This is the only
+    # cost-side evidence in the workbook.
+    # ------------------------------------------------------------------
+    ("DK.GOV.DGP.SAVE.PLAN", "Digital Post: projected annual public saving", "DK",
+     2016, 1000.0, "million DKK per year", "projected annual saving, whole public sector",
+     "e", "RR1",
+     "Ministry of Finance business case; Rigsrevisionen reports it as 'approx. 1bn'."),
+    ("DK.GOV.DGP.SAVE.VERIF", "Digital Post: annual saving verifiable by audit", "DK",
+     2016, 450.0, "million DKK per year", "verified annual saving, whole public sector",
+     "e", "RR1",
+     "Postage, paper and envelopes only. The wage and overhead component was "
+     "never verified: the cross-government study was abandoned after KL declined "
+     "to take part."),
 ]
+
+
+# ---------------------------------------------------------------------------
+# Policy events.
+#
+# The assessment asks for policy that is specific enough for its impact to be
+# visible. Outcomes alone cannot show that: a series needs something to be
+# measured against. These rows are the instruments themselves, dated, cited,
+# and rendered as event markers on the figures.
+#
+# `precision` is honest about how firmly the date is established:
+#   day   - the commencement or publication date is stated by the source
+#   month - the source places it in a month
+#   year  - the source places it in a year only
+#
+# Nothing here is dated more precisely than its source allows.
+# ---------------------------------------------------------------------------
+POLICY_EVENTS = [
+    ("2012-06-11", "day", "Lov om Offentlig Digital Post adopted",
+     "LOV nr 528 af 11/06/2012", "RI1",
+     "Creates the statutory basis for mandatory public digital post. Section 10 "
+     "deems delivery effective on availability, not on the message being read.",
+     "DK.DGP.EXMP"),
+
+    ("2013-01-01", "year", "Digital Post becomes mandatory for businesses",
+     "Lov om Offentlig Digital Post", "DG4",
+     "Businesses are enrolled a year ahead of citizens.",
+     "DK.ECM.ENT.TRN"),
+
+    ("2014-11-01", "day", "Digital Post becomes mandatory for citizens aged 15+",
+     "Lov om Offentlig Digital Post", "DG4",
+     "Citizens are enrolled automatically whether or not they registered "
+     "themselves. Exemption is available only against statutory criteria. This is "
+     "the single most consequential date in this workbook.",
+     "DK.DGP.EXMP"),
+
+    ("2016-01-01", "month", "Rigsrevisionen reports on the Digital Post business case",
+     "Beretning, January 2016", "RR1",
+     "Of an approx. DKK 1bn projected annual saving, only DKK 450m - postage, "
+     "paper and envelopes - could be verified.",
+     "DK.GOV.DGP.SAVE.PLAN"),
+
+    ("2018-01-01", "year", "SMV:Digital launched",
+     "Danish digital growth plan for SMEs", "DG3",
+     "Grant scheme subsidising SME digitalisation projects.",
+     "DK.SME.SMVD.PROJ"),
+
+    ("2021-10-01", "month", "MitID rollout begins",
+     "National electronic ID replacement programme", "DG4",
+     "Begins the migration of the whole population off NemID.",
+     "DK.TRU.DPS"),
+
+    ("2022-07-01", "day", "Kontantreglen amended",
+     "Lov om betalinger, ss 81", "RI2",
+     "Businesses may refuse cash from other businesses; temporary events are "
+     "exempted; the notification duty for 06:00-20:00 acceptance is removed. The "
+     "obligation on shops to accept cash from consumers remains.",
+     "DK.PAY.CASH.POS"),
+
+    ("2022-09-22", "day", "MitID required for public digital services",
+     "National electronic ID replacement programme", "DG4",
+     "From this date citizens need MitID for borger.dk, skat.dk and sundhed.dk.",
+     "DK.TRU.DPS"),
+
+    ("2023-10-31", "day", "NemID fully phased out",
+     "National electronic ID replacement programme", "DG4",
+     "The predecessor credential can no longer be obtained or used.",
+     "DK.TRU.DPS"),
+
+    ("2026-01-01", "year", "SMV:Digital grant pools continue",
+     "Tilskudspuljer i 2026", "SMV1",
+     "The scheme is still operating and still awarding grants in 2026; a further "
+     "pool opens on 26 October 2026. Recorded because an earlier draft of this "
+     "workbook asserted the scheme was being defunded. It was not verifiable and "
+     "the opposite is documented.",
+     "DK.SME.SMVD.PROJ"),
+]
+
+
+def policy_events_for(series_code):
+    """Events whose `related` field names this series. Used for chart markers."""
+    return [e for e in POLICY_EVENTS if e[6] == series_code]
 
 
 COUNTRIES = {
@@ -326,6 +440,27 @@ def validate():
     assert row_2019[6] != [r for r in OBS
                            if r[0] == "DK.ECM.IND.BUY" and r[3] == 2020][0][6], \
         "2019 and 2020 denominators must differ"
+
+    # Policy events must be dated, cited, sourced, and must point at a series
+    # that exists. An event marker on a chart is a factual claim about when an
+    # instrument took effect; it carries the same evidential burden as a value.
+    from datetime import date as _date
+
+    codes = {r[0] for r in OBS}
+    seen_events = set()
+    for ev in POLICY_EVENTS:
+        assert len(ev) == 7, f"wrong column count on policy event: {ev[:2]}"
+        when, precision, name, citation, src, desc, related = ev
+        assert precision in ("day", "month", "year"), \
+            f"bad date precision {precision!r} on {name}"
+        _date.fromisoformat(when)  # raises if not a real date
+        assert citation, f"policy event {name!r} has no legal citation"
+        assert src in SOURCES, f"unknown source_id {src!r} on policy event {name!r}"
+        assert desc, f"policy event {name!r} has no description"
+        assert related in codes, \
+            f"policy event {name!r} points at unknown series {related!r}"
+        assert (when, name) not in seen_events, f"duplicate policy event: {name}"
+        seen_events.add((when, name))
 
     return len(OBS)
 

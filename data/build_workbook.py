@@ -18,7 +18,8 @@ from openpyxl.drawing.line import LineProperties
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-from dataset import COUNTRIES, OBS, cross_section, validate
+from dataset import (COUNTRIES, OBS, POLICY_EVENTS, cross_section,
+                     policy_events_for, validate)
 from sources import ACCESSED, SOURCES
 
 OUT = os.path.join(
@@ -81,6 +82,11 @@ def lookup(series, year):
     m = "'02_MASTER'"
     cond = f'{m}!$B:$B,"{series}",{m}!$E:$E,{year}'
     return f'=IF(COUNTIFS({cond})=0,"",SUMIFS({m}!$F:$F,{cond}))'
+
+
+def L(series, year):
+    """`lookup` with the leading '=' stripped, for embedding inside a formula."""
+    return lookup(series, year)[1:]
 
 
 def source_note(ws, row, text):
@@ -146,6 +152,11 @@ def sheet_cover(wb):
         ("F4_EXCLUSION", "Figure 4 - measures of digital exclusion"),
         ("F5_EU8", "Figure 5 - online purchasing, verified EU countries, 2024"),
         ("F6_ADOPT_BENEFIT", "Figure 6 - adoption vs economic effect, EU 2024"),
+        ("F7_QUALITY", "Figure 7 - DK vs EU: leads on adoption, trails on "
+                       "service quality"),
+        ("F8_SMVDIGITAL", "Figure 8 - SMV:Digital, the one policy with a "
+                          "control group"),
+        ("09_POLICY", "Policy events - dated instruments with legal citations"),
         ("06_RETAIL_GAP", "Documented gap - retail volume index not retrieved"),
         ("07_LIMITATIONS", "Data quality statement - read before citing"),
         ("08_AI_LOG", "AI use and validation log"),
@@ -417,6 +428,40 @@ def sheet_calc(wb):
         ("Perceived security of Digital Post, change 2017-2025",
          f"={L('DK.TRU.DGP.SEC', 2025)}-{L('DK.TRU.DGP.SEC', 2017)}", "pp",
          "Trust in the mandated system over the mandate period (CLO4)."),
+
+        # --- the fiscal case, and how much of it was ever verified ---------
+        ("Digital Post: projected annual saving",
+         lookup("DK.GOV.DGP.SAVE.PLAN", 2016), "mDKK/yr",
+         "Ministry of Finance business case for the mandate (RR1)."),
+        ("Digital Post: saving verifiable by audit",
+         lookup("DK.GOV.DGP.SAVE.VERIF", 2016), "mDKK/yr",
+         "Postage, paper and envelopes only (RR1)."),
+        ("Digital Post: unverified share of the business case",
+         f"=1-({L('DK.GOV.DGP.SAVE.VERIF', 2016)}"
+         f"/{L('DK.GOV.DGP.SAVE.PLAN', 2016)})", "%",
+         "Over half the projected saving - the wage and overhead component - was "
+         "never substantiated. The cross-government study intended to test it was "
+         "abandoned. The strongest cost-side finding in this workbook."),
+        ("Digital Post: cost per formally exempt citizen, if the shortfall is real",
+         f"=(({L('DK.GOV.DGP.SAVE.PLAN', 2016)}"
+         f"-{L('DK.GOV.DGP.SAVE.VERIF', 2016)})*1000000)"
+         f"/{L('DK.DGP.EXMP.N', 2026)}", "DKK",
+         "ILLUSTRATIVE ONLY, and not a real unit cost: it divides an unverified "
+         "saving shortfall by an unrelated headcount. Included because the "
+         "comparison of magnitudes is informative; it must not be quoted as a "
+         "cost per person."),
+
+        # --- magnitudes ----------------------------------------------------
+        ("Resident population, 1 January 2026",
+         lookup("DK.POP.TOT", 2026), "count",
+         "Direct lookup. The only population level in the workbook (DST2)."),
+        ("Citizens formally exempt from Digital Post, Q1 2026",
+         lookup("DK.DGP.EXMP.N", 2026), "count",
+         "Headcount behind the 4.7% rate (DG1)."),
+        ("Change in exempt headcount, 2025 to 2026",
+         f"={L('DK.DGP.EXMP.N', 2026)}-{L('DK.DGP.EXMP.N', 2025)}", "count",
+         "Falling. Note the 2025 figure is an 'approximately' value, so this "
+         "difference is not precise."),
     ]
     r = 5
     for label, formula, unit, how in items:
@@ -435,6 +480,37 @@ def sheet_calc(wb):
 
     ws.sheet_view.showGridLines = False
     return ws
+
+
+def policy_block(ws, row, series_code, heading="POLICY EVENTS ON THIS SERIES"):
+    """Write the dated instruments bearing on `series_code` beneath a figure.
+
+    openpyxl cannot draw a vertical rule on a chart plot area, so the events are
+    rendered as a dated table directly under the data the chart reads. A reader
+    can line the dates up against the series by eye, and - unlike an annotation
+    burned into a chart image - each row carries its own legal citation and
+    source_id, so the claim that an instrument took effect on a given date is
+    auditable on the same terms as every value in the workbook.
+
+    Returns the next free row.
+    """
+    events = policy_events_for(series_code)
+    if not events:
+        return row
+
+    ws.cell(row=row, column=1, value=heading).font = T_SUB
+    row += 1
+    header_row(ws, row, ["date", "precision", "instrument", "citation", "source"],
+               [14, 11, 46, 34, 10])
+    row += 1
+    for when, precision, name, citation, src, _desc, _rel in events:
+        vals = [when, precision, name, citation, src]
+        for j, v in enumerate(vals, start=1):
+            c = ws.cell(row=row, column=j, value=v)
+            c.font = T_MONO if j in (1, 5) else T_BODY
+            c.border, c.alignment, c.fill = BOX, WRAP, F_RAW
+        row += 1
+    return row + 1
 
 
 def _style_view(ws, first_row, last_row, ncols):
@@ -574,7 +650,9 @@ def sheet_f2(wb):
             ws.cell(row=r, column=j).border = BOX
         r += 1
 
-    source_note(ws, r + 1,
+    r = policy_block(ws, r + 2, "DK.PAY.CASH.POS")
+
+    source_note(ws, r,
                 "Source: Danmarks Nationalbank, Danskernes betalingsvaner (NB1). "
                 "Panel B sums to 95%, not 100%: the residual is other digital "
                 "instruments (chiefly account transfers and non-card mobile "
@@ -635,7 +713,9 @@ def sheet_f3(wb):
             ws.cell(row=r, column=j).border = BOX
         r += 1
 
-    source_note(ws, r + 1,
+    r = policy_block(ws, r + 2, "DK.ECM.ENT.TRN")
+
+    source_note(ws, r,
                 "Source: Eurostat (ES5). Reading: Denmark's e-sales share of turnover "
                 "rose from 17.05% to 33.31% while the EU average moved from 16.43% to "
                 "19.49%. Breadth of adoption is flat at roughly 38% of enterprises; "
@@ -703,7 +783,46 @@ def sheet_f4(wb):
             ws.cell(row=r, column=j).border = BOX
         r += 1
 
-    source_note(ws, r + 1,
+    r += 1
+    ws.cell(row=r, column=1, value="HEADCOUNTS, NOT SHARES").font = T_SUB
+    r += 1
+    header_row(ws, r, ["quantity", "persons", "basis"], [46, 14, 74])
+    r += 1
+    heads = [
+        ("Citizens formally exempt, Q1 2026", lookup("DK.DGP.EXMP.N", 2026),
+         "Reported directly by the Agency for Digital Government (DG1)."),
+        ("Citizens formally exempt, April 2025", lookup("DK.DGP.EXMP.N", 2025),
+         "Reported as approximately 256,000 (DG1)."),
+        ("Implied population aged 15+",
+         f"={L('DK.DGP.EXMP.N', 2026)}/({L('DK.DGP.EXMP', 2026)}/100)",
+         "DERIVED, not retrieved: the exempt headcount divided by the exemption "
+         "rate. Used only to convert the capability shares below into orders of "
+         "magnitude. A published 15+ population figure was not verifiable in this "
+         "session; see 06_RETAIL_GAP."),
+        ("Implied persons who do not use digital public services at all",
+         f"=({L('DK.DGX.NOUSE', 2026)}/100)*({L('DK.DGP.EXMP.N', 2026)}"
+         f"/({L('DK.DGP.EXMP', 2026)}/100))",
+         "ORDER OF MAGNITUDE ONLY. Applies a share measured on 'the population' "
+         "to a 15+ base; the denominators are not identical."),
+        ("Implied persons facing difficulty with digital public services",
+         f"=({L('DK.DGX.DIFF', 2026)}/100)*({L('DK.DGP.EXMP.N', 2026)}"
+         f"/({L('DK.DGP.EXMP', 2026)}/100))",
+         "ORDER OF MAGNITUDE ONLY, same caveat."),
+    ]
+    for label, formula, note in heads:
+        ws.cell(row=r, column=1, value=label).font = T_BODY
+        c = ws.cell(row=r, column=2, value=formula)
+        c.font, c.fill, c.number_format = T_BODY, F_CALC, "#,##0"
+        ws.cell(row=r, column=3, value=note).font = T_SMALL
+        ws.cell(row=r, column=3).alignment = WRAP
+        for j in range(1, 4):
+            ws.cell(row=r, column=j).border = BOX
+        ws.row_dimensions[r].height = 40
+        r += 1
+
+    r = policy_block(ws, r + 1, "DK.DGP.EXMP")
+
+    source_note(ws, r,
                 "Sources: DG1, DG2, EC1, JU1. Reading: the measures are nested rather "
                 "than contradictory. Formal exemption (4.7%) is an administrative "
                 "status; the capability measures are three to five times larger. The "
@@ -803,7 +922,12 @@ def sheet_f6(wb):
     s = Series(ys, xs, title_from_data=True)
     s.marker = Marker(symbol="circle", size=9)
     s.graphicalProperties.line.noFill = True          # markers only, no join
-    s.trendline = Trendline(trendlineType="linear", dispRSqr=True, dispEq=True)
+    # The equation is displayed; R-squared deliberately is NOT. See the
+    # SELECTION WARNING block below - this sample is drawn from the tails of the
+    # adoption distribution, which inflates R-squared by construction. Putting it
+    # on the chart face would advertise a goodness-of-fit the sample has not
+    # earned. It remains computed in the statistics table, next to the warning.
+    s.trendline = Trendline(trendlineType="linear", dispRSqr=False, dispEq=True)
     ch.series.append(s)
     ch.x_axis.scaling.min, ch.x_axis.scaling.max = 50, 100
     ch.y_axis.scaling.min = 0
@@ -830,7 +954,9 @@ def sheet_f6(wb):
         ("Correlation (r)", f"=CORREL({xr},{yr})", "0.000",
          "Strength and direction of the linear association."),
         ("R-squared", f"=RSQ({yr},{xr})", "0.000",
-         "Share of cross-country variation in Y that moves with X."),
+         "Share of cross-country variation in Y that moves with X. READ THE "
+         "SELECTION WARNING BELOW BEFORE QUOTING THIS NUMBER: it is inflated by "
+         "how the sample was drawn and overstates the fit."),
         ("Denmark: actual Y", lookup("DK.ECM.ENT.TRN", 2024), "0.00",
          "Denmark's observed value."),
         ("Denmark: fitted Y",
@@ -852,6 +978,58 @@ def sheet_f6(wb):
         for j in range(1, 4):
             ws.cell(row=r, column=j).border = BOX
         ws.row_dimensions[r].height = 26
+        r += 1
+
+    # --- selection warning --------------------------------------------------
+    # The X column could not be retrieved as a full Eurostat table in this
+    # session. It was assembled from a press release, and a press release names
+    # the countries that make a story: the top of the ranking, the bottom of the
+    # ranking, and a few large movers. That is a sample drawn from the tails.
+    #
+    # Truncating a distribution at both ends and discarding the middle raises the
+    # correlation coefficient largely independently of the underlying
+    # relationship, because the spread in X is artificially widened relative to
+    # the noise. The R-squared above is therefore an upper bound on the fit, not
+    # an estimate of it. Stating this is not optional: the alternative is
+    # publishing a goodness-of-fit statistic known to be biased upward.
+    r += 1
+    ws.cell(row=r, column=1, value="SELECTION WARNING - read before quoting the fit"
+            ).font = T_SUB
+    r += 1
+    tails = [g for g in paired
+             if g in ("IE", "DK", "DE", "IT", "BG", "RO", "NL")]
+    for line in [
+        "HOW THE SAMPLE WAS DRAWN: the X column (consumer adoption) was not "
+        "available as a complete Eurostat table in this session. The values come "
+        "from a Eurostat press release, which names the three highest countries, "
+        "the three lowest, and three large movers - a sample concentrated in the "
+        "TAILS of the adoption distribution.",
+        f"CONSEQUENCE: of the {len(paired)} countries plotted, {len(tails)} come "
+        "from the top or bottom of the EU ranking. Selecting on the extremes of X "
+        "and dropping the middle inflates the correlation coefficient and "
+        "R-squared by construction, because it widens the spread in X relative to "
+        "the scatter around the line.",
+        "HOW TO USE THIS FIGURE HONESTLY: report the SLOPE, which is far less "
+        "sensitive to this kind of selection, and report n. Treat the R-squared "
+        "as an upper bound. Do not describe the fit as 'strong' or 'tight', and "
+        "do not compute a p-value or confidence interval from these points.",
+        "HOW TO FIX IT: retrieve Eurostat isoc_ec_ib20 for 2024 for all 27 member "
+        "states from the databrowser and add the rows to dataset.py. That removes "
+        "the selection entirely and roughly triples n. The register below names "
+        "every country still missing and the exact series code for each.",
+        "DIRECTION OF CAUSATION IS NOT ESTABLISHED AND CANNOT BE. X measures "
+        "consumers; Y measures enterprises, including business-to-business sales "
+        "that no consumer touches. Both plausibly rise with national income, "
+        "which is in neither axis. This figure shows that digital commerce runs "
+        "deep in the same economies where consumers buy online. It does not show "
+        "that the one produces the other.",
+    ]:
+        c = ws.cell(row=r, column=1, value=line)
+        c.font, c.alignment, c.fill = T_SMALL, WRAP, F_FLAG
+        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=4)
+        for j in range(1, 5):
+            ws.cell(row=r, column=j).border = BOX
+        ws.row_dimensions[r].height = 46
         r += 1
 
     # --- expansion register -------------------------------------------------
@@ -902,6 +1080,245 @@ def sheet_f6(wb):
                 f"so a positive association is evidence that digital commerce is "
                 f"deep in an economy - not evidence that consumers buying online "
                 f"causes enterprise turnover.")
+    ws.sheet_view.showGridLines = False
+    return ws
+
+
+def sheet_policy(wb):
+    """The instruments themselves, dated and cited.
+
+    A workbook of outcomes cannot show policy impact, because impact is a
+    statement about what happened relative to something. This sheet supplies the
+    something. Each row is an instrument with a commencement date, a legal
+    citation, a source_id and the series it bears on; the figure sheets render
+    the same rows beneath their data.
+
+    The `precision` column exists because two of these dates are known only to
+    the year. Recording them as if they were known to the day would be the same
+    class of error as recording an interpolated value as a retrieved one.
+    """
+    ws = wb.create_sheet("09_POLICY")
+    title_block(ws, "Policy events",
+                "Dated instruments, with the series each one bears on. "
+                "Rendered as event tables beneath the figures they affect.")
+    header_row(ws, 4,
+               ["date", "precision", "instrument", "legal citation", "source_id",
+                "what it does", "series affected"],
+               [13, 11, 44, 32, 10, 74, 24])
+
+    r = 5
+    for when, precision, name, citation, src, desc, related in POLICY_EVENTS:
+        vals = [when, precision, name, citation, src, desc, related]
+        for j, v in enumerate(vals, start=1):
+            c = ws.cell(row=r, column=j, value=v)
+            c.font = T_MONO if j in (1, 5, 7) else T_BODY
+            c.border, c.alignment, c.fill = BOX, WRAP, F_RAW
+        ws.row_dimensions[r].height = 46
+        r += 1
+
+    source_note(ws, r + 1,
+                "Reading: the mandate date of 1 November 2014 is the hinge of this "
+                "workbook. Digital Post was not adopted by citizens choosing it; "
+                "citizens were enrolled automatically, and exemption is available "
+                "only against statutory criteria. Adoption rates after that date "
+                "therefore measure compliance with a legal obligation, not revealed "
+                "preference, and no figure in this workbook should be read as though "
+                "they measured preference.")
+    source_note(ws, r + 3,
+                "CORRECTION RECORDED: an earlier draft of this workbook stated that "
+                "SMV:Digital was being defunded. That claim could not be verified, "
+                "and the scheme's own 2026 grant-pool page (SMV1) documents pools "
+                "still open, with a further pool opening on 26 October 2026. The "
+                "claim has been withdrawn from the dataset and from the report's "
+                "argument. See 07_LIMITATIONS and 08_AI_LOG.")
+    ws.freeze_panes = "C5"
+    ws.sheet_view.showGridLines = False
+    return ws
+
+
+def sheet_f7(wb):
+    """Adoption is not the same thing as service quality, and Denmark proves it.
+
+    Denmark leads the EU on every adoption and capability measure in this
+    workbook, and sits BELOW the EU average on the eGovernment Benchmark score
+    for citizen services - 82.2 against 84.64 - and far below on cross-border
+    services. That pairing is the strongest finding in the dataset: near-universal
+    use of public digital services was achieved by statute, and universal use has
+    not produced above-average services.
+
+    The chart is a grouped bar rather than a scatter because these are six
+    different indicators on three different denominators; plotting them against
+    each other would imply a relationship that does not exist. What is being
+    compared is Denmark against the EU average, indicator by indicator.
+    """
+    ws = wb.create_sheet("F7_QUALITY")
+    title_block(ws, "Figure 7 - Denmark vs the EU: adoption and capability, then quality",
+                "Leads on every capability measure. Below average on citizen "
+                "service quality.")
+    header_row(ws, 4, ["indicator", "Denmark", "EU-27", "unit"], [46, 14, 14, 30])
+
+    rows = [
+        ("SMEs with at least basic digital intensity",
+         lookup("DK.ENT.DII", 2025), lookup("EU.ENT.DII", 2025), "% of SMEs"),
+        ("Enterprises adopting AI",
+         lookup("DK.ENT.AI", 2025), "", "% of enterprises (EU avg 19.95)"),
+        ("Digital public services for citizens",
+         lookup("DK.GOV.DPS.CIT", 2025), lookup("EU.GOV.DPS.CIT", 2025),
+         "eGovernment Benchmark score 0-100"),
+        ("Cross-border digital public services",
+         lookup("DK.GOV.DPS.XB", 2025), "", "score 0-100 (EU avg 75.28)"),
+    ]
+    r = 5
+    for label, dk, eu, unit in rows:
+        ws.cell(row=r, column=1, value=label).font = T_BODY
+        c = ws.cell(row=r, column=2, value=dk)
+        c.font, c.fill, c.number_format = T_BODY, F_CALC, "0.00"
+        if eu:
+            c = ws.cell(row=r, column=3, value=eu)
+            c.font, c.fill, c.number_format = T_BODY, F_CALC, "0.00"
+        ws.cell(row=r, column=4, value=unit).font = T_SMALL
+        for j in range(1, 5):
+            ws.cell(row=r, column=j).border = BOX
+        r += 1
+    last = r - 1
+
+    ch = BarChart()
+    ch.type, ch.grouping = "bar", "clustered"
+    ch.title = "Denmark vs EU-27 average"
+    ch.style = 2
+    ch.x_axis.title = "% or benchmark score"
+    ch.height, ch.width = 10, 18
+    data = Reference(ws, min_col=2, max_col=3, min_row=4, max_row=last)
+    cats = Reference(ws, min_col=1, min_row=5, max_row=last)
+    ch.add_data(data, titles_from_data=True)
+    ch.set_categories(cats)
+    ws.add_chart(ch, "F4")
+
+    r = last + 2
+    ws.cell(row=r, column=1,
+            value="THE GAP THAT MATTERS - service quality, not capability").font = T_SUB
+    r += 1
+    header_row(ws, r, ["quantity", "value", "reading"], [46, 14, 74])
+    r += 1
+    gaps = [
+        ("Digital public services, DK minus EU average",
+         f"={L('DK.GOV.DPS.CIT', 2025)}-{L('EU.GOV.DPS.CIT', 2025)}",
+         "Negative. The most digitalised population in the EU receives "
+         "below-average digital public services."),
+        ("Digital skills gap within Denmark, 16-24 minus 55-74",
+         f"={L('DK.SKL.1624', 2025)}-{L('DK.SKL.5574', 2025)}",
+         "The within-country spread. Note that Denmark's WEAKEST age group "
+         "(67.81%) still beats the EU average (42.60%) by 25pp, so Danish "
+         "exclusion is not a skills deficit relative to Europe - it is a mandate "
+         "calibrated above the bottom of its own distribution."),
+        ("AI adoption gap within Denmark, large firms minus SMEs",
+         f"={L('DK.ENT.AI.LRG', 2025)}-{L('DK.ENT.AI.SME', 2025)}",
+         "Breadth without depth, restated for AI."),
+    ]
+    for label, formula, note in gaps:
+        ws.cell(row=r, column=1, value=label).font = T_BODY
+        c = ws.cell(row=r, column=2, value=formula)
+        c.font, c.fill, c.number_format = T_BODY, F_CALC, "0.00"
+        ws.cell(row=r, column=3, value=note).font = T_SMALL
+        ws.cell(row=r, column=3).alignment = WRAP
+        for j in range(1, 4):
+            ws.cell(row=r, column=j).border = BOX
+        ws.row_dimensions[r].height = 44
+        r += 1
+
+    source_note(ws, r + 1,
+                "Source: European Commission, Digital Decade 2026 country report for "
+                "Denmark (EC1). CAUTION: the eGovernment Benchmark is a scored "
+                "assessment, not a survey proportion, and a 2.4-point difference "
+                "between two scores should not be read as a precisely measured gap. "
+                "The direction is the finding; the magnitude is not.")
+    ws.sheet_view.showGridLines = False
+    return ws
+
+
+def sheet_f8(wb):
+    """The only control-group evidence in the workbook.
+
+    Every other adoption-and-outcome pairing here is correlational. The June 2025
+    Effektmaaling, prepared by Danmarks Statistik, compared SMV:Digital
+    participants against comparable non-participating firms and found higher
+    revenue and higher employment. A comparison group is worth more, evidentially,
+    than any cross-section of countries in this file - which is why this sheet
+    exists and why Figure 6 should be read as support for it rather than the
+    other way round.
+
+    No effect size is plotted because none was verified. Plotting the
+    participation shares as though they were an effect would repeat exactly the
+    error this workbook was rebuilt to avoid.
+    """
+    ws = wb.create_sheet("F8_SMVDIGITAL")
+    title_block(ws, "Figure 8 - SMV:Digital, the one policy with a control group",
+                "Danmarks Statistik matched-comparison evaluation, June 2025.")
+    header_row(ws, 4, ["measure", "value", "unit"], [52, 14, 30])
+
+    rows = [
+        ("Digitalisation projects supported since 2018",
+         lookup("DK.SME.SMVD.PROJ", 2025), "count"),
+        ("Participants investing further during the project",
+         lookup("DK.SME.SMVD.INV", 2025), "% of participants"),
+        ("Participants with no further investment plans",
+         lookup("DK.SME.SMVD.NOINV", 2025), "% of participants"),
+    ]
+    r = 5
+    for label, formula, unit in rows:
+        ws.cell(row=r, column=1, value=label).font = T_BODY
+        c = ws.cell(row=r, column=2, value=formula)
+        c.font, c.fill = T_BODY, F_CALC
+        c.number_format = "#,##0" if unit == "count" else "0.0"
+        ws.cell(row=r, column=3, value=unit).font = T_SMALL
+        for j in range(1, 4):
+            ws.cell(row=r, column=j).border = BOX
+        r += 1
+    last = r - 1
+
+    ch = BarChart()
+    ch.type, ch.grouping = "bar", "clustered"
+    ch.title = "SMV:Digital participant outcomes"
+    ch.style = 2
+    ch.x_axis.title = "% of participating enterprises / count"
+    ch.height, ch.width = 8, 16
+    data = Reference(ws, min_col=2, min_row=4, max_row=last)
+    cats = Reference(ws, min_col=1, min_row=5, max_row=last)
+    ch.add_data(data, titles_from_data=True)
+    ch.set_categories(cats)
+    ch.legend = None
+    ws.add_chart(ch, "E4")
+
+    r = last + 2
+    ws.cell(row=r, column=1,
+            value="WHY THIS IS THE STRONGEST EVIDENCE IN THE WORKBOOK").font = T_SUB
+    r += 1
+    for line in [
+        "The evaluation was carried out by Danmarks Statistik, which compared "
+        "participating firms against comparable firms that did not participate. "
+        "Participants showed higher revenue AND higher employment.",
+        "That is a comparison group. Nothing else in this workbook has one. "
+        "Figure 6's cross-section can show that adoption and commercial activity "
+        "move together across countries; it cannot rule out that richer countries "
+        "simply do more of both. A matched comparison can.",
+        "LIMIT: the effect sizes are not reproduced here because they were not "
+        "verified against the evaluation itself. The direction of the finding is "
+        "sourced; the magnitude is not, and must not be invented.",
+        "LIMIT: participation is voluntary, so selection into the programme by "
+        "more capable or more ambitious firms is not excluded by matching alone.",
+    ]:
+        c = ws.cell(row=r, column=1, value=line)
+        c.font, c.alignment = T_SMALL, WRAP
+        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=3)
+        ws.row_dimensions[r].height = 34
+        r += 1
+
+    r = policy_block(ws, r + 1, "DK.SME.SMVD.PROJ")
+
+    source_note(ws, r,
+                "Source: Effektmaaling af SMV:Digital, Danmarks Statistik for the "
+                "Agency for Digital Government, June 2025 (DG3); scheme status from "
+                "SMV:Digital's 2026 grant-pool page (SMV1).")
     ws.sheet_view.showGridLines = False
     return ws
 
@@ -959,6 +1376,54 @@ def sheet_limitations(wb):
          "this dataset would be uninterpretable. The workbook supports description "
          "and comparison only. Co-movement between digital payment adoption and "
          "branch closures is presented as association, never as measured causation."),
+        ("Figure 6 sample is selected on the tails",
+         "The adoption column in Figure 6 was assembled from a Eurostat press "
+         "release naming the highest three countries, the lowest three, and three "
+         "large movers. Most of the plotted points therefore come from the ends of "
+         "the EU distribution. Selecting on the extremes of X inflates the "
+         "correlation coefficient and R-squared regardless of the underlying "
+         "relationship. The R-squared is an upper bound, not an estimate; the "
+         "slope is the statistic to quote, alongside n. The chart deliberately "
+         "does not display R-squared on its face. Fixing this requires the full "
+         "27-country isoc_ec_ib20 column."),
+        ("No price deflator on the turnover series",
+         "E-sales as a share of enterprise turnover runs 2014 to 2024, spanning "
+         "the pandemic and the 2022 inflation episode. Turnover is nominal, and "
+         "online and physical retail did not face the same price path. Part of the "
+         "measured rise in the e-sales share is therefore relative price movement "
+         "rather than real reallocation of activity. No deflator was available in "
+         "this session and none has been applied, so the doubling of intensity "
+         "should be read as nominal."),
+        ("Banking series use different base years",
+         "Branch counts begin in 2004; institution counts and employment begin in "
+         "1991. A 2004-2024 branch change and a 1991-2024 employment change are "
+         "not comparable, and placing the two percentages side by side in prose "
+         "would misrepresent both. 05_CALC labels every window explicitly. Either "
+         "state both windows or do not draw the comparison."),
+        ("No sampling error is reported anywhere",
+         "The Eurostat, Nationalbank and Agency for Digital Government figures are "
+         "survey estimates and carry sampling error that the issuing authorities "
+         "publish but this workbook does not reproduce. Small differences should "
+         "not be treated as established: a 2-3 point gap between two survey "
+         "proportions, or between two eGovernment Benchmark scores, may not be "
+         "distinguishable from zero. Directions are more robust than magnitudes "
+         "throughout."),
+        ("Headcount conversions rest on an implied denominator",
+         "A published figure for the Danish population aged 15 and over could not "
+         "be verified in this session. F4 therefore derives an implied 15+ base by "
+         "dividing the exempt headcount by the exemption rate, both from the same "
+         "source. Persons-affected figures built on it are orders of magnitude, "
+         "not counts, and the capability shares they scale are measured on 'the "
+         "population' rather than on the 15+ base - the denominators are not "
+         "identical. Every such cell is marked in place."),
+        ("A withdrawn claim about SMV:Digital",
+         "An earlier draft of this workbook asserted that SMV:Digital was being "
+         "defunded, and an argument was built on the contrast between a programme "
+         "that works and a programme being cut. The claim could not be verified. "
+         "The scheme's own 2026 grant-pool page documents pools still open and a "
+         "further pool opening on 26 October 2026. The claim has been removed from "
+         "the dataset and from the report's argument, and the correction is "
+         "recorded in 09_POLICY and 08_AI_LOG rather than silently erased."),
         ("Unbalanced panel",
          "Observation years differ by series because the underlying sources publish "
          "on different cycles - payment habits roughly biennially, Eurostat annually, "
@@ -1041,12 +1506,30 @@ def sheet_ai_log(wb):
          "AI used to search for published values by authority and indicator.",
          "Each value checked against a result reporting the issuing authority's own "
          "publication.",
-         "69 observations retained."),
+         "Every retained observation carries a source_id."),
         ("Rejection of a prior dataset",
          "A candidate dataset produced with AI assistance was reviewed.",
          "Cross-checked against Eurostat's published country ranking; the values "
          "inverted the true ranking and contained duplicated and interpolated cells.",
          "Dataset rejected in full and excluded."),
+        ("Withdrawal of an AI-suggested claim",
+         "An AI-assisted draft asserted that the SMV:Digital grant scheme was "
+         "being defunded, and an argument was built on the contrast between a "
+         "programme with measured positive effects and a programme being cut.",
+         "Searched for the scheme's funding status. The scheme's own 2026 "
+         "grant-pool page documents pools still open and a further pool opening "
+         "26 October 2026. No source supported the defunding claim.",
+         "Claim withdrawn from the dataset and the argument; the withdrawal is "
+         "recorded in 09_POLICY and 07_LIMITATIONS rather than erased."),
+        ("Statistical self-audit",
+         "AI was asked to audit its own workbook as a macroeconomic policy "
+         "reviewer would.",
+         "The audit found that Figure 6's adoption column had been assembled "
+         "from a press release naming only the top three, bottom three and three "
+         "large movers - a sample drawn from the tails, which inflates R-squared "
+         "by construction.",
+         "R-squared removed from the chart face; a SELECTION WARNING added to "
+         "F6; the limitation recorded in 07_LIMITATIONS."),
         ("Workbook construction",
          "AI wrote the Python build script that generates this workbook.",
          "Structural assertions run at build time: source_ids resolve, units and "
@@ -1095,6 +1578,9 @@ def main():
     sheet_f4(wb)
     sheet_f5(wb)
     sheet_f6(wb)
+    sheet_f7(wb)
+    sheet_f8(wb)
+    sheet_policy(wb)
     sheet_gap(wb)
     sheet_limitations(wb)
     sheet_ai_log(wb)

@@ -20,11 +20,12 @@ PATH = os.path.join(
 EXPECTED = [
     "00_COVER", "01_README", "02_MASTER", "03_SOURCES", "04_DEFINITIONS",
     "05_CALC", "F1_BRANCHES", "F2_PAYMENTS", "F3_ESALES", "F4_EXCLUSION",
-    "F5_EU8", "F6_ADOPT_BENEFIT", "06_RETAIL_GAP", "07_LIMITATIONS", "08_AI_LOG",
+    "F5_EU8", "F6_ADOPT_BENEFIT", "F7_QUALITY", "F8_SMVDIGITAL", "09_POLICY",
+    "06_RETAIL_GAP", "07_LIMITATIONS", "08_AI_LOG",
 ]
 
 FIG_SHEETS = ["F1_BRANCHES", "F2_PAYMENTS", "F3_ESALES", "F4_EXCLUSION",
-              "F5_EU8", "F6_ADOPT_BENEFIT"]
+              "F5_EU8", "F6_ADOPT_BENEFIT", "F7_QUALITY", "F8_SMVDIGITAL"]
 
 failures = []
 checks = 0
@@ -58,7 +59,7 @@ src_ids = {r[0].value for r in wb["03_SOURCES"].iter_rows(min_row=2, max_col=1)
 check(len(src_ids) > 0, "SOURCES sheet has no source_ids")
 
 rows = list(m.iter_rows(min_row=2, values_only=True))
-check(len(rows) == 87, f"expected 87 observations, found {len(rows)}")
+check(len(rows) == 92, f"expected 92 observations, found {len(rows)}")
 
 seen = set()
 for r in rows:
@@ -157,10 +158,70 @@ check(resolved >= 40, f"only {resolved} lookups resolved; expected more")
 # 8. charts present
 expected_charts = {"F1_BRANCHES": 1, "F2_PAYMENTS": 2, "F3_ESALES": 1,
                    "F4_EXCLUSION": 1, "F5_EU8": 1,
-                   "F6_ADOPT_BENEFIT": 1}
+                   "F6_ADOPT_BENEFIT": 1, "F7_QUALITY": 1, "F8_SMVDIGITAL": 1}
 for name, n in expected_charts.items():
     check(len(wb[name]._charts) == n,
           f"{name}: expected {n} chart(s), found {len(wb[name]._charts)}")
+
+# 9. the policy sheet. An event marker is a factual claim about when an
+# instrument took effect, so it carries the same evidential burden as a value:
+# a real date, an honest precision, a legal citation, a resolvable source, and a
+# series that actually exists in MASTER.
+from datetime import date as _date
+
+from dataset import OBS, POLICY_EVENTS
+
+pol = wb["09_POLICY"]
+# Event rows are those carrying a precision keyword in column B; the trailing
+# source_note paragraphs on this sheet also occupy column A and must not be
+# mistaken for events.
+pol_rows = [r for r in pol.iter_rows(min_row=5, max_col=7, values_only=True)
+            if r[0] and r[1] in ("day", "month", "year")]
+check(len(pol_rows) == len(POLICY_EVENTS),
+      f"09_POLICY has {len(pol_rows)} events, dataset has {len(POLICY_EVENTS)}")
+
+master_codes = {r[1] for r in rows}
+for when, precision, name, citation, src, desc, related in pol_rows:
+    try:
+        _date.fromisoformat(str(when))
+    except ValueError:
+        check(False, f"policy event {name!r}: {when!r} is not a real date")
+    check(precision in ("day", "month", "year"),
+          f"policy event {name!r}: bad date precision {precision!r}")
+    check(bool(citation), f"policy event {name!r}: no legal citation")
+    check(src in src_ids, f"policy event {name!r}: source_id {src!r} not in SOURCES")
+    check(bool(desc), f"policy event {name!r}: no description")
+    check(related in master_codes,
+          f"policy event {name!r}: series {related!r} is not in MASTER")
+
+# 10. Figure 6 must not advertise R-squared on the chart face, and must carry
+# the selection warning. The sample is drawn from the tails of the adoption
+# distribution, so displaying goodness-of-fit as a headline would overstate it.
+f6 = wb["F6_ADOPT_BENEFIT"]
+check(len(f6._charts) == 1, "F6 should have exactly one chart")
+tl = f6._charts[0].series[0].trendline
+check(tl is not None, "F6 trendline missing")
+check(not tl.dispRSqr,
+      "F6 chart displays R-squared on its face; the sample is tail-selected "
+      "and the statistic is inflated by construction")
+f6_text = " ".join(str(c.value) for row in f6.iter_rows() for c in row
+                   if isinstance(c.value, str))
+check("SELECTION WARNING" in f6_text,
+      "F6 has no SELECTION WARNING block")
+for phrase in ("tails", "upper bound", "isoc_ec_ib20"):
+    check(phrase in f6_text.lower(),
+          f"F6 selection warning does not mention {phrase!r}")
+
+# 11. The withdrawn SMV:Digital defunding claim must be recorded, not erased.
+# A correction that leaves no trace is indistinguishable from never having made
+# the error, which is precisely what the AI Use appendix has to be able to show.
+all_text = " ".join(
+    str(c.value) for sheet in ("09_POLICY", "07_LIMITATIONS", "08_AI_LOG")
+    for row in wb[sheet].iter_rows() for c in row if isinstance(c.value, str))
+check("defunded" in all_text,
+      "the withdrawn SMV:Digital defunding claim is not recorded anywhere")
+check(not any("defund" in str(r[11] or "") for r in rows),
+      "a defunding claim survives in MASTER notes")
 
 # ---------------------------------------------------------------- report ---
 print(f"{checks} checks run")
