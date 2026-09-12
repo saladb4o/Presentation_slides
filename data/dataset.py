@@ -274,11 +274,22 @@ OBS = [
     # Digital skills by age - European Commission Digital Decade report
     # ------------------------------------------------------------------
     ("DK.SKL.1624", "At least basic digital skills, age 16-24", "DK", 2025, 92.06,
-     "%", "% of age group", "", "EC1", "EU average 74.55%."),
+     "%", "% of age group", "", "EC1", "EU average carried as EU.SKL.1624."),
     ("DK.SKL.2554", "At least basic digital skills, age 25-54", "DK", 2025, 86.89,
-     "%", "% of age group", "", "EC1", "EU average 68.57%."),
+     "%", "% of age group", "", "EC1", "EU average carried as EU.SKL.2554."),
     ("DK.SKL.5574", "At least basic digital skills, age 55-74", "DK", 2025, 67.81,
-     "%", "% of age group", "", "EC1", "EU average 42.60%."),
+     "%", "% of age group", "", "EC1", "EU average carried as EU.SKL.5574."),
+
+    # EU-27 comparators for the same three bands, same publication. These were
+    # previously held only in the note field of the Danish rows, which made them
+    # uncitable: a value in a note is not an observation and cannot be looked up,
+    # charted or traced. Promoted to rows so F10 can reference them.
+    ("EU.SKL.1624", "At least basic digital skills, age 16-24", "EU27", 2025, 74.55,
+     "%", "% of age group", "", "EC1", "Comparator for DK.SKL.1624."),
+    ("EU.SKL.2554", "At least basic digital skills, age 25-54", "EU27", 2025, 68.57,
+     "%", "% of age group", "", "EC1", "Comparator for DK.SKL.2554."),
+    ("EU.SKL.5574", "At least basic digital skills, age 55-74", "EU27", 2025, 42.60,
+     "%", "% of age group", "", "EC1", "Comparator for DK.SKL.5574."),
 
     # ------------------------------------------------------------------
     # Enterprise digitalisation and public services - European Commission

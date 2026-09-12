@@ -79,6 +79,7 @@ N_INT = '_(#,##0_);\\(#,##0\\);_("–"_);_("–"_)'
 N_ONE = '_(#,##0.0_);\\(#,##0.0\\);_("–"_);_("–"_)'
 N_THREE = '_(#,##0.000_);\\(#,##0.000\\);_("–"_);_("–"_)'
 N_SIGNED = '_(+#,##0.00_);_(-#,##0.00_);_("–"_);_("–"_)'
+N_PCT = '_(0.0%_);\\(0.0%\\);_("–"_);_("–"_)'
 
 THIN = Side(style="thin", color="FFBFBFBF")
 BOX = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
@@ -271,6 +272,9 @@ def sheet_cover(wb):
                        "service quality"),
         ("F8_SMVDIGITAL", "Figure 8 - SMV:Digital, the one policy with a "
                           "control group"),
+        ("F9_CONSOLIDATION", "Figure 9 - banking consolidation on three "
+                             "measures, and the asymmetry between them"),
+        ("F10_SKILLS", "Figure 10 - digital skills by age band, DK vs EU-27"),
         ("09_POLICY", "Policy events - dated instruments with legal citations"),
         ("06_RETAIL_GAP", "Documented gap - retail volume index not retrieved"),
         ("07_LIMITATIONS", "Data quality statement - read before citing"),
@@ -1504,6 +1508,233 @@ def sheet_f8(wb):
     return ws
 
 
+def sheet_f9(wb):
+    """Banking consolidation on three measures, and what the gap between them says.
+
+    The three series do not share a start year - branches begin in 2004,
+    institutions and employment in 1991 - so a single indexed chart would be
+    dishonest. Each category label therefore carries its own window, and the
+    percentage changes are never presented as though measured over one period.
+    """
+    ws = wb.create_sheet("F9_CONSOLIDATION")
+    title_block(ws, "Figure 9 - Consolidation of Danish retail banking",
+                "Three measures of the same structural shift. Note the different "
+                "start years: the periods are NOT comparable to one another.")
+
+    header_row(ws, 4,
+               ["measure", "period", "first", "last", "change"],
+               [30, 16, 14, 14, 14])
+    rows = [
+        ("Financial institutions", "1991-2024", "DK.FIN.INST", 1991, 2024),
+        ("Bank branches", "2004-2024", "DK.FIN.BRCH", 2004, 2024),
+        ("Bank employees", "1991-2024", "DK.FIN.EMP", 1991, 2024),
+    ]
+    for i, (label, period, code, y0, y1) in enumerate(rows):
+        r = 5 + i
+        ws.cell(row=r, column=1, value=label).font = T_BODY
+        ws.cell(row=r, column=2, value=period).font = T_MONO
+        for col, yr in ((3, y0), (4, y1)):
+            c = ws.cell(row=r, column=col, value=lookup(code, yr))
+            c.font, c.fill, c.number_format = T_BODY, F_CALC, N_INT
+        c = ws.cell(row=r, column=5,
+                    value=f"=({L(code, y1)}/{L(code, y0)})-1")
+        c.font, c.fill, c.number_format = T_BODY, F_CALC, N_PCT
+        for j in range(1, 6):
+            ws.cell(row=r, column=j).border = BOX
+    last = 4 + len(rows)
+
+    # --- chart: percentage change, with the period inside each label ---------
+    # A helper column carries "measure (period)" so the different windows are
+    # unmissable on the chart face rather than only in the table.
+    ws.cell(row=4, column=7, value="chart label (helper)").font = T_SMALL
+    ws.cell(row=4, column=8, value="change").font = T_SMALL
+    for i, (label, period, code, y0, y1) in enumerate(rows):
+        r = 5 + i
+        ws.cell(row=r, column=7, value=f"{label} ({period})").font = T_BODY
+        c = ws.cell(row=r, column=8, value=f"=({L(code, y1)}/{L(code, y0)})-1")
+        c.font, c.fill, c.number_format = T_BODY, F_CALC, N_PCT
+
+    ch = BarChart()
+    ch.type, ch.grouping = "bar", "clustered"
+    ch.x_axis.title = "Change over the stated period"
+    ch.height, ch.width = 8, 17
+    data = Reference(ws, min_col=8, min_row=4, max_row=last)
+    cats = Reference(ws, min_col=7, min_row=5, max_row=last)
+    ch.add_data(data, titles_from_data=True)
+    ch.set_categories(cats)
+    # Employment is the point of the chart: it is the bar that did NOT fall as
+    # far. It takes the accent; the two structural measures recede.
+    highlight_points(ch.series[0], len(rows), {2: C_ACCENT}, base=C_DARK)
+    style_chart(ch, legend=None)
+    chart_title(ws, "J3", "Banking consolidation, by measure",
+                "Employment in blue - it fell least. Periods differ by measure; "
+                "read each bar against its own label.")
+    ws.add_chart(ch, "J4")
+
+    # --- the finding: staff per institution ---------------------------------
+    r = last + 2
+    ws.cell(row=r, column=1,
+            value="THE ASYMMETRY - staff per institution").font = T_SUB
+    r += 1
+    header_row(ws, r, ["statistic", "1991", "2024", "reading"],
+               [30, 14, 14, 60])
+    r += 1
+    per = r
+    ws.cell(row=r, column=1, value="Employees per institution").font = T_BODY
+    for col, yr in ((2, 1991), (3, 2024)):
+        c = ws.cell(row=r, column=col,
+                    value=f"={L('DK.FIN.EMP', yr)}/{L('DK.FIN.INST', yr)}")
+        c.font, c.fill, c.number_format = T_BODY, F_CALC, N_INT
+    rd = ws.cell(row=r, column=4,
+                 value="Denmark did not shed banking labour in proportion to "
+                       "its institutions. It concentrated it.")
+    rd.font, rd.alignment = T_SMALL, WRAP
+    for j in range(1, 5):
+        ws.cell(row=r, column=j).border = BOX
+    ws.row_dimensions[r].height = 30
+    r += 1
+    ws.cell(row=r, column=1, value="Change in staff per institution").font = T_BODY
+    c = ws.cell(row=r, column=2,
+                value=f"=(({L('DK.FIN.EMP', 2024)}/{L('DK.FIN.INST', 2024)})"
+                      f"/({L('DK.FIN.EMP', 1991)}/{L('DK.FIN.INST', 1991)}))-1")
+    c.font, c.fill, c.number_format = T_BODY, F_CALC, N_PCT
+    ws.cell(row=r, column=3, value="").border = BOX
+    rd = ws.cell(row=r, column=4,
+                 value="The measure that rose. Every other line on this sheet "
+                       "falls.")
+    rd.font, rd.alignment = T_SMALL, WRAP
+    for j in range(1, 5):
+        ws.cell(row=r, column=j).border = BOX
+    r += 1
+    ws.cell(row=r, column=1, value="Employees per branch, 2024").font = T_BODY
+    c = ws.cell(row=r, column=2,
+                value=f"={L('DK.FIN.EMP', 2024)}/{L('DK.FIN.BRCH', 2024)}")
+    c.font, c.fill, c.number_format = T_BODY, F_CALC, N_ONE
+    ws.cell(row=r, column=3, value="").border = BOX
+    rd = ws.cell(row=r, column=4,
+                 value="Branch counts begin in 2004, so no 1991 comparison is "
+                       "available for this ratio.")
+    rd.font, rd.alignment = T_SMALL, WRAP
+    for j in range(1, 5):
+        ws.cell(row=r, column=j).border = BOX
+
+    r = policy_block(ws, r + 3, "DK.FIN.BRCH")
+
+    source_note(ws, r,
+                "Sources: Finans Danmark (FD1) for institutions, branches and "
+                "employment. CAUTION ON THE PERIODS: institutions and employment "
+                "run 1991-2024; branches only 2004-2024. The three percentage "
+                "changes above are therefore NOT measured over a common window "
+                "and must not be subtracted from one another. What is comparable "
+                "is institutions against employment, both 1991-2024: institutions "
+                "fell by roughly three quarters while employment fell by under a "
+                "third. Reading: consolidation removed institutions and branches "
+                "far faster than it removed jobs, so the surviving institutions "
+                "are much larger. This is a concentration and scale effect, not a "
+                "labour-shedding one, and it is the economic consequence of "
+                "digital payment adoption that the branch count alone does not "
+                "show. Employment figures are rounded by the source - it states "
+                "'around 51,000' and 'just under 36,000' - and carry flag e.")
+    ws.sheet_view.showGridLines = False
+    return ws
+
+
+def sheet_f10(wb):
+    """Digital skills by age band, Denmark against the EU-27 average.
+
+    The chart carries the section 4 argument on its own: Denmark leads at every
+    age, and its weakest band still beats the EU average for that band, so the
+    excluded population is not explained by a skills deficit.
+    """
+    ws = wb.create_sheet("F10_SKILLS")
+    title_block(ws, "Figure 10 - At least basic digital skills, by age band, 2025",
+                "Denmark against the EU-27 average. Same publication, same "
+                "definition, same year.")
+
+    header_row(ws, 4, ["age band", "Denmark", "EU-27", "DK lead"],
+               [16, 14, 14, 14])
+    bands = [("16-24", "SKL.1624"), ("25-54", "SKL.2554"), ("55-74", "SKL.5574")]
+    for i, (label, stem) in enumerate(bands):
+        r = 5 + i
+        ws.cell(row=r, column=1, value=label).font = T_MONO
+        for col, geo in ((2, "DK"), (3, "EU")):
+            c = ws.cell(row=r, column=col, value=lookup(f"{geo}.{stem}", 2025))
+            c.font, c.fill, c.number_format = T_BODY, F_CALC, N_DEC
+        c = ws.cell(row=r, column=4,
+                    value=f"={L(f'DK.{stem}', 2025)}-{L(f'EU.{stem}', 2025)}")
+        c.font, c.fill, c.number_format = T_BODY, F_CALC, N_SIGNED
+        for j in range(1, 5):
+            ws.cell(row=r, column=j).border = BOX
+    last = 4 + len(bands)
+
+    ch = BarChart()
+    ch.type, ch.grouping = "col", "clustered"
+    ch.y_axis.title = "% of age group"
+    ch.x_axis.title = "Age band"
+    ch.height, ch.width = 9, 15
+    data = Reference(ws, min_col=2, max_col=3, min_row=4, max_row=last)
+    cats = Reference(ws, min_col=1, min_row=5, max_row=last)
+    ch.add_data(data, titles_from_data=True)
+    ch.set_categories(cats)
+    paint(ch.series[0], C_ACCENT)   # Denmark
+    paint(ch.series[1], C_GREY)     # EU-27 average, context
+    ch.y_axis.scaling.max = 100
+    style_chart(ch)
+    chart_title(ws, "F3", "At least basic digital skills by age, DK vs EU-27",
+                "Denmark in blue; the EU-27 average in grey. Note that the "
+                "Danish 55-74 bar still clears the EU average for its own band.")
+    ws.add_chart(ch, "F4")
+
+    r = last + 2
+    ws.cell(row=r, column=1,
+            value="WHY THIS MATTERS FOR THE EXCLUSION ARGUMENT").font = T_SUB
+    r += 1
+    header_row(ws, r, ["statistic", "value", "reading"], [34, 14, 66])
+    r += 1
+    stats = [
+        ("Danish gradient, 16-24 less 55-74",
+         f"={L('DK.SKL.1624', 2025)}-{L('DK.SKL.5574', 2025)}", N_SIGNED,
+         "The internal spread across Danish age bands."),
+        ("EU gradient, 16-24 less 55-74",
+         f"={L('EU.SKL.1624', 2025)}-{L('EU.SKL.5574', 2025)}", N_SIGNED,
+         "The same spread for the EU as a whole. Denmark's is the narrower of "
+         "the two, so its age gradient is comparatively mild."),
+        ("Danish 55-74 less the EU average for 55-74",
+         f"={L('DK.SKL.5574', 2025)}-{L('EU.SKL.5574', 2025)}", N_SIGNED,
+         "Denmark's weakest band against the EU's same band - NOT against the "
+         "EU all-ages average. Positive and large."),
+    ]
+    for label, formula, fmt, reading in stats:
+        ws.cell(row=r, column=1, value=label).font = T_BODY
+        c = ws.cell(row=r, column=2, value=formula)
+        c.font, c.fill, c.number_format = T_BODY, F_CALC, fmt
+        rd = ws.cell(row=r, column=3, value=reading)
+        rd.font, rd.alignment = T_SMALL, WRAP
+        for j in range(1, 4):
+            ws.cell(row=r, column=j).border = BOX
+        ws.row_dimensions[r].height = 30
+        r += 1
+
+    source_note(ws, r + 1,
+                "Source: European Commission, Digital Decade 2026 country report "
+                "for Denmark (EC1). The three EU-27 values were previously held "
+                "only in the note field of the Danish rows; they are now "
+                "observations in 02_MASTER under EU.SKL.*, because a figure in a "
+                "note cannot be looked up, charted or traced. READING: Denmark "
+                "leads the EU average in every age band, and its weakest band "
+                "(55-74) clears the EU average for that same band by a wide "
+                "margin. The Danish population excluded from digital public "
+                "services is therefore not explained by low skills relative to "
+                "Europe - the mandate is calibrated above the bottom of its own "
+                "distribution. Compare the exclusion measures on F4: 4.7% are "
+                "formally exempt while 16.5% report difficulty. That gap is "
+                "administrative, not a capability deficit. Do not compare the "
+                "55-74 figure against an EU all-ages average; the comparison is "
+                "band against the same band.")
+    ws.sheet_view.showGridLines = False
+    return ws
+
+
 def sheet_gap(wb):
     ws = wb.create_sheet("06_RETAIL_GAP")
     ws.column_dimensions["A"].width = 26
@@ -1580,6 +1811,10 @@ def sheet_limitations(wb):
          "this session and none has been applied, so the doubling of intensity "
          "should be read as nominal."),
         ("Banking series use different base years",
+         "This constrains F9_CONSOLIDATION directly: the three percentage "
+         "changes on that sheet are not measured over a common window, so they "
+         "must not be differenced against one another. Institutions and "
+         "employment are comparable to each other, both 1991-2024. "
          "Branch counts begin in 2004; institution counts and employment begin in "
          "1991. A 2004-2024 branch change and a 1991-2024 employment change are "
          "not comparable, and placing the two percentages side by side in prose "
@@ -1796,6 +2031,8 @@ def main():
     sheet_f6(wb)
     sheet_f7(wb)
     sheet_f8(wb)
+    sheet_f9(wb)
+    sheet_f10(wb)
     sheet_policy(wb)
     sheet_gap(wb)
     sheet_limitations(wb)
