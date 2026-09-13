@@ -19,8 +19,9 @@ capability — data integration and specialist skills, which Section 3 identifie
 the binding constraint — and its next grant pool, opening 26 October 2026
 [[SMV1]], should allocate by lottery among eligible applicants. The scheme reports
 that 65% of participants invested further ([[F8]]; [[DG3:b]]), but that is
-self-reported and has no control group, so it measures participation, not effect.
-An oversubscribed pool yields a control group at no cost.
+self-reported and uncontrolled: it measures participation, not effect.
+An oversubscribed pool yields a control group at no cost. Appendix F specifies the
+instrument, its outcome measures and its timeline.
 
 Both follow from one reading: Denmark built a rail, then left who could board it,
 and who could build on it, to a capability it never distributed.

@@ -592,6 +592,85 @@ APPENDIX_FIGURES_FNS = [figC1_residuals, figC2_jackknife, figC3_tailselection,
                         figD1_denominators, figE1_eu27, figE2_payments]
 
 
+
+
+# --------------------------------------------------------------------------
+def figE3_productivity():
+    """Danish labour productivity against the EU-27 average, 2005-2025.
+
+    The y axis is an INDEX on EU27_2020 = 100, so the reference line at 100 is
+    the EU average and the series shows Denmark's position against it. It is
+    not a Danish growth rate; the 100 line is drawn and labelled precisely so
+    the chart cannot be misread as one.
+    """
+    rows = sorted((o[3], o[4]) for o in OBS if o[0] == "DK.PRD.LP.PER")
+    yrs = [r[0] for r in rows]
+    vals = [r[1] for r in rows]
+
+    fig, ax = plt.subplots(figsize=(WIDTH, 3.5))
+    frame(ax)
+    ax.axhline(100, color=DARK, linewidth=1.1, linestyle="--", zorder=2)
+    ax.annotate("EU-27 average = 100", xy=(yrs[0], 100), xytext=(0, 5),
+                textcoords="offset points", fontsize=8, color=DARK, va="bottom")
+    ax.plot(yrs, vals, color=ACCENT, linewidth=2.0, zorder=4)
+
+    peak = max(range(len(vals)), key=lambda i: vals[i])
+    for i, note in ((0, "below"), (peak, "above"), (len(vals) - 1, "below")):
+        ax.plot(yrs[i], vals[i], "o", color=ACCENT, markersize=5, zorder=5)
+        ax.annotate(f"{vals[i]:.1f}", (yrs[i], vals[i]), textcoords="offset points",
+                    xytext=(0, -15 if note == "below" else 9), ha="center",
+                    fontsize=8.5, color=DARK)
+    ax.set_ylim(95, 126)
+    ax.set_xlim(2004, 2026)
+    ax.set_xticks([2005, 2010, 2015, 2020, 2025])
+    ax.set_ylabel("Index, EU27 (2020 composition) = 100")
+    title(ax, "Denmark's lead over the EU average widened, then narrowed",
+          "Nominal labour productivity per person, current prices in PPS. "
+          "A relative position, not a growth rate")
+    return save(fig, "figA_e3_productivity.png")
+
+
+def figF1_gantt():
+    """Implementation and evaluation timeline for the randomised SMV:Digital pool.
+
+    Colour carries the argument rather than decorating it: the accent marks the
+    three steps that make the scheme evaluable - randomisation, outcome
+    measurement, publication - and everything administrative stays grey.
+    """
+    # (label, start month index from Oct 2026, duration in months, is_causal)
+    tasks = [
+        ("Grant pool opens; applications received", 0, 2, False),
+        ("Eligibility screening against scheme criteria", 2, 1, False),
+        ("Randomised allocation among eligible applicants", 3, 1, True),
+        ("Baseline linkage to Danmarks Statistik registers", 3, 2, True),
+        ("Grants disbursed; funded projects run", 4, 12, False),
+        ("Midline monitoring of take-up and attrition", 10, 2, False),
+        ("Endline outcome measurement, both arms", 16, 3, True),
+        ("Evaluation report published", 19, 2, True),
+    ]
+    labels = [t[0] for t in tasks][::-1]
+    fig, ax = plt.subplots(figsize=(WIDTH, 3.9))
+    frame(ax, grid_axis="x")
+    for i, (lab, start, dur, causal) in enumerate(tasks[::-1]):
+        ax.barh(i, dur, left=start, height=0.55, zorder=3,
+                color=ACCENT if causal else GREY)
+    ax.set_yticks(range(len(labels)))
+    ax.set_yticklabels(labels, fontsize=8.5)
+    # Ticks every six months from the opening of the pool.
+    marks = [0, 6, 12, 18, 21]
+    names = ["Oct 2026", "Apr 2027", "Oct 2027", "Apr 2028", "Jul 2028"]
+    ax.set_xticks(marks)
+    ax.set_xticklabels(names, fontsize=8)
+    ax.set_xlim(-0.4, 21.4)
+    title(ax, "The evaluation is built in, not bolted on",
+          "Blue marks the four steps that make an effect estimate possible; "
+          "grey is scheme administration")
+    return save(fig, "figA_f1_gantt.png")
+
+
+APPENDIX_FIGURES_FNS += [figE3_productivity, figF1_gantt]
+
+
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
     print(f"writing {len(FIGURES)} figures to report/figures/")

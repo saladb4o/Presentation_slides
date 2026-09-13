@@ -46,6 +46,7 @@ APPENDICES = [
     ("C", "C_regression", "Regression Diagnostics"),
     ("D", "D_exclusion", "Reconciling the Exclusion Estimates"),
     ("E", "E_cross_sections", "Full Cross-Sections and Series"),
+    ("F", "F_policy_spec", "Policy Specification and Implementation Timeline"),
 ]
 
 # Appendix figures are numbered WITHIN their appendix (Figure C1, C2, ...), so
@@ -62,6 +63,12 @@ APPENDIX_FIGURES = {
                   "The exclusion estimates converted to people on their own bases."),
     "AF_RANK": ("figA_e1_eu27.png",
                 "Individuals purchasing online, all 27 member states, 2024. Workbook F5_EU27."),
+    "AF_PROD": ("figA_e3_productivity.png",
+                "Danish labour productivity against the EU-27 average, 2005-2025. "
+                "An index on EU27 = 100, so it shows relative position, not growth."),
+    "AF_GANTT": ("figA_f1_gantt.png",
+                 "Implementation and evaluation timeline for the randomised "
+                 "SMV:Digital allocation proposed in Section 6."),
     "AF_PAY": ("figA_e2_payments.png",
                "Instrument shares of physical-retail payments, 2017-2025. Workbook F2_PAYMENTS."),
 }

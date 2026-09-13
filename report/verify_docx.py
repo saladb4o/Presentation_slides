@@ -111,8 +111,11 @@ def main():
         check(row[0] in text, f"Table 1 missing row {row[0]}")
 
     # --- word count -------------------------------------------------------
+    # Tripwire against runaway generation across the WHOLE document, not the
+    # 2,000-word assessment limit - that one is enforced on the body alone by
+    # assemble_report.py. Raised from 5,200 when Appendix F was added.
     body_words = len(text.split())
-    check(body_words < 5200,
+    check(body_words < 6500,
           f"document body has {body_words} words, unexpectedly long")
 
     print(f"{checks} checks run")

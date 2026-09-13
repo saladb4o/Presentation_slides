@@ -37,3 +37,27 @@ period. Most of what replaced cash at the point of sale was therefore a differen
 way of presenting a card, not a new instrument — which is what one would expect
 where an identity rail lowers the cost of building a new interface on existing
 payment infrastructure.
+
+### E.4 Labour productivity against the EU-27 average
+
+[[AF_PROD]]
+
+Every other measure in this report is an adoption measure. This one is an
+economic outcome: nominal labour productivity per person, indexed so that the
+EU-27 equals 100 in each year [[ES8:b]]. Denmark stood at 109.2 in 2005, peaked
+at 121.0 in 2021, and stands at 116.8 in 2025.
+
+Three cautions govern how far it can be read. The series is an index on the EU
+average, so a rise means Denmark gained **relative to its peers** and says nothing
+about whether Danish productivity grew. It is measured per person rather than per
+hour, which makes it sensitive to changes in part-time work. And it is nominal,
+in current prices at purchasing power standards, so price movements are inside
+it.
+
+What it establishes is therefore modest and worth stating plainly: across the
+period Denmark built its digital infrastructure, its productivity position
+improved against the EU average and has not returned to where it started. The
+series is consistent with the report's argument. It does not demonstrate it, and
+no single-country time series could — the 2021 peak coincides with a pandemic
+that moved measured productivity everywhere, which is the clearest possible
+illustration that this series responds to more than digital policy.

@@ -37,7 +37,7 @@ Banking shows the magnitude. Danish retail bank branches fell from 2,025 in 2004
 
 Payments moved with it. Cash fell from 23% to 9% of the *number* of payments in physical retail between 2017 and 2025 — 14 percentage points, to under two-fifths of its 2017 share — while card-based mobile wallets reached 32% of that same measure (Danmarks Nationalbank 2025). Much of this is displacement within digital instruments: wallet payments are card payments, and the physical card share fell from 73% to 54% (Appendix E). What replaced cash was mostly a new interface onto existing card infrastructure — which is what a rail makes cheap to build. Cash acceptance remains a statutory obligation on shops under *lov om betalinger* §81, narrowed but not removed on 1 July 2022 (Finanstilsynet 2025).
 
-Does wider consumer adoption accompany greater commercial activity? Figure 3 plots the share of internet users purchasing online against enterprise e-sales turnover across the European Union in 2024. On the 18 member states holding both measures, the fitted slope is +0.602 percentage points of turnover per percentage point of adoption (standard error 0.105; t = 5.75 on 16 degrees of freedom; 95% confidence interval [0.380, 0.824]; R² = 0.674) (Eurostat 2026; Eurostat 2025c).
+Does wider consumer adoption accompany greater commercial activity? Figure 3 plots the share of internet users purchasing online against enterprise e-sales turnover across the European Union in 2024. On the 18 member states holding both measures, the fitted slope is +0.602 percentage points of turnover per percentage point of adoption (standard error 0.105; t = 5.75 on 16 degrees of freedom; 95% confidence interval [0.380, 0.824]; R² = 0.674) (Eurostat 2026a; Eurostat 2025c).
 
 Appendix C reports the diagnostics; three matter here. An earlier version of this figure drew its adoption values from a Eurostat news release (Eurostat 2025a) naming only the distribution's ends, where the fit was R² 0.853 against 0.674 here while the slope moved by 8% — selection bias measured rather than asserted. The slope survives dropping any single state, ranging [0.516, 0.672]. And the nine states absent for want of the turnover measure are indistinguishable from the plotted eighteen on adoption (p ≈ 0.71).
 
@@ -59,7 +59,7 @@ Causation is neither established nor establishable from this design. Adoption me
 
 ## 3. Diffusion: Denmark against the European Union
 
-"Breadth" has two subjects in Denmark and they point opposite ways. Citizen breadth is near-complete: 90.86% of Danish internet users bought online in 2024, third of the twenty-seven member states (Eurostat 2026); the full ranking is Appendix E. Enterprise breadth is not. Only 38.78% of Danish enterprises make any e-sales at all — second-highest in the Union, behind Lithuania's 43.03%, and still under two firms in five (Eurostat 2025b). Denmark leads Europe at a level most Danish firms have not reached.
+"Breadth" has two subjects in Denmark and they point opposite ways. Citizen breadth is near-complete: 90.86% of Danish internet users bought online in 2024, third of the twenty-seven member states (Eurostat 2026a); the full ranking is Appendix E. Enterprise breadth is not. Only 38.78% of Danish enterprises make any e-sales at all — second-highest in the Union, behind Lithuania's 43.03%, and still under two firms in five (Eurostat 2025b). Denmark leads Europe at a level most Danish firms have not reached.
 
 Intensity moved where breadth did not. Among firms that do sell online, e-sales rose from 17.05% of enterprise turnover in 2014 to 33.31% in 2024, while the EU-27 average rose from 16.43% to 19.49% (Figure 4). Denmark and the Union began the decade level; Denmark roughly doubled and the EU gained three percentage points.
 
@@ -113,7 +113,7 @@ The report opened on a projection of roughly DKK 1,000 million a year. Rigsrevis
 
 Two specific measures follow. First, the exemption criteria in *Lov om Offentlig Digital Post* should be widened from the present statutory categories to admit documented difficulty, with assisted access at municipal citizen service centres as the default alternative. Section 4 showed the gap is administrative: relief was drawn narrower than the difficulty, and the criteria are what the state can change.
 
-Second, SMV:Digital should be redirected from adoption toward complementary capability — data integration and specialist skills, which Section 3 identified as the binding constraint — and its next grant pool, opening 26 October 2026 (SMV:Digital 2026), should allocate by lottery among eligible applicants. The scheme reports that 65% of participants invested further (Figure 8; Digitaliseringsstyrelsen 2025b), but that is self-reported and has no control group, so it measures participation, not effect. An oversubscribed pool yields a control group at no cost.
+Second, SMV:Digital should be redirected from adoption toward complementary capability — data integration and specialist skills, which Section 3 identified as the binding constraint — and its next grant pool, opening 26 October 2026 (SMV:Digital 2026), should allocate by lottery among eligible applicants. The scheme reports that 65% of participants invested further (Figure 8; Digitaliseringsstyrelsen 2025b), but that is self-reported and uncontrolled: it measures participation, not effect. An oversubscribed pool yields a control group at no cost. Appendix F specifies the instrument, its outcome measures and its timeline.
 
 Both follow from one reading: Denmark built a rail, then left who could board it, and who could build on it, to a capability it never distributed. The evidence has limits, set out with the data and the AI-use declaration in Appendices A to C — the cross-section in Section 2 has eighteen observations and establishes association, not cause.
 
@@ -147,7 +147,9 @@ Eurostat 2025b, EU enterprises' online sales reach new heights, European Commiss
 
 Eurostat 2025c, Share of enterprises' turnover on e-commerce (tin00110), European Commission, Luxembourg, accessed 12 September 2026.
 
-Eurostat 2026, Internet purchases by individuals (2020 onwards), dataset isoc_ec_ib20, Statistical Office of the European Union, Luxembourg, data last updated 17 April 2026, accessed 12 September 2026, <https://ec.europa.eu/eurostat/databrowser/view/isoc_ec_ib20/default/table?lang=en>.
+Eurostat 2026a, Internet purchases by individuals (2020 onwards), dataset isoc_ec_ib20, Statistical Office of the European Union, Luxembourg, data last updated 17 April 2026, accessed 12 September 2026, <https://ec.europa.eu/eurostat/databrowser/view/isoc_ec_ib20/default/table?lang=en>.
+
+Eurostat 2026b, Labour productivity per person employed and hour worked (EU27_2020=100), dataset tesem160, last updated 9 September 2026, Eurostat, accessed 13 September 2026, <https://ec.europa.eu/eurostat/databrowser/view/tesem160/default/table?lang=en>.
 
 Finans Danmark 2025, Institutter, filialer & ansatte, Finans Danmark, Copenhagen, accessed 12 September 2026, <https://finansdanmark.dk/tal-og-data/institutter-filialer-ansatte/>.
 
@@ -206,7 +208,7 @@ The research question, the country, the policy instrument, the SDG selection, th
 
 ### A.6 Residual risk
 
-Direct access to statistical portals was blocked in the build environment, so most values were verified against search results reporting the issuing authority's publication rather than by opening the authority's database directly. The exception is the Eurostat `isoc_ec_ib20` extract, which the author retrieved from the databrowser and supplied with its own provenance header (Eurostat 2026). Sixteen country-level turnover values are flagged `u` in `02_MASTER` for this reason and should be spot-checked before the workbook is reused. No sampling error is reported anywhere in the dataset, because the sources do not publish standard errors alongside these estimates; survey-based figures should be read as point estimates carrying unquantified uncertainty.
+Direct access to statistical portals was blocked in the build environment, so most values were verified against search results reporting the issuing authority's publication rather than by opening the authority's database directly. The exception is the Eurostat `isoc_ec_ib20` extract, which the author retrieved from the databrowser and supplied with its own provenance header (Eurostat 2026a). Sixteen country-level turnover values are flagged `u` in `02_MASTER` for this reason and should be spot-checked before the workbook is reused. No sampling error is reported anywhere in the dataset, because the sources do not publish standard errors alongside these estimates; survey-based figures should be read as point estimates carrying unquantified uncertainty.
 
 ---
 
@@ -272,7 +274,7 @@ The workbook records twenty limitations in `07_LIMITATIONS`. Those that bear dir
 
 ## Appendix C. Regression Diagnostics
 
-This appendix supports the regression reported in Section 2. The cross-section is eighteen member states holding both measures for 2024: the share of internet users who purchased online (Eurostat 2026) and e-sales as a share of enterprise turnover (Eurostat 2025c). All computation is reproducible from `02_MASTER`; the workbook computes the same statistics as live formulas on sheet `F6_ADOPT_BENEFIT`.
+This appendix supports the regression reported in Section 2. The cross-section is eighteen member states holding both measures for 2024: the share of internet users who purchased online (Eurostat 2026a) and e-sales as a share of enterprise turnover (Eurostat 2025c). All computation is reproducible from `02_MASTER`; the workbook computes the same statistics as live formulas on sheet `F6_ADOPT_BENEFIT`.
 
 ### C.1 The estimate
 
@@ -387,7 +389,7 @@ Two series are cited in the body as workbook pointers rather than numbered figur
 
 Figure E1
 
-Section 3 names three of these twenty-seven by number. The full ranking places Denmark third at 90.86%, behind Ireland (95.79%) and the Netherlands (94.42%) and above Sweden (89.89%), against an EU-27 average of 76.58% (Eurostat 2026). The measure is the share of **internet users** who made an online purchase in the preceding twelve months, not the share of all individuals — the denominator that changed in 2020 and is flagged in `02_MASTER`.
+Section 3 names three of these twenty-seven by number. The full ranking places Denmark third at 90.86%, behind Ireland (95.79%) and the Netherlands (94.42%) and above Sweden (89.89%), against an EU-27 average of 76.58% (Eurostat 2026a). The measure is the share of **internet users** who made an online purchase in the preceding twelve months, not the share of all individuals — the denominator that changed in 2020 and is flagged in `02_MASTER`.
 
 This cross-section is complete: all twenty-seven member states report the adoption measure. It is the outcome measure, e-sales turnover, that is missing for nine of them, which is why the regression in Appendix C rests on eighteen.
 
@@ -401,6 +403,16 @@ The series is plotted on the number of payments rather than their value, and the
 
 The displacement matters for Section 2's argument. Wallet payments are card payments, and the physical card share fell from 73% to 54% across the same period. Most of what replaced cash at the point of sale was therefore a different way of presenting a card, not a new instrument — which is what one would expect where an identity rail lowers the cost of building a new interface on existing payment infrastructure.
 
+### E.4 Labour productivity against the EU-27 average
+
+Figure E3
+
+Every other measure in this report is an adoption measure. This one is an economic outcome: nominal labour productivity per person, indexed so that the EU-27 equals 100 in each year Eurostat 2026b. Denmark stood at 109.2 in 2005, peaked at 121.0 in 2021, and stands at 116.8 in 2025.
+
+Three cautions govern how far it can be read. The series is an index on the EU average, so a rise means Denmark gained **relative to its peers** and says nothing about whether Danish productivity grew. It is measured per person rather than per hour, which makes it sensitive to changes in part-time work. And it is nominal, in current prices at purchasing power standards, so price movements are inside it.
+
+What it establishes is therefore modest and worth stating plainly: across the period Denmark built its digital infrastructure, its productivity position improved against the EU average and has not returned to where it started. The series is consistent with the report's argument. It does not demonstrate it, and no single-country time series could — the 2021 peak coincides with a pandemic that moved measured productivity everywhere, which is the clearest possible illustration that this series responds to more than digital policy.
+
 ![Figure E1 - Individuals purchasing online, all 27 member states, 2024. Workbook F5_EU27.](figures/figA_e1_eu27.png)
 
 *Figure E1 - Individuals purchasing online, all 27 member states, 2024. Workbook F5_EU27.*
@@ -408,3 +420,55 @@ The displacement matters for Section 2's argument. Wallet payments are card paym
 ![Figure E2 - Instrument shares of physical-retail payments, 2017-2025. Workbook F2_PAYMENTS.](figures/figA_e2_payments.png)
 
 *Figure E2 - Instrument shares of physical-retail payments, 2017-2025. Workbook F2_PAYMENTS.*
+
+![Figure E3 - Danish labour productivity against the EU-27 average, 2005-2025. An index on EU27 = 100, so it shows relative position, not growth.](figures/figA_e3_productivity.png)
+
+*Figure E3 - Danish labour productivity against the EU-27 average, 2005-2025. An index on EU27 = 100, so it shows relative position, not growth.*
+
+---
+
+## Appendix F. Policy Specification and Implementation Timeline
+
+Section 6 recommends two measures. The second — allocating an oversubscribed SMV:Digital grant pool by lottery — is a research design as much as a policy, and a design is only as good as its specification. This appendix states it at the level of detail an administering agency would need to act on it.
+
+### F.1 Why the present scheme cannot measure its own effect
+
+SMV:Digital reports that 65% of participating enterprises invested further after their project (Figure 8; Digitaliseringsstyrelsen 2025b). Read as an effect, that number claims the scheme caused two-thirds of its participants to invest. It cannot support the claim. Firms apply to SMV:Digital because they already intend to digitalise, so the comparison implicit in "65%" is between applicants and the general population of SMEs — two groups that differ in exactly the characteristic being measured. The figure is also self-reported, and by the scheme to its own funder.
+
+What is missing is not more data. It is a comparison group of firms that wanted the grant and did not get one. An oversubscribed pool creates that group for free, and discards it only because allocation is currently first-come or assessed.
+
+### F.2 The instrument
+
+| Element | Specification |
+|---|---|
+| Instrument | Randomised allocation of grants among eligible applicants |
+| Legal vehicle | Administrative amendment to scheme guidelines; no primary legislation |
+| Administering body | Erhvervsstyrelsen, via the SMV:Digital secretariat |
+| Trigger condition | Applied only where the pool is oversubscribed |
+| Eligibility | Unchanged from the present scheme criteria |
+| Allocation | Public randomisation among applicants passing eligibility |
+| Treatment arm | Grant awarded on current terms |
+| Control arm | Unsuccessful applicants, eligible and unfunded |
+| Primary outcome | Subsequent own-funded digital investment, from register data |
+| Secondary outcomes | Employment, turnover, survival |
+| Data source | Danmarks Statistik register linkage, not self-report |
+| Measurement window | Baseline at allocation; endline 18 months after disbursement |
+| Marginal cost | Administrative only; the grant budget is unchanged |
+
+Three features carry the argument. Randomisation occurs **after** eligibility, so no firm that qualifies under present rules is excluded by the change — the reform alters who among qualifying applicants is funded, not who qualifies. Outcomes come from registers rather than a survey of participants, which removes the self-reporting problem that makes the 65% uninterpretable. And the control arm costs nothing, because those firms are already being turned away; the scheme simply stops discarding the information that they were.
+
+### F.3 What the design can and cannot deliver
+
+The comparison is between funded and unfunded **applicants**. It therefore estimates the effect of the grant on firms that sought one, not on Danish SMEs generally. That is the policy-relevant quantity — the scheme only ever reaches applicants — but it is not a national effect and should not be reported as one.
+
+The design also cannot detect effects on firms deterred from applying at all, which Section 3 identifies as the larger population. A lottery measures the scheme; it does not measure the gap the scheme was built to close.
+
+### F.4 Timeline
+
+Figure F1
+
+The schedule is anchored on the grant pool opening 26 October 2026 (SMV:Digital 2026). The critical path runs through randomisation, not disbursement: every later step depends on the allocation being random, and none of it can be reconstructed after the fact. A scheme that allocates first and asks about effect afterwards has already foreclosed the answer, which is the position SMV:Digital is in today.
+
+![Figure F1 - Implementation and evaluation timeline for the randomised SMV:Digital allocation proposed in Section 6.](figures/figA_f1_gantt.png)
+
+*Figure F1 - Implementation and evaluation timeline for the randomised SMV:Digital allocation proposed in Section 6.*
