@@ -640,13 +640,13 @@ def figF1_gantt():
     # (label, start month index from Oct 2026, duration in months, is_causal)
     tasks = [
         ("Grant pool opens; applications received", 0, 2, False),
-        ("Eligibility screening against scheme criteria", 2, 1, False),
-        ("Randomised allocation among eligible applicants", 3, 1, True),
+        ("Eligibility screening; applications scored", 2, 1, True),
+        ("Scores and funding cut-off published", 3, 1, True),
         ("Baseline linkage to Danmarks Statistik registers", 3, 2, True),
         ("Grants disbursed; funded projects run", 4, 12, False),
         ("Midline monitoring of take-up and attrition", 10, 2, False),
-        ("Endline outcome measurement, both arms", 16, 3, True),
-        ("Evaluation report published", 19, 2, True),
+        ("Endline outcome measurement, both sides of cut-off", 28, 3, True),
+        ("Evaluation report published", 31, 3, True),
     ]
     labels = [t[0] for t in tasks][::-1]
     fig, ax = plt.subplots(figsize=(WIDTH, 3.9))
@@ -657,14 +657,15 @@ def figF1_gantt():
     ax.set_yticks(range(len(labels)))
     ax.set_yticklabels(labels, fontsize=8.5)
     # Ticks every six months from the opening of the pool.
-    marks = [0, 6, 12, 18, 21]
-    names = ["Oct 2026", "Apr 2027", "Oct 2027", "Apr 2028", "Jul 2028"]
+    marks = [0, 6, 12, 18, 24, 30, 34]
+    names = ["Oct 2026", "Apr 2027", "Oct 2027", "Apr 2028", "Oct 2028",
+             "Apr 2029", "Aug 2029"]
     ax.set_xticks(marks)
     ax.set_xticklabels(names, fontsize=8)
-    ax.set_xlim(-0.4, 21.4)
+    ax.set_xlim(-0.6, 34.6)
     title(ax, "The evaluation is built in, not bolted on",
-          "Blue marks the four steps that make an effect estimate possible; "
-          "grey is scheme administration")
+          "Blue marks the five steps that make an effect estimate possible; "
+          "grey is scheme administration. Months from the pool opening")
     return save(fig, "figA_f1_gantt.png")
 
 

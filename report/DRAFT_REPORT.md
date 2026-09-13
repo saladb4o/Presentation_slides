@@ -10,13 +10,13 @@ Accompanying data file: ECON1596_A2_Denmark_DataWorkbook_s4040040.xlsx
 
 ## 1. The instrument and what it was meant to buy
 
-Denmark did not persuade its citizens onto digital public services. It required them. *Lov om Offentlig Digital Post* (Denmark 2012) made a state-run digital mailbox the default legal channel for public correspondence — compulsory for businesses from 2013 and for every citizen aged 15 and over from 1 November 2014. Enrolment is automatic, and §10 deems delivery effective when a message becomes available rather than when it is read, transferring the legal consequence of non-engagement to the recipient. Exemption exists, but only against statutory criteria (Table 1).
+Denmark did not persuade its citizens onto digital public services. It required them. *Lov om Offentlig Digital Post* (Denmark 2012) made a state-run digital mailbox the default legal channel for public correspondence — compulsory for businesses from 2013 and for every citizen aged 15 and over from 1 November 2014. Enrolment is automatic, and §10 deems delivery effective when a message becomes available rather than when it is read, so the legal consequence of non-engagement falls on the recipient. Exemption exists, but only against statutory criteria (Table 1).
 
-The mandate rode on a single national identity credential: NemID, replaced by MitID from October 2021 and withdrawn entirely on 31 October 2023 (Digitaliseringsstyrelsen 2025a). That pairing is the policy's design. A mandate alone moves letters; a mandate plus one universal credential builds a *rail* — an authentication layer every Dane must hold and every firm may build on without financing its adoption. Rails are innovation infrastructure: they lower the fixed cost of whatever is built on top.
+The mandate rode on a single national identity credential: NemID, replaced by MitID from October 2021 and withdrawn entirely on 31 October 2023 (Digitaliseringsstyrelsen 2025a). That pairing is the design. A mandate alone moves letters; a mandate plus one universal credential builds a *rail* — an authentication layer every Dane must hold and every firm may build on without financing its adoption. Rails are innovation infrastructure: they lower the fixed cost of whatever is built on top.
 
 Compulsion is also why the adoption statistics that follow need care. After 1 November 2014, enrolment measures compliance with a legal obligation, not revealed demand. That distinction governs this report.
 
-The programme was justified on a number. The Ministry of Finance business case projected savings of approximately DKK 1,000 million a year (Rigsrevisionen 2016) — the return that warranted making the system compulsory for the entire adult population, currently about 5.1 million people (Digitaliseringsstyrelsen 2026). Section 6 returns to how much survived audit.
+The programme was justified on a number: the Ministry of Finance business case projected savings of approximately DKK 1,000 million a year (Rigsrevisionen 2016), the return that warranted compelling the entire adult population, currently about 5.1 million people (Digitaliseringsstyrelsen 2026). Section 6 returns to how much survived audit.
 
 **Table 1 - The instruments this report turns on. Full timeline in workbook sheet 09_POLICY.**
 
@@ -33,9 +33,9 @@ The programme was justified on a number. The Ministry of Finance business case p
 
 The rail's value is not that Danes use it — compulsion settles that — but what others could build on it, and where that building stopped.
 
-Banking shows the magnitude. Danish retail bank branches fell from 2,025 in 2004 to 665 in 2024, a decline of 67.2% (Figure 1; Finans Danmark 2025). Read alone, that suggests digitalisation destroyed banking employment. The longer series refuses it. Between 1991 and 2024 the number of financial institutions fell by 76.7%, from 219 to 51, while bank employment fell by only 29.4%, from roughly 51,000 to 36,000 (Figure 2). Staff per surviving institution therefore rose from 233 to 706, an increase of 203%: consolidation concentrated the sector rather than shedding it. The branch series begins in 2004, so its −67.2% spans a different window and the three changes must not be differenced (Appendix B).
+Banking shows the magnitude. Danish retail bank branches fell from 2,025 in 2004 to 665 in 2024, a decline of 67.2% (Figure 1; Finans Danmark 2025). Read alone, that suggests digitalisation destroyed banking employment. The longer series refuses it: between 1991 and 2024 the number of financial institutions fell by 76.7%, from 219 to 51, while bank employment fell by only 29.4%, from roughly 51,000 to 36,000 (Figure 2). Staff per surviving institution therefore rose from 233 to 706, an increase of 203%: consolidation concentrated the sector rather than shedding it. The branch series begins only in 2004, so the three changes span different windows and must not be differenced (Appendix B).
 
-Payments moved with it. Cash fell from 23% to 9% of the *number* of payments in physical retail between 2017 and 2025 — 14 percentage points, to under two-fifths of its 2017 share — while card-based mobile wallets reached 32% of that same measure (Danmarks Nationalbank 2025). Much of this is displacement within digital instruments: wallet payments are card payments, and the physical card share fell from 73% to 54% (Appendix E). What replaced cash was mostly a new interface onto existing card infrastructure — which is what a rail makes cheap to build. Cash acceptance remains a statutory obligation on shops under *lov om betalinger* §81, narrowed but not removed on 1 July 2022 (Finanstilsynet 2025).
+Payments moved with it. Cash fell from 23% to 9% of the *number* of payments in physical retail between 2017 and 2025, to under two-fifths of its 2017 share, while card-based mobile wallets reached 32% of the same measure (Danmarks Nationalbank 2025). Much of this is displacement within digital instruments: wallet payments are card payments, and the physical card share fell from 73% to 54% (Appendix E). What replaced cash was mostly a new interface onto existing card infrastructure — which is what a rail makes cheap to build. Cash acceptance remains a statutory obligation on shops under *lov om betalinger* §81, narrowed but not removed on 1 July 2022 (Finanstilsynet 2025).
 
 Does wider consumer adoption accompany greater commercial activity? Figure 3 plots the share of internet users purchasing online against enterprise e-sales turnover across the European Union in 2024. On the 18 member states holding both measures, the fitted slope is +0.602 percentage points of turnover per percentage point of adoption (standard error 0.105; t = 5.75 on 16 degrees of freedom; 95% confidence interval [0.380, 0.824]; R² = 0.674) (Eurostat 2026a; Eurostat 2025c).
 
@@ -59,15 +59,15 @@ Causation is neither established nor establishable from this design. Adoption me
 
 ## 3. Diffusion: Denmark against the European Union
 
-"Breadth" has two subjects in Denmark and they point opposite ways. Citizen breadth is near-complete: 90.86% of Danish internet users bought online in 2024, third of the twenty-seven member states (Eurostat 2026a); the full ranking is Appendix E. Enterprise breadth is not. Only 38.78% of Danish enterprises make any e-sales at all — second-highest in the Union, behind Lithuania's 43.03%, and still under two firms in five (Eurostat 2025b). Denmark leads Europe at a level most Danish firms have not reached.
+"Breadth" has two subjects in Denmark and they point opposite ways. Citizen breadth is near-complete: 90.86% of Danish internet users bought online in 2024, third of the twenty-seven member states (Eurostat 2026a); the full ranking is Appendix E. Enterprise breadth is not. Only 38.78% of Danish enterprises make any e-sales at all — second in the Union, behind Lithuania's 43.03%, and still under two firms in five (Eurostat 2025b). Denmark leads Europe at a level most Danish firms have not reached.
 
-Intensity moved where breadth did not. Among firms that do sell online, e-sales rose from 17.05% of enterprise turnover in 2014 to 33.31% in 2024, while the EU-27 average rose from 16.43% to 19.49% (Figure 4). Denmark and the Union began the decade level; Denmark roughly doubled and the EU gained three percentage points.
+Intensity moved where breadth did not. E-sales rose from 17.05% of enterprise turnover in 2014 to 33.31% in 2024, while the EU-27 average rose from 16.43% to 19.49% (Figure 4). Both began the decade level; Denmark roughly doubled, the EU gained three percentage points.
 
-The same pattern governs the newest technology, and it identifies who could build on the rail. In 2025, 42.03% of Danish enterprises used artificial intelligence — but 74.52% of large firms against 40.99% of small and medium-sized ones, a gap of 33.53 percentage points (Figure 5; European Commission 2026). This is not a connectivity or literacy failure: 92.45% of Danish SMEs clear the basic digital-intensity threshold, against an EU average of 71.39%. What Danish SMEs lack is the complementary capital — data, integration, specialist staff — that turns access into application. A rail lowers the fixed cost of building on it but supplies none of the capability to build, and that capability is distributed by firm size. Compulsion can mandate access to infrastructure; it cannot mandate the absorptive capacity that turns infrastructure into product.
+The same pattern governs the newest technology, and it identifies who could build on the rail. In 2025, 42.03% of Danish enterprises used artificial intelligence — but 74.52% of large firms against 40.99% of small and medium-sized ones, a gap of 33.53 percentage points (Figure 5; European Commission 2026). This is not a connectivity or literacy failure: 92.45% of Danish SMEs clear the basic digital-intensity threshold, against an EU average of 71.39%. What they lack is the complementary capital — data, integration, specialist staff — that turns access into application, and that capital is distributed by firm size. Compulsion can mandate access to infrastructure; it cannot mandate the absorptive capacity that turns infrastructure into product.
 
-Nor did it guarantee quality. Denmark scores 82.2 on the Digital Decade measure of digital public services for citizens, below the EU average of 84.64. The country with Europe's most compulsory digital government delivers slightly below-average services through it.
+Nor did it guarantee quality. Denmark scores 82.2 on the Digital Decade measure of digital public services for citizens, below the EU average of 84.64: the country with Europe's most compulsory digital government delivers below-average services through it.
 
-That diagnosis is precisely Sustainable Development Goal 8, Target 8.2 — productivity growth through technological upgrading and innovation. Denmark's binding constraint on 8.2 is not adoption but diffusion: the productivity gain sits with the firms already best placed to capture it, and the policy question is how to move it down the size distribution.
+That diagnosis is Sustainable Development Goal 8, Target 8.2 — productivity growth through technological upgrading. Denmark's binding constraint on 8.2 is not adoption but diffusion: the productivity gain sits with the firms already best placed to capture it, and the policy question is how to move it down the size distribution.
 
 ![Figure 4 - E-sales share of enterprise turnover, Denmark and EU-27, 2014 and 2024. Eurostat; workbook F3.](figures/fig4_esales.png)
 
@@ -85,9 +85,9 @@ Start where the mandate bites hardest. Among Danish citizens aged 75–84, 20% h
 
 Against that, the aggregate looks small: in the first quarter of 2026, 4.7% of citizens aged 15 and over — 238,479 people — were exempt. The aggregate is small because the affected population is small, not because exclusion is rare where it lands.
 
-Exemption is also the narrowest available measure. Figure 6 sets it against four wider estimates. They are not strictly comparable — measure, year and denominator all differ, and Appendix D reconciles them on a common footing. Read it as a ladder, not a series. Some 6.5% of Danes do not use digital public services at all and 16.5% report difficulty using them (European Commission 2026); the widest estimates reach a quarter of adults (Digitaliseringsstyrelsen 2025c), (Justitia 2022). The counts are clearer than the percentages: exemption reaches 238,479 people, while 16.5% of a population of 6.03 million (Danmarks Statistik 2026) is roughly 994,000 — the lowest credible estimate of need. On the order of 750,000 Danes struggle with a compulsory system and hold no formal standing outside it.
+Exemption is also the narrowest available measure. Figure 6 sets it against four wider estimates. They are not strictly comparable — measure, year and denominator all differ, and Appendix D reconciles them on a common footing. Read it as a ladder, not a series. Some 6.5% of Danes do not use digital public services at all and 16.5% report difficulty using them (European Commission 2026); the widest estimates reach a quarter of adults (Digitaliseringsstyrelsen 2025d), (Justitia 2022). The counts are clearer than the percentages: exemption reaches 238,479 people, while 16.5% of a population of 6.03 million (Danmarks Statistik 2026) is roughly 994,000 — the lowest credible estimate of need. On the order of 750,000 Danes struggle with a compulsory system and hold no formal standing outside it.
 
-Weak digital skills would be the convenient explanation; the data refuse it. Denmark's weakest age band, 55–74, reaches 67.81% with at least basic digital skills against an EU average of 42.60% for that band. Denmark leads the EU in all three age bands, and its internal gradient from youngest to oldest is 24.25 percentage points against the EU's 31.95 (Figure 7).
+Weak digital skills would be the convenient explanation; the data refuse it. Denmark's weakest age band, 55–74, reaches 67.81% with at least basic digital skills against an EU average of 42.60%. Denmark leads the Union in all three bands, and its gradient from youngest to oldest is 24.25 percentage points against the EU's 31.95 (Figure 7).
 
 The exclusion is therefore administrative, not a capability deficit. The mandate was calibrated above the bottom of its own distribution, and the exemption criteria were drawn narrower than the difficulty they were meant to relieve. A rail everyone must board and a sixth of the population finds hard to use is a universal obligation, not a universal opportunity.
 
@@ -109,21 +109,19 @@ The exclusion is therefore administrative, not a capability deficit. The mandate
 
 ## 6. Recommendation and limitations
 
-The report opened on a projection of roughly DKK 1,000 million a year. Rigsrevisionen could verify DKK 450 million of it — postage, paper and envelopes. The wage and overhead component was never substantiated, and the cross-government study intended to settle it was abandoned when the municipalities declined to take part (Rigsrevisionen 2016). Denmark compels its adult population onto a business case that remains 55% unaudited.
+The report opened on a projection of roughly DKK 1,000 million a year. Rigsrevisionen could verify DKK 450 million of it — postage, paper and envelopes. The wage and overhead component was never substantiated, and the study intended to settle it was abandoned when the municipalities declined to take part (Rigsrevisionen 2016). Denmark compels its adult population onto a business case that remains 55% unaudited.
 
-Two specific measures follow. First, the exemption criteria in *Lov om Offentlig Digital Post* should be widened from the present statutory categories to admit documented difficulty, with assisted access at municipal citizen service centres as the default alternative. Section 4 showed the gap is administrative: relief was drawn narrower than the difficulty, and the criteria are what the state can change.
+Two measures follow. First, the exemption criteria in *Lov om Offentlig Digital Post* should be widened to admit documented difficulty. Denmark already fixed the adjacent problem: since June 2023 an exempt citizen is entitled, on request, to a non-digital alternative to any mandatory self-service solution (Folketinget 2023). That decoupled the channel from the obligation but left the gate untouched, because the right runs only to those already exempt. Section 4 measured that gate: roughly three-quarters of a million people report the difficulty the 2023 Act relieves and cannot reach the relief.
 
-Second, SMV:Digital should be redirected from adoption toward complementary capability — data integration and specialist skills, which Section 3 identified as the binding constraint — and its next grant pool, opening 26 October 2026 (SMV:Digital 2026), should allocate by lottery among eligible applicants. The scheme reports that 65% of participants invested further (Figure 8; Digitaliseringsstyrelsen 2025b), but that is self-reported and uncontrolled: it measures participation, not effect. An oversubscribed pool yields a control group at no cost. Appendix F specifies the instrument, its outcome measures and its timeline.
+Second, SMV:Digital should be redirected toward complementary capability — data integration and specialist skills, which Section 3 identified as the binding constraint. Its effect is better evidenced than most such schemes: Digitaliseringsstyrelsen matches recipients to comparable firms in the Danmarks Statistik registers and finds revenue growth five percentage points higher (Digitaliseringsstyrelsen 2025b). But matching handles selection on what the registers record — sector, size, age, prior trajectory — not on what they do not, and for a voluntary scheme that residual is the whole problem: a manager ambitious enough to apply is ambitious enough to grow unaided. The next pool opens 26 October 2026 (SMV:Digital 2026), and its eligibility scoring already produces a threshold that would identify the effect directly. Appendix F specifies the instrument, its outcome measures and its timeline.
 
-Both follow from one reading: Denmark built a rail, then left who could board it, and who could build on it, to a capability it never distributed. The evidence has limits, set out with the data and the AI-use declaration in Appendices A to C — the cross-section in Section 2 has eighteen observations and establishes association, not cause.
-
-![Figure 8 - SMV:Digital participation: self-reported, no control group. Workbook F8.](figures/fig8_smvdigital.png)
-
-*Figure 8 - SMV:Digital participation: self-reported, no control group. Workbook F8.*
+Both follow from one reading: Denmark built a rail, then left who could board it, and who could build on it, to a capability it never distributed. The evidence has limits, set out in Appendices A to C — not least that Section 2's cross-section establishes association, not cause.
 
 ---
 
 ## References
+
+Bundesrechnungshof 2022, Bemerkungen 2022 zur Haushalts- und Wirtschaftsfuehrung des Bundes, German Federal Court of Auditors, accessed 13 September 2026, <https://www.bundesrechnungshof.de/SharedDocs/Pressemitteilungen/DE/2022/bemerkungen2022-hauptband.html>.
 
 Danmarks Nationalbank 2025, Danskernes betalingsvaner, Danmarks Nationalbank, Copenhagen, accessed 12 September 2026, <https://www.nationalbanken.dk/en/what-we-do/safe-and-efficient-payments/payment-habits-in-denmark>.
 
@@ -133,9 +131,11 @@ Denmark 2012, Lov om Offentlig Digital Post (LOV nr 528 af 11/06/2012), Retsinfo
 
 Digitaliseringsstyrelsen 2025a, Digital Post – lovgivning, Agency for Digital Government, Copenhagen, accessed 12 September 2026.
 
-Digitaliseringsstyrelsen 2025b, Effektmåling af SMV:Digital, prepared by Danmarks Statistik, Agency for Digital Government, Copenhagen, accessed 12 September 2026.
+Digitaliseringsstyrelsen 2025b, Effektmaaling af SMV:Digital, June 2025, Agency for Digital Government, accessed 13 September 2026, <https://digst.dk/media/yz2ouzzz/effektmaaling-af-smvdigital-2025.pdf>.
 
-Digitaliseringsstyrelsen 2025c, Hvem oplever udfordringer ved det digitale?, Agency for Digital Government, Copenhagen, accessed 12 September 2026.
+Digitaliseringsstyrelsen 2025c, Effektmåling af SMV:Digital, prepared by Danmarks Statistik, Agency for Digital Government, Copenhagen, accessed 12 September 2026.
+
+Digitaliseringsstyrelsen 2025d, Hvem oplever udfordringer ved det digitale?, Agency for Digital Government, Copenhagen, accessed 12 September 2026.
 
 Digitaliseringsstyrelsen 2026, Statistik om Digital Post, Agency for Digital Government, Copenhagen, accessed 12 September 2026.
 
@@ -154,6 +154,8 @@ Eurostat 2026b, Labour productivity per person employed and hour worked (EU27_20
 Finans Danmark 2025, Institutter, filialer & ansatte, Finans Danmark, Copenhagen, accessed 12 September 2026, <https://finansdanmark.dk/tal-og-data/institutter-filialer-ansatte/>.
 
 Finanstilsynet 2025, Kontantreglen, Danish Financial Supervisory Authority, Copenhagen, accessed 12 September 2026.
+
+Folketinget 2023, Lov om fravigelse fra obligatorisk digital selvbetjening, LOV nr 603 af 31. maj 2023, in force 1 June 2023, Retsinformation, accessed 13 September 2026, <https://www.retsinformation.dk/eli/lta/2023/603>.
 
 Justitia 2022, Retssikkerhed for digitalt udsatte borgere, Justitia, Copenhagen, accessed 12 September 2026.
 
@@ -354,7 +356,7 @@ Section 4 reports five estimates of Danish digital exclusion ranging from 4.7% t
 | Formally exempt from Digital Post | 4.7% | 2026 | Citizens aged 15+ | Digitaliseringsstyrelsen 2026 |
 | Do not use digital public services | 6.5% | 2026 | Population | European Commission 2026 |
 | Report difficulty using them | 16.5% | 2026 | Population | European Commission 2026 |
-| "Digitally disadvantaged" | 17–22% | 2025 | Adult population | Digitaliseringsstyrelsen 2025c |
+| "Digitally disadvantaged" | 17–22% | 2025 | Adult population | Digitaliseringsstyrelsen 2025d |
 | Justitia estimate | Up to 25% | 2022 | Adult population | Justitia 2022 |
 
 Three things vary together: what is being measured (a legal status, a behaviour, a self-reported difficulty, an analyst's category), the year, and the denominator. Any one of the three would make them non-comparable; all three together mean the ladder cannot be read as a series and the differences between its rungs cannot be taken.
@@ -429,46 +431,58 @@ What it establishes is therefore modest and worth stating plainly: across the pe
 
 ## Appendix F. Policy Specification and Implementation Timeline
 
-Section 6 recommends two measures. The second — allocating an oversubscribed SMV:Digital grant pool by lottery — is a research design as much as a policy, and a design is only as good as its specification. This appendix states it at the level of detail an administering agency would need to act on it.
+Section 6 recommends two measures. The second — restructuring SMV:Digital's allocation so the scheme can measure its own effect — is a research design as much as a policy, and a design is only as good as its specification. This appendix states it at the level of detail an administering agency would need to act on it.
 
-### F.1 Why the present scheme cannot measure its own effect
+### F.1 What the present scheme can and cannot establish
 
-SMV:Digital reports that 65% of participating enterprises invested further after their project (Figure 8; Digitaliseringsstyrelsen 2025b). Read as an effect, that number claims the scheme caused two-thirds of its participants to invest. It cannot support the claim. Firms apply to SMV:Digital because they already intend to digitalise, so the comparison implicit in "65%" is between applicants and the general population of SMEs — two groups that differ in exactly the characteristic being measured. The figure is also self-reported, and by the scheme to its own funder.
+SMV:Digital is better evaluated than most such schemes. Digitaliseringsstyrelsen links recipients to Danmarks Statistik registers and compares them with matched control firms, reporting revenue growth of 18 percentage points against the controls' 13, and employment growth of 8% against 4% (Digitaliseringsstyrelsen 2025b). That is register data with a comparison group, and it disposes of the naive reading of the scheme's own headline — that 65% of participants invested further Digitaliseringsstyrelsen 2025c — which compares applicants with the general SME population and is besides self-reported to the scheme's own funder.
 
-What is missing is not more data. It is a comparison group of firms that wanted the grant and did not get one. An oversubscribed pool creates that group for free, and discards it only because allocation is currently first-come or assessed.
+The residual problem is the one matching cannot reach. Recipients are matched on what the registers record: sector, size, age, prior trajectory. Selection into a voluntary scheme runs on what they do not record — managerial ambition, an existing digitalisation plan, the slack to write an application. Those are precisely the traits that also produce revenue growth, so the matched estimate retains an upward bias of unknown size. Closing it requires variation in funding that is independent of the firm, and matching cannot manufacture that.
+
+Figure F1
 
 ### F.2 The instrument
 
 | Element | Specification |
 |---|---|
-| Instrument | Randomised allocation of grants among eligible applicants |
+| Instrument | Regression discontinuity at the eligibility scoring threshold |
 | Legal vehicle | Administrative amendment to scheme guidelines; no primary legislation |
 | Administering body | Erhvervsstyrelsen, via the SMV:Digital secretariat |
-| Trigger condition | Applied only where the pool is oversubscribed |
+| Trigger condition | Applied where applications are scored and the pool is oversubscribed |
 | Eligibility | Unchanged from the present scheme criteria |
-| Allocation | Public randomisation among applicants passing eligibility |
-| Treatment arm | Grant awarded on current terms |
-| Control arm | Unsuccessful applicants, eligible and unfunded |
+| Allocation | Unchanged: highest-scoring applicants funded until the pool is exhausted |
+| Treatment arm | Applicants scoring just above the funding cut-off |
+| Control arm | Applicants scoring just below it |
+| Identifying assumption | Firms cannot precisely control their own score |
 | Primary outcome | Subsequent own-funded digital investment, from register data |
 | Secondary outcomes | Employment, turnover, survival |
 | Data source | Danmarks Statistik register linkage, not self-report |
-| Measurement window | Baseline at allocation; endline 18 months after disbursement |
-| Marginal cost | Administrative only; the grant budget is unchanged |
+| Measurement window | Baseline at scoring; endline 24 months after disbursement |
+| Required disclosure | Publication of all applicant scores and the cut-off |
+| Marginal cost | Administrative only; neither budget nor allocation rule changes |
 
-Three features carry the argument. Randomisation occurs **after** eligibility, so no firm that qualifies under present rules is excluded by the change — the reform alters who among qualifying applicants is funded, not who qualifies. Outcomes come from registers rather than a survey of participants, which removes the self-reporting problem that makes the 65% uninterpretable. And the control arm costs nothing, because those firms are already being turned away; the scheme simply stops discarding the information that they were.
+Three features carry the argument. Near the cut-off, whether a firm is funded turns on assessor variation rather than on the firm — so above and below are comparable on the unobservables that defeat matching, which is the entire gain over the present evaluation. Nothing about who receives money changes: the highest-scoring applicants are still funded, so the reform imposes no cost on applicants and needs no new appropriation. And the control arm already exists — those firms are being turned away today; the scheme simply stops discarding the information that it turned them away at a known distance from a known threshold.
 
-### F.3 What the design can and cannot deliver
+### F.3 The alternative, and why it is rejected
 
-The comparison is between funded and unfunded **applicants**. It therefore estimates the effect of the grant on firms that sought one, not on Danish SMEs generally. That is the policy-relevant quantity — the scheme only ever reaches applicants — but it is not a national effect and should not be reported as one.
+The cleaner design is randomised allocation among eligible applicants, and an oversubscribed pool would supply it at no budgetary cost. Germany tried it. Under *Digital Jetzt*, the Bundesrechnungshof found that lottery allocation led firms to **postpone** investment while waiting for a favourable draw, and called for the procedure to be discontinued (Bundesrechnungshof 2022). The objection is not a technicality about budget law: a lottery makes the grant a prize worth waiting for, and waiting is the opposite of the behaviour the scheme exists to produce. A scoring threshold carries no such incentive, because applying at the highest quality one can manage remains the dominant strategy whichever side of the cut-off one lands on.
 
-The design also cannot detect effects on firms deterred from applying at all, which Section 3 identifies as the larger population. A lottery measures the scheme; it does not measure the gap the scheme was built to close.
+### F.4 What the design can and cannot deliver
 
-### F.4 Timeline
+The estimate is local to the threshold. It identifies the effect of the grant on marginal applicants — firms the assessors found neither clearly strong nor clearly weak — not on the strongest recipients, and not on Danish SMEs generally. That is a narrower quantity than the present evaluation claims, and a credible one, which is the trade the design makes.
 
-Figure F1
+It also cannot detect effects on firms deterred from applying at all, which Section 3 identifies as the larger population. A discontinuity measures the scheme; it does not measure the gap the scheme was built to close.
 
-The schedule is anchored on the grant pool opening 26 October 2026 (SMV:Digital 2026). The critical path runs through randomisation, not disbursement: every later step depends on the allocation being random, and none of it can be reconstructed after the fact. A scheme that allocates first and asks about effect afterwards has already foreclosed the answer, which is the position SMV:Digital is in today.
+### F.5 Timeline
 
-![Figure F1 - Implementation and evaluation timeline for the randomised SMV:Digital allocation proposed in Section 6.](figures/figA_f1_gantt.png)
+Figure F2
 
-*Figure F1 - Implementation and evaluation timeline for the randomised SMV:Digital allocation proposed in Section 6.*
+The schedule is anchored on the grant pool opening 26 October 2026 (SMV:Digital 2026). The critical path runs through scoring and disclosure, not disbursement: every later step depends on the scores and the cut-off being recorded at the time, and none of it can be reconstructed afterwards. A scheme that allocates first and asks about effect later has already foreclosed the sharper answer, which is the position SMV:Digital is in today.
+
+![Figure F1 - SMV:Digital participation: self-reported by participants to the scheme's own funder. Workbook F8.](figures/fig8_smvdigital.png)
+
+*Figure F1 - SMV:Digital participation: self-reported by participants to the scheme's own funder. Workbook F8.*
+
+![Figure F2 - Implementation and evaluation timeline for the SMV:Digital scoring-threshold design proposed in Section 6.](figures/figA_f1_gantt.png)
+
+*Figure F2 - Implementation and evaluation timeline for the SMV:Digital scoring-threshold design proposed in Section 6.*

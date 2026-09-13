@@ -24,9 +24,9 @@ struggle with a compulsory system and hold no formal standing outside it.
 
 Weak digital skills would be the convenient explanation; the data refuse it.
 Denmark's weakest age band, 55–74, reaches 67.81% with at least basic digital
-skills against an EU average of 42.60% for that band. Denmark leads the EU in all
-three age bands, and its internal gradient from youngest to oldest is 24.25
-percentage points against the EU's 31.95 ([[F10]]).
+skills against an EU average of 42.60%. Denmark leads the Union in all three
+bands, and its gradient from youngest to oldest is 24.25 percentage points against
+the EU's 31.95 ([[F10]]).
 
 The exclusion is therefore administrative, not a capability deficit. The mandate
 was calibrated above the bottom of its own distribution, and the exemption

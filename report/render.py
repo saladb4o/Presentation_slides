@@ -66,9 +66,12 @@ APPENDIX_FIGURES = {
     "AF_PROD": ("figA_e3_productivity.png",
                 "Danish labour productivity against the EU-27 average, 2005-2025. "
                 "An index on EU27 = 100, so it shows relative position, not growth."),
+    "AF_SMV": ("fig8_smvdigital.png",
+               "SMV:Digital participation: self-reported by participants to the "
+               "scheme's own funder. Workbook F8."),
     "AF_GANTT": ("figA_f1_gantt.png",
-                 "Implementation and evaluation timeline for the randomised "
-                 "SMV:Digital allocation proposed in Section 6."),
+                 "Implementation and evaluation timeline for the SMV:Digital "
+                 "scoring-threshold design proposed in Section 6."),
     "AF_PAY": ("figA_e2_payments.png",
                "Instrument shares of physical-retail payments, 2017-2025. Workbook F2_PAYMENTS."),
 }
@@ -78,7 +81,7 @@ FIGURE_FILES = {
     "F1": "fig1_branches.png", "F9": "fig2_consolidation.png",
     "F6": "fig3_regression.png", "F3": "fig4_esales.png",
     "F7": "fig5_ai_firmsize.png", "F4": "fig6_exclusion.png",
-    "F10": "fig7_skills.png", "F8": "fig8_smvdigital.png",
+    "F10": "fig7_skills.png",
 }
 SECTIONS = ["S1_context", "S2_adoption_effect", "S3_eu_diffusion",
             "S4_left_behind", "S6_recommendation"]
@@ -93,7 +96,6 @@ CAPTIONS = {
     "F7":  "AI adoption by firm size, Denmark 2025. European Commission; workbook F7.",
     "F4":  "Five estimates of Danish digital exclusion; denominators and years differ. Workbook F4.",
     "F10": "Basic digital skills by age band, Denmark and EU-27, 2025. European Commission; workbook F10.",
-    "F8":  "SMV:Digital participation: self-reported, no control group. Workbook F8.",
 }
 
 # Table 1 is trimmed to the instruments the argument actually turns on; the full

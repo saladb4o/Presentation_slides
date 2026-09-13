@@ -1,66 +1,89 @@
-Section 6 recommends two measures. The second — allocating an oversubscribed
-SMV:Digital grant pool by lottery — is a research design as much as a policy, and
-a design is only as good as its specification. This appendix states it at the
-level of detail an administering agency would need to act on it.
+Section 6 recommends two measures. The second — restructuring SMV:Digital's
+allocation so the scheme can measure its own effect — is a research design as much
+as a policy, and a design is only as good as its specification. This appendix
+states it at the level of detail an administering agency would need to act on it.
 
-### F.1 Why the present scheme cannot measure its own effect
+### F.1 What the present scheme can and cannot establish
 
-SMV:Digital reports that 65% of participating enterprises invested further after
-their project ([[F8]]; [[DG3:b]]). Read as an effect, that number claims the
-scheme caused two-thirds of its participants to invest. It cannot support the
-claim. Firms apply to SMV:Digital because they already intend to digitalise, so
-the comparison implicit in "65%" is between applicants and the general population
-of SMEs — two groups that differ in exactly the characteristic being measured.
-The figure is also self-reported, and by the scheme to its own funder.
+SMV:Digital is better evaluated than most such schemes. Digitaliseringsstyrelsen
+links recipients to Danmarks Statistik registers and compares them with matched
+control firms, reporting revenue growth of 18 percentage points against the
+controls' 13, and employment growth of 8% against 4% [[DG5]]. That is register
+data with a comparison group, and it disposes of the naive reading of the scheme's
+own headline — that 65% of participants invested further [[DG3:b]] —
+which compares applicants with the general SME population and is besides
+self-reported to the scheme's own funder.
 
-What is missing is not more data. It is a comparison group of firms that wanted
-the grant and did not get one. An oversubscribed pool creates that group for
-free, and discards it only because allocation is currently first-come or
-assessed.
+The residual problem is the one matching cannot reach. Recipients are matched on
+what the registers record: sector, size, age, prior trajectory. Selection into a
+voluntary scheme runs on what they do not record — managerial ambition, an
+existing digitalisation plan, the slack to write an application. Those are
+precisely the traits that also produce revenue growth, so the matched estimate
+retains an upward bias of unknown size. Closing it requires variation in funding
+that is independent of the firm, and matching cannot manufacture that.
+
+[[AF_SMV]]
 
 ### F.2 The instrument
 
 | Element | Specification |
 |---|---|
-| Instrument | Randomised allocation of grants among eligible applicants |
+| Instrument | Regression discontinuity at the eligibility scoring threshold |
 | Legal vehicle | Administrative amendment to scheme guidelines; no primary legislation |
 | Administering body | Erhvervsstyrelsen, via the SMV:Digital secretariat |
-| Trigger condition | Applied only where the pool is oversubscribed |
+| Trigger condition | Applied where applications are scored and the pool is oversubscribed |
 | Eligibility | Unchanged from the present scheme criteria |
-| Allocation | Public randomisation among applicants passing eligibility |
-| Treatment arm | Grant awarded on current terms |
-| Control arm | Unsuccessful applicants, eligible and unfunded |
+| Allocation | Unchanged: highest-scoring applicants funded until the pool is exhausted |
+| Treatment arm | Applicants scoring just above the funding cut-off |
+| Control arm | Applicants scoring just below it |
+| Identifying assumption | Firms cannot precisely control their own score |
 | Primary outcome | Subsequent own-funded digital investment, from register data |
 | Secondary outcomes | Employment, turnover, survival |
 | Data source | Danmarks Statistik register linkage, not self-report |
-| Measurement window | Baseline at allocation; endline 18 months after disbursement |
-| Marginal cost | Administrative only; the grant budget is unchanged |
+| Measurement window | Baseline at scoring; endline 24 months after disbursement |
+| Required disclosure | Publication of all applicant scores and the cut-off |
+| Marginal cost | Administrative only; neither budget nor allocation rule changes |
 
-Three features carry the argument. Randomisation occurs **after** eligibility, so
-no firm that qualifies under present rules is excluded by the change — the reform
-alters who among qualifying applicants is funded, not who qualifies. Outcomes come
-from registers rather than a survey of participants, which removes the
-self-reporting problem that makes the 65% uninterpretable. And the control arm
-costs nothing, because those firms are already being turned away; the scheme
-simply stops discarding the information that they were.
+Three features carry the argument. Near the cut-off, whether a firm is funded
+turns on assessor variation rather than on the firm — so above and below are
+comparable on the unobservables that defeat matching, which is the entire gain
+over the present evaluation. Nothing about who receives money changes: the
+highest-scoring applicants are still funded, so the reform imposes no cost on
+applicants and needs no new appropriation. And the control arm already exists —
+those firms are being turned away today; the scheme simply stops discarding the
+information that it turned them away at a known distance from a known threshold.
 
-### F.3 What the design can and cannot deliver
+### F.3 The alternative, and why it is rejected
 
-The comparison is between funded and unfunded **applicants**. It therefore
-estimates the effect of the grant on firms that sought one, not on Danish SMEs
-generally. That is the policy-relevant quantity — the scheme only ever reaches
-applicants — but it is not a national effect and should not be reported as one.
+The cleaner design is randomised allocation among eligible applicants, and an
+oversubscribed pool would supply it at no budgetary cost. Germany tried it. Under
+*Digital Jetzt*, the Bundesrechnungshof found that lottery allocation led firms to
+**postpone** investment while waiting for a favourable draw, and called for the
+procedure to be discontinued [[BRH1]]. The objection is not a technicality about
+budget law: a lottery makes the grant a prize worth waiting for, and waiting is
+the opposite of the behaviour the scheme exists to produce. A scoring threshold
+carries no such incentive, because applying at the highest quality one can manage
+remains the dominant strategy whichever side of the cut-off one lands on.
 
-The design also cannot detect effects on firms deterred from applying at all,
-which Section 3 identifies as the larger population. A lottery measures the
+### F.4 What the design can and cannot deliver
+
+The estimate is local to the threshold. It identifies the effect of the grant on
+marginal applicants — firms the assessors found neither clearly strong nor clearly
+weak — not on the strongest recipients, and not on Danish SMEs generally. That is
+a narrower quantity than the present evaluation claims, and a credible one, which
+is the trade the design makes.
+
+It also cannot detect effects on firms deterred from applying at all, which
+Section 3 identifies as the larger population. A discontinuity measures the
 scheme; it does not measure the gap the scheme was built to close.
 
-### F.4 Timeline
+### F.5 Timeline
 
 [[AF_GANTT]]
 
 The schedule is anchored on the grant pool opening 26 October 2026 [[SMV1]]. The
-critical path runs through randomisation, not disbursement: every later step
-depends on the allocation being random, and none of it can be reconstructed after
-the fact. A scheme that allocates first and asks about effect afterwards has
-already foreclosed the answer, which is the position SMV:Digital is in today.
+critical path runs through scoring and disclosure, not disbursement: every later
+step depends on the scores and the cut-off being recorded at the time, and none of
+it can be reconstructed afterwards. A scheme that allocates first and asks about
+effect later has already foreclosed the sharper answer, which is the position
+SMV:Digital is in today.

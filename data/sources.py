@@ -311,6 +311,59 @@ SOURCES = {
             "table?lang=en>."
         ),
     ),
+    "LOV1": dict(
+        authority="Folketinget",
+        title=(
+            "Lov om fravigelse fra obligatorisk digital selvbetjening "
+            "(Act on derogation from mandatory digital self-service)"
+        ),
+        dataset_code="LOV nr 603 af 31/05/2023",
+        url="https://www.retsinformation.dk/eli/lta/2023/603",
+        accessed="13 September 2026",
+        harvard=(
+            "Folketinget 2023, Lov om fravigelse fra obligatorisk digital "
+            "selvbetjening, LOV nr 603 af 31. maj 2023, in force 1 June 2023, "
+            "Retsinformation, accessed 13 September 2026, "
+            "<https://www.retsinformation.dk/eli/lta/2023/603>."
+        ),
+    ),
+    "DG5": dict(
+        authority="Digitaliseringsstyrelsen",
+        title=(
+            "Effektmaaling af SMV:Digital - register-based effect measurement "
+            "of grant recipients against a matched control group, with "
+            "accompanying method note"
+        ),
+        dataset_code="Effektmaaling 2025",
+        url="https://digst.dk/media/yz2ouzzz/effektmaaling-af-smvdigital-2025.pdf",
+        accessed="13 September 2026",
+        harvard=(
+            "Digitaliseringsstyrelsen 2025, Effektmaaling af SMV:Digital, June "
+            "2025, Agency for Digital Government, accessed 13 September 2026, "
+            "<https://digst.dk/media/yz2ouzzz/effektmaaling-af-smvdigital-2025"
+            ".pdf>."
+        ),
+    ),
+    "BRH1": dict(
+        authority="Bundesrechnungshof",
+        title=(
+            "Bemerkungen 2022 zur Haushalts- und Wirtschaftsfuehrung des Bundes "
+            "- findings on the Digital Jetzt lottery allocation"
+        ),
+        dataset_code="Bemerkungen 2022",
+        url=(
+            "https://www.bundesrechnungshof.de/SharedDocs/Pressemitteilungen/"
+            "DE/2022/bemerkungen2022-hauptband.html"
+        ),
+        accessed="13 September 2026",
+        harvard=(
+            "Bundesrechnungshof 2022, Bemerkungen 2022 zur Haushalts- und "
+            "Wirtschaftsfuehrung des Bundes, German Federal Court of Auditors, "
+            "accessed 13 September 2026, "
+            "<https://www.bundesrechnungshof.de/SharedDocs/Pressemitteilungen/"
+            "DE/2022/bemerkungen2022-hauptband.html>."
+        ),
+    ),
 }
 
 # Sources held for the report's reference list that no workbook observation uses
@@ -323,4 +376,12 @@ REFERENCE_ONLY = frozenset({
     "NB2",   # Nationalbank on offline-payment resilience - context for F2/F9.
     "IMR1",  # Danish Institute for Human Rights on the digital welfare state -
              # corroborates the F4 exclusion argument without supplying a value.
+    "LOV1",  # Act 603/2023 - a legal instrument, not a data source. It settles
+             # what Section 6 may recommend; it supplies no observation.
+    "DG5",   # SMV:Digital effect measurement. Its figures are reported in
+             # Section 6 as another party's estimate, not re-used as data here:
+             # the underlying register linkage is not public, so nothing in the
+             # workbook could be traced back to a row.
+    "BRH1",  # German Federal Court of Auditors on lottery allocation - the
+             # reason Appendix F rejects that instrument. Argument, not data.
 })
