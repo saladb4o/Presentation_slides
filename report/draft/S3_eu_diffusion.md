@@ -1,0 +1,35 @@
+## 3. Diffusion: Denmark against the European Union
+
+"Breadth" has two subjects in Denmark and they point opposite ways. Citizen
+breadth is near-complete: 90.86% of Danish internet users bought online in 2024,
+third of the twenty-seven member states (full ranking in the workbook, sheet
+F5_EU27). Enterprise breadth is not. Only 38.78% of Danish enterprises make any
+e-sales at all — second-highest in the Union, behind Lithuania's 43.03%, and still
+under two firms in five. Denmark leads Europe at a level most Danish firms have
+not reached.
+
+Intensity moved where breadth did not. Among firms that do sell online, e-sales
+rose from 17.05% of enterprise turnover in 2014 to 33.31% in 2024, while the EU-27
+average rose from 16.43% to 19.49% (Figure 3). Denmark and the Union began the
+decade level; Denmark roughly doubled and the EU gained three percentage points.
+Depth without breadth, stated precisely.
+
+The same pattern governs the newest technology, and it identifies who could build
+on the rail. In 2025, 42.03% of Danish enterprises used artificial intelligence —
+but 74.52% of large firms against 40.99% of small and medium-sized ones, a gap of
+33.53 percentage points (Figure 7). This is not a connectivity or literacy failure:
+92.45% of Danish SMEs clear the basic digital-intensity threshold, against an EU
+average of 71.39%. Danish SMEs are connected, capable and on the rail. What they
+lack is the complementary capital — data, integration, specialist staff — that
+turns access into application. Compulsion built the infrastructure; it could not
+distribute the capacity to exploit it.
+
+Nor did it guarantee quality. Denmark scores 82.2 on the Digital Decade measure of
+digital public services for citizens, below the EU average of 84.64. The country
+with Europe's most compulsory digital government delivers slightly below-average
+services through it.
+
+This maps directly onto Sustainable Development Goal 8, and specifically Target
+8.2 — higher productivity through technological upgrading and innovation.
+Denmark's constraint on 8.2 is not adoption but diffusion: the productivity gain
+is concentrated in the firms that were already best placed to capture it.
