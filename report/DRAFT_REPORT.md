@@ -111,7 +111,7 @@ The exclusion is administrative, not a capability deficit: the mandate was calib
 
 The report opened on a projection of roughly DKK 1,000 million a year. Rigsrevisionen could verify DKK 450 million of it — postage, paper and envelopes. The wage and overhead component was never substantiated, and the study meant to settle it was abandoned when the municipalities declined to take part (Rigsrevisionen 2016). Denmark compels its adult population onto a business case 55% unaudited.
 
-Two measures follow. First, the exemption criteria in *Lov om Offentlig Digital Post* should be widened to admit documented difficulty. Denmark already fixed the adjacent problem: since June 2023 an exempt citizen is entitled, on request, to a non-digital alternative to any mandatory self-service solution (Folketinget 2023). That decoupled the channel from the obligation but left the gate untouched, because the right runs only to those already exempt. Section 4 measured that gate: roughly three-quarters of a million people report the difficulty the 2023 Act relieves and cannot reach the relief. The Conseil d'État (Conseil d'Etat 2022) and the Belgian Cour constitutionnelle (Cour constitutionnelle 2025) have both since attached the entitlement to the difficulty rather than to a prior status (Appendix G).
+Two measures follow. First, the exemption criteria in *Lov om Offentlig Digital Post* should be widened to admit documented difficulty. Denmark already fixed the adjacent problem: since June 2023 an exempt citizen is entitled, on request, to a non-digital alternative to any mandatory self-service solution (Folketinget 2023). That decoupled the channel from the obligation but left the gate untouched, because the right runs only to those already exempt. Section 4 measured that gate: roughly three-quarters of a million people report the difficulty the 2023 Act relieves and cannot reach the relief. The Conseil d'État (Conseil d'État 2022) and the Belgian Cour constitutionnelle (Cour constitutionnelle 2025) have both since attached the entitlement to the difficulty rather than to a prior status (Appendix G).
 
 Second, SMV:Digital should be redirected toward complementary capability — data integration and specialist skills, the binding constraint identified in Section 3. Its effect is better evidenced than most such schemes: Digitaliseringsstyrelsen matches recipients to comparable firms in the Danmarks Statistik registers and finds revenue growth five percentage points higher (Digitaliseringsstyrelsen 2025b). But matching handles selection on what the registers record — sector, size, age, prior trajectory — not on what they do not, and for a voluntary scheme that residual is the whole problem: a manager ambitious enough to apply is ambitious enough to grow unaided. The next pool opens 26 October 2026 (SMV:Digital 2026), and its eligibility scoring already produces a threshold that would identify the effect directly. Appendix F specifies the instrument, its outcome measures and its timeline.
 
@@ -121,11 +121,11 @@ Both follow from one reading: Denmark built a rail, then left who could board it
 
 ## References
 
-Bundesrechnungshof 2022, Bemerkungen 2022 zur Haushalts- und Wirtschaftsfuehrung des Bundes, German Federal Court of Auditors, accessed 13 September 2026, <https://www.bundesrechnungshof.de/SharedDocs/Pressemitteilungen/DE/2022/bemerkungen2022-hauptband.html>.
+Bundesrechnungshof 2022, Bemerkungen 2022 zur Haushalts- und Wirtschaftsführung des Bundes, German Federal Court of Auditors, accessed 13 September 2026, <https://www.bundesrechnungshof.de/SharedDocs/Pressemitteilungen/DE/2022/bemerkungen2022-hauptband.html>.
 
-Conseil d'Etat 2022, Decision No. 452798, 3 June 2022, Conseil d'Etat, Paris, accessed 13 September 2026, <https://www.conseil-etat.fr/fr/arianeweb/CE/decision/2022-06-03/452798>.
+Conseil d'État 2022, Decision No. 452798, 3 June 2022, Conseil d'État, Paris, accessed 13 September 2026, <https://www.conseil-etat.fr/fr/arianeweb/CE/decision/2022-06-03/452798>.
 
-Cour constitutionnelle 2025, Arret no. 126/2025, 25 September 2025, ECLI:BE:GHCC:2025:ARR.126, Cour constitutionnelle, Brussels, accessed 13 September 2026, <https://fr.const-court.be/public/f/2025/2025-126f.pdf>.
+Cour constitutionnelle 2025, Arrêt no. 126/2025, 25 September 2025, ECLI:BE:GHCC:2025:ARR.126, Cour constitutionnelle, Brussels, accessed 13 September 2026, <https://fr.const-court.be/public/f/2025/2025-126f.pdf>.
 
 Danmarks Nationalbank 2025, Danskernes betalingsvaner, Danmarks Nationalbank, Copenhagen, accessed 12 September 2026, <https://www.nationalbanken.dk/en/what-we-do/safe-and-efficient-payments/payment-habits-in-denmark>.
 
@@ -139,7 +139,7 @@ Digitaliseringsdirektoratet 2025, Kontakt- og reservasjonsregisteret, Norwegian 
 
 Digitaliseringsstyrelsen 2025a, Digital Post – lovgivning, Agency for Digital Government, Copenhagen, accessed 12 September 2026.
 
-Digitaliseringsstyrelsen 2025b, Effektmaaling af SMV:Digital, June 2025, Agency for Digital Government, accessed 13 September 2026, <https://digst.dk/media/yz2ouzzz/effektmaaling-af-smvdigital-2025.pdf>.
+Digitaliseringsstyrelsen 2025b, Effektmåling af SMV:Digital, June 2025, Agency for Digital Government, accessed 13 September 2026, <https://digst.dk/media/yz2ouzzz/effektmaaling-af-smvdigital-2025.pdf>.
 
 Digitaliseringsstyrelsen 2025c, Effektmåling af SMV:Digital, prepared by Danmarks Statistik, Agency for Digital Government, Copenhagen, accessed 12 September 2026.
 
@@ -167,7 +167,7 @@ Folketinget 2023, Lov om fravigelse fra obligatorisk digital selvbetjening, LOV 
 
 Folketingets Ombudsmand 2015, Offentlig Digital Post skal indrettes i overensstemmelse med de almindelige forvaltningsretlige krav, FOB 2015-22, Parliamentary Ombudsman, Copenhagen, accessed 13 September 2026, <https://www.ombudsmanden.dk/find-viden/udtalelser/2015/2015-22>.
 
-Folketingets Ombudsmand 2024, Klage har foert til ny praksis i forhold til sene digitale klager, Parliamentary Ombudsman, Copenhagen, accessed 13 September 2026, <https://www.ombudsmanden.dk/find-viden/nyheder/2024/klage-har-foert-til-ny-praksis-i-forhold-til-sene-digitale-klager>.
+Folketingets Ombudsmand 2024, Klage har ført til ny praksis i forhold til sene digitale klager, Parliamentary Ombudsman, Copenhagen, accessed 13 September 2026, <https://www.ombudsmanden.dk/find-viden/nyheder/2024/klage-har-foert-til-ny-praksis-i-forhold-til-sene-digitale-klager>.
 
 Howell, ST 2017, 'Financing innovation: evidence from R&D grants', American Economic Review, vol. 107, no. 4, pp. 1136-1164.
 
@@ -520,11 +520,11 @@ The schedule is anchored on the grant pool opening 26 October 2026 (SMV:Digital 
 
 ## Appendix G. Comparative Law on Mandatory Digital Administration
 
-Section 6 recommends widening the exemption criteria in *Lov om Offentlig Digital Post*. The case for doing so is not only domestic. Two European courts have in the last four years examined mandatory digital administration and set conditions Denmark's mandate does not meet. This appendix sets out what they held, and what follows for a Danish reform.
+Section 6 recommends widening the exemption criteria in *Lov om Offentlig Digital Post*. The case for doing so is not only domestic. Two European courts have in the last four years examined mandatory digital administration and set conditions Denmark's mandate does not meet, and one comparable state reached the same place without litigation at all. This appendix sets out each, and what follows for a Danish reform.
 
 ### G.1 France: mandatory digital service is lawful only on conditions
 
-In Decision No. 452798 of 3 June 2022, the Conseil d'État partially annulled the decree requiring residence-permit applications to be made through the ANEF portal (Conseil d'Etat 2022). The court accepted that a regulatory authority may compel the use of a digital service. It held that the obligation is lawful only where users retain normal access to the public service and can exercise their rights effectively — and that this must be assessed *in concreto* against five criteria: the object of the service, the complexity of the procedure, its consequences for those affected, the characteristics of the digital tool, and the characteristics of the public concerned, including any difficulty it has in accessing or using online services.
+In Decision No. 452798 of 3 June 2022, the Conseil d'État partially annulled the decree requiring residence-permit applications to be made through the ANEF portal (Conseil d'État 2022). The court accepted that a regulatory authority may compel the use of a digital service. It held that the obligation is lawful only where users retain normal access to the public service and can exercise their rights effectively — and that this must be assessed *in concreto* against five criteria: the object of the service, the complexity of the procedure, its consequences for those affected, the characteristics of the digital tool, and the characteristics of the public concerned, including any difficulty it has in accessing or using online services.
 
 Two remedies followed. The administration must provide support for users who need it, and a non-digital substitute route where the digital one fails. The reasoning is the one this report has been making empirically: a mandate is justified by the capability of the population it binds, not by the capability of the median user.
 
@@ -536,9 +536,9 @@ That last holding is the one that bites hardest on a business case. Denmark's ju
 
 ### G.3 Norway: the digital default binds the administration, not the citizen
 
-The sharper contrast is not litigated at all. Norway made electronic communication the administrative default — *digitalt førstevalg* — but under the eGovernment regulations the obligation runs to the public body, and every citizen keeps a statutory right to opt out, the *reservasjonsrett*. The opt-out is recorded in the Contact and Reservation Register, which authorities must check before dispatching; a citizen who has opted out must be sent decisions on paper (Digitaliseringsdirektoratet 2025). Roughly 200,000 people hold a reservation, against about five million who have registered contact details in the register — and Digdir notes the number reserving has lately been falling rather than rising.
+The sharper contrast is not litigated at all. Norway made electronic communication the administrative default — *digitalt førstevalg* — but under the eGovernment regulations the obligation runs to the public body, and every citizen keeps a statutory right to opt out, the *reservasjonsrett*. The opt-out is recorded in the Contact and Reservation Register, which authorities must check before dispatching; a citizen who has opted out must be sent decisions on paper (Digitaliseringsdirektoratet 2025). Roughly 200,000 people hold a reservation, and Digdir notes the number has lately been falling rather than rising.
 
-Two features distinguish this from the Danish arrangement, and neither is about how digital the state is. The entitlement attaches to the citizen rather than to an administrative status they must first qualify for, so there is no gate of the kind Section 4 measures. And it is exercisable by telephone or on paper, which matters because an opt-out reachable only through the digital channel would be self-defeating. Roughly 200,000 against roughly five million registered is about 4%, close to Denmark's 4.7% exemption rate — though the two rates rest on different bases and Appendix D explains why that forbids treating the gap between them as a quantity. The comparison worth making is not the rate but the route: similar shares of people end up outside the digital channel either way, and what differs is whether reaching that position requires the state's permission.
+Two features distinguish this from the Danish arrangement, and neither is about how digital the state is. The entitlement attaches to the citizen rather than to an administrative status they must first qualify for, so there is no gate of the kind Section 4 measures. And it is exercisable by telephone or on paper, which matters because an opt-out reachable only through the digital channel would be self-defeating. No rate is offered against Denmark's 4.7%: the Norwegian figure is a count of registrations and the base it should be taken on is not established by the source, which is the error Appendix D exists to name. The comparison worth making is the route rather than the rate — whether reaching a position outside the digital channel requires the state's permission or only the citizen's decision.
 
 ### G.4 What this does and does not establish
 
@@ -554,11 +554,11 @@ The point has also been made domestically. The Danish Institute for Human Rights
 
 Section 1 describes *Lov om Offentlig Digital Post* §10, which deems a message delivered when it becomes available rather than when it is read. Section 4 argues that the resulting exclusion is administrative rather than a capability deficit. Neither claim rests only on this report's reading of the statute. Denmark's Parliamentary Ombudsman has examined the system twice on the points that matter, and both findings run the same way.
 
-### H.1 The system had to be redesigned to meet ordinary administrative law
+### H.1 The system had to be brought into line with ordinary administrative law
 
-In FOB 2015-22 the Ombudsman held that Public Digital Post must be arranged in accordance with general administrative law requirements (Folketingets Ombudsmand 2015). Two defects were identified in the design as built. Messages did not reliably carry a correct sender designation, where the governing principle is that it must be visible to the citizen which public authority they are dealing with — without which an administrative appeal cannot be directed at anyone. And the system had to secure the integrity and authenticity of a stored document: that its content is original, and that it genuinely originates from the stated sender.
+In FOB 2015-22 the Ombudsman held that Public Digital Post must be arranged in accordance with general administrative law requirements (Folketingets Ombudsmand 2015). Two requirements were at issue in the design as built. A message from a public authority must carry a correct sender designation, the governing principle being that it must be visible to the citizen which authority they are dealing with — without which an administrative appeal cannot be directed at anyone. And the system had to secure the integrity and authenticity of a stored document: that its content is original, and that it genuinely originates from the stated sender.
 
-The finding matters to this report's argument for a reason beyond the specific defects. Denmark made the channel compulsory in 2014 and the Ombudsman was still establishing in 2015 that it had to satisfy the administrative-law guarantees the paper channel had always satisfied. The mandate preceded the safeguards.
+The finding matters to this report's argument for a reason beyond the two requirements themselves. Denmark made the channel compulsory in 2014 and the Ombudsman was still establishing in 2015 that it had to satisfy guarantees that are general administrative law, not novel requirements invented for it. The mandate preceded the confirmation that the mandated channel met them.
 
 ### H.2 The asymmetry in §10, demonstrated
 
@@ -566,8 +566,8 @@ A citizen sent an appeal through Digital Post at 23:43 on the last day of a stat
 
 The Ombudsman established what the ministry's own service data showed: since 2022 the target has been that 95% of messages are available in the recipient's system within twenty seconds of leaving the sender's outbox, and that target has been met consistently since autumn of that year. Practice changed as a result. A citizen who sends a complaint digitally may now generally assume it is available to the authority within a very short time, Ankestyrelsen issued a new principle statement, and affected cases are being reopened.
 
-This is §10's asymmetry made concrete. Where the state sends, availability is deemed to be delivery and the risk of any gap falls on the citizen. Where the citizen sent, the same twenty-second infrastructure was treated as too uncertain to rely on, and the risk fell on the citizen again. The positions are irreconcilable, and it took the Ombudsman to say so. Section 4's claim that the exclusion is administrative rather than technical is precisely this — the infrastructure worked; the allocation of risk around it did not.
+This is §10's asymmetry made concrete, though the two halves are not the same kind of thing and the appendix does not claim a legal contradiction: §10 is a statutory rule, while what Ankestyrelsen applied was an appeals-board practice. What they shared was a direction. Where the state sends, availability is deemed to be delivery and the risk of any gap falls on the citizen. Where the citizen sends, the same twenty-second infrastructure was treated as too uncertain to rely on, and the risk fell on the citizen again. It took the Ombudsman to disturb the second. Section 4's claim that the exclusion is administrative rather than technical is precisely this — the infrastructure worked; the allocation of risk around it did not.
 
 ### H.3 What this appendix does not claim
 
-Two findings are not a pattern, and the Ombudsman's interventions are evidence that Danish administrative law has a functioning corrective, not evidence that it has failed. The 2024 case ended with the practice corrected and earlier cases reopened. The report's argument is narrower and survives that: the safeguards arrived after the mandate and by external intervention rather than by design, and a citizen without the capability to reach an ombudsman is not reached by either.
+Two findings are not a pattern, and the Ombudsman's interventions are evidence that Danish administrative law has a working corrective, not evidence that it has failed. The 2024 case ended with the practice corrected and earlier cases reopened. The report's argument is narrower and survives that: the safeguards arrived after the mandate and by external intervention rather than by design, and a citizen without the capability to reach an ombudsman is not reached by either.

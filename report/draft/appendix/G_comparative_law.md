@@ -1,8 +1,9 @@
 Section 6 recommends widening the exemption criteria in *Lov om Offentlig Digital
 Post*. The case for doing so is not only domestic. Two European courts have in the
 last four years examined mandatory digital administration and set conditions
-Denmark's mandate does not meet. This appendix sets out what they held, and what
-follows for a Danish reform.
+Denmark's mandate does not meet, and one comparable state reached the same place
+without litigation at all. This appendix sets out each, and what follows for a
+Danish reform.
 
 ### G.1 France: mandatory digital service is lawful only on conditions
 
@@ -45,27 +46,25 @@ regulations the obligation runs to the public body, and every citizen keeps a
 statutory right to opt out, the *reservasjonsrett*. The opt-out is recorded in the
 Contact and Reservation Register, which authorities must check before dispatching;
 a citizen who has opted out must be sent decisions on paper [[NO1]]. Roughly
-200,000 people hold a reservation, against about five million who have registered
-contact details in the register — and Digdir notes the number reserving has lately
-been falling rather than rising.
+200,000 people hold a reservation, and Digdir notes the number has lately been
+falling rather than rising.
 
 Two features distinguish this from the Danish arrangement, and neither is about
 how digital the state is. The entitlement attaches to the citizen rather than to
 an administrative status they must first qualify for, so there is no gate of the
 kind Section 4 measures. And it is exercisable by telephone or on paper, which
 matters because an opt-out reachable only through the digital channel would be
-self-defeating. Roughly 200,000 against roughly five million registered is about
-4%, close to Denmark's 4.7% exemption rate — though the two rates rest on
-different bases and Appendix D explains why that forbids treating the gap between
-them as a quantity. The comparison worth making is not the rate but the route:
-similar shares of people end up outside the digital channel either way, and what
-differs is whether reaching that position requires the state's permission.
+self-defeating. No rate is offered against Denmark's 4.7%: the Norwegian figure is
+a count of registrations and the base it should be taken on is not established by
+the source, which is the error Appendix D exists to name. The comparison worth
+making is the route rather than the rate — whether reaching a position outside the
+digital channel requires the state's permission or only the citizen's decision.
 
 ### G.4 What this does and does not establish
 
 Neither ruling binds Denmark, and Norway's arrangement is a policy choice rather
-than a legal requirement on anyone else. The Conseil d'État decision concerns French
-administrative law and a specific applicant population — foreign nationals seeking
+than a legal requirement on anyone else. The Conseil d'État decision concerns
+French administrative law and a specific applicant population — foreign nationals seeking
 residence permits — whose vulnerability the court treated as material. The Belgian
 ruling construes a Brussels regional ordinance against Belgian constitutional
 guarantees. Neither is a holding about *Lov om Offentlig Digital Post*, and this

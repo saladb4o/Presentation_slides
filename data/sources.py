@@ -330,15 +330,15 @@ SOURCES = {
     "DG5": dict(
         authority="Digitaliseringsstyrelsen",
         title=(
-            "Effektmaaling af SMV:Digital - register-based effect measurement "
+            "Effektmåling af SMV:Digital - register-based effect measurement "
             "of grant recipients against a matched control group, with "
             "accompanying method note"
         ),
-        dataset_code="Effektmaaling 2025",
+        dataset_code="Effektmåling 2025",
         url="https://digst.dk/media/yz2ouzzz/effektmaaling-af-smvdigital-2025.pdf",
         accessed="13 September 2026",
         harvard=(
-            "Digitaliseringsstyrelsen 2025, Effektmaaling af SMV:Digital, June "
+            "Digitaliseringsstyrelsen 2025, Effektmåling af SMV:Digital, June "
             "2025, Agency for Digital Government, accessed 13 September 2026, "
             "<https://digst.dk/media/yz2ouzzz/effektmaaling-af-smvdigital-2025"
             ".pdf>."
@@ -347,7 +347,7 @@ SOURCES = {
     "BRH1": dict(
         authority="Bundesrechnungshof",
         title=(
-            "Bemerkungen 2022 zur Haushalts- und Wirtschaftsfuehrung des Bundes "
+            "Bemerkungen 2022 zur Haushalts- und Wirtschaftsführung des Bundes "
             "- findings on the Digital Jetzt lottery allocation"
         ),
         dataset_code="Bemerkungen 2022",
@@ -358,14 +358,14 @@ SOURCES = {
         accessed="13 September 2026",
         harvard=(
             "Bundesrechnungshof 2022, Bemerkungen 2022 zur Haushalts- und "
-            "Wirtschaftsfuehrung des Bundes, German Federal Court of Auditors, "
+            "Wirtschaftsführung des Bundes, German Federal Court of Auditors, "
             "accessed 13 September 2026, "
             "<https://www.bundesrechnungshof.de/SharedDocs/Pressemitteilungen/"
             "DE/2022/bemerkungen2022-hauptband.html>."
         ),
     ),
     "CE1": dict(
-        authority="Conseil d'Etat (France)",
+        authority="Conseil d'État (France)",
         title=(
             "Decision No. 452798 - partial annulment of the ANEF decree "
             "mandating online-only residence permit applications"
@@ -374,8 +374,8 @@ SOURCES = {
         url="https://www.conseil-etat.fr/fr/arianeweb/CE/decision/2022-06-03/452798",
         accessed="13 September 2026",
         harvard=(
-            "Conseil d'Etat 2022, Decision No. 452798, 3 June 2022, Conseil "
-            "d'Etat, Paris, accessed 13 September 2026, "
+            "Conseil d'État 2022, Decision No. 452798, 3 June 2022, Conseil "
+            "d'État, Paris, accessed 13 September 2026, "
             "<https://www.conseil-etat.fr/fr/arianeweb/CE/decision/2022-06-03/"
             "452798>."
         ),
@@ -383,14 +383,14 @@ SOURCES = {
     "BE1": dict(
         authority="Cour constitutionnelle (Belgium)",
         title=(
-            "Arret no. 126/2025 - Brussels Digital ordinance; cumulative "
+            "Arrêt no. 126/2025 - Brussels Digital ordinance; cumulative "
             "non-digital access guarantees"
         ),
         dataset_code="ECLI:BE:GHCC:2025:ARR.126",
         url="https://fr.const-court.be/public/f/2025/2025-126f.pdf",
         accessed="13 September 2026",
         harvard=(
-            "Cour constitutionnelle 2025, Arret no. 126/2025, 25 September "
+            "Cour constitutionnelle 2025, Arrêt no. 126/2025, 25 September "
             "2025, ECLI:BE:GHCC:2025:ARR.126, Cour constitutionnelle, "
             "Brussels, accessed 13 September 2026, "
             "<https://fr.const-court.be/public/f/2025/2025-126f.pdf>."
@@ -416,7 +416,7 @@ SOURCES = {
     "OMB2": dict(
         authority="Folketingets Ombudsmand",
         title=(
-            "Klage har foert til ny praksis i forhold til sene digitale klager "
+            "Klage har ført til ny praksis i forhold til sene digitale klager "
             "- complaint sent through Digital Post at 23:43 on the deadline day"
         ),
         dataset_code="News item, 2024",
@@ -426,7 +426,7 @@ SOURCES = {
         ),
         accessed="13 September 2026",
         harvard=(
-            "Folketingets Ombudsmand 2024, Klage har foert til ny praksis i "
+            "Folketingets Ombudsmand 2024, Klage har ført til ny praksis i "
             "forhold til sene digitale klager, Parliamentary Ombudsman, "
             "Copenhagen, accessed 13 September 2026, "
             "<https://www.ombudsmanden.dk/find-viden/nyheder/2024/klage-har-"
@@ -492,7 +492,7 @@ REFERENCE_ONLY = frozenset({
              # Section 6 as another party's estimate, not re-used as data here:
              # the underlying register linkage is not public, so nothing in the
              # workbook could be traced back to a row.
-    "CE1",   # Conseil d'Etat and Cour constitutionnelle: comparative legal
+    "CE1",   # Conseil d'État and Cour constitutionnelle: comparative legal
     "BE1",   # authority for Appendix G. Rulings, not observations.
     "OMB1",  # The Parliamentary Ombudsman on Digital Post's design and on
     "OMB2",  # deadlines; Norway's opt-out register; and the two regression
