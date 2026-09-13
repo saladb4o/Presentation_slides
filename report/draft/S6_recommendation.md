@@ -22,5 +22,8 @@ that 65% of participants invested further ([[F8]]; [[DG3:b]]), but that is
 self-reported and has no control group, so it measures participation, not effect.
 An oversubscribed pool yields a control group at no cost.
 
-The same caution applies here: the cross-section in Section 2 has eighteen
-observations and establishes association, not cause.
+Both follow from one reading: Denmark built a rail, then left who could board it,
+and who could build on it, to a capability it never distributed.
+The evidence has limits, set out with the data and the AI-use declaration in
+Appendices A to C — the cross-section in Section 2 has eighteen observations and
+establishes association, not cause.

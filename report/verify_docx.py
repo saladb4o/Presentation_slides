@@ -52,15 +52,16 @@ def main():
 
     # --- images -----------------------------------------------------------
     embedded = [n for n in z.namelist() if n.startswith("word/media/")]
-    check(len(embedded) == r["figure_count"],
-          f"{len(embedded)} images embedded, expected {r['figure_count']}")
+    total_figs = r["figure_count"] + r["appendix_figure_count"]
+    check(len(embedded) == total_figs,
+          f"{len(embedded)} images embedded, expected {total_figs}")
     sizes = {n: z.getinfo(n).file_size for n in embedded}
     check(all(s > 20000 for s in sizes.values()),
           f"an embedded image looks truncated: {sizes}")
     # 16cm == 5760000 EMU; allow rounding
     widths = [int(w) for w in re.findall(r'<wp:extent cx="(\d+)"', doc)]
-    check(len(widths) == r["figure_count"],
-          f"{len(widths)} sized images, expected {r['figure_count']}")
+    check(len(widths) == total_figs,
+          f"{len(widths)} sized images, expected {total_figs}")
     check(all(abs(w - 5760000) < 20000 for w in widths),
           f"a figure is not 16cm wide: {widths}")
 
@@ -85,13 +86,33 @@ def main():
     check("DO NOT SUBMIT" in text, "section 5 placeholder is not marked")
 
     # --- Table 1 ----------------------------------------------------------
-    check(doc.count("<w:tbl>") == 1, "expected exactly one table")
+    app_tables = sum(1 for a in r["appendices"]
+                     for kind, _p in a["blocks"] if kind == "table")
+    check(doc.count("<w:tbl>") == 1 + app_tables,
+          f"expected {1 + app_tables} tables, found {doc.count('<w:tbl>')}")
+
+    # --- appendices -------------------------------------------------------
+    for app in r["appendices"]:
+        check(app["heading"] in text, f"missing appendix heading: {app['heading']}")
+        first = next((p for k, p in app["blocks"] if k == "para"), "")[:60]
+        check(first in text, f"missing opening prose of {app['heading']}")
+        for fig in app["figures"]:
+            check(fig["caption"][:35] in text,
+                  f"missing appendix caption: {fig['caption'][:35]}")
+    # every appendix must be pointed at from the body, or a marker never opens it
+    body_text = " ".join(p for s in r["sections"] for p in s["paragraphs"])
+    for app in r["appendices"]:
+        letter = app["letter"]
+        referenced = (f"Appendix {letter}" in body_text
+                      or re.search(rf"Appendices [A-Z] to [{letter}-Z]", body_text))
+        check(bool(referenced),
+              f"Appendix {letter} is never referenced from the body")
     for row in r["table1"]["rows"]:
         check(row[0] in text, f"Table 1 missing row {row[0]}")
 
     # --- word count -------------------------------------------------------
     body_words = len(text.split())
-    check(body_words < 2600,
+    check(body_words < 5200,
           f"document body has {body_words} words, unexpectedly long")
 
     print(f"{checks} checks run")

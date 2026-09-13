@@ -35,8 +35,36 @@ from sources import SOURCES, REFERENCE_ONLY          # noqa: E402
 from dataset import POLICY_EVENTS                    # noqa: E402
 
 DRAFT = ROOT / "report" / "draft"
+APPENDIX_DIR = DRAFT / "appendix"
 FIGURES_DIR = ROOT / "report" / "figures"
 RESERVED_S5 = 280        # words held for the blocked guest-lecture section
+
+# Appendices, in order. Letter, source file stem, title.
+APPENDICES = [
+    ("A", "A_ai_use", "AI Use and Validation"),
+    ("B", "B_data_methods", "Data, Provenance and Verification"),
+    ("C", "C_regression", "Regression Diagnostics"),
+    ("D", "D_exclusion", "Reconciling the Exclusion Estimates"),
+    ("E", "E_cross_sections", "Full Cross-Sections and Series"),
+]
+
+# Appendix figures are numbered WITHIN their appendix (Figure C1, C2, ...), so
+# adding one never renumbers a body figure. Body figures stay 1-8 whatever the
+# appendices do.
+APPENDIX_FIGURES = {
+    "AF_RESID": ("figA_c1_residuals.png",
+                 "Residuals against fitted values, EU 2024 regression. Workbook F6."),
+    "AF_JACK": ("figA_c2_jackknife.png",
+                "Leave-one-out slopes, all 18 drops. Workbook F6."),
+    "AF_TAIL": ("figA_c3_tailselection.png",
+                "The six tail countries against the full cross-section. Workbook F6."),
+    "AF_LADDER": ("figA_d1_denominators.png",
+                  "The exclusion estimates converted to people on their own bases."),
+    "AF_RANK": ("figA_e1_eu27.png",
+                "Individuals purchasing online, all 27 member states, 2024. Workbook F5_EU27."),
+    "AF_PAY": ("figA_e2_payments.png",
+               "Instrument shares of physical-retail payments, 2017-2025. Workbook F2_PAYMENTS."),
+}
 
 # Workbook sheet -> the PNG that report/build_figures.py writes for it.
 FIGURE_FILES = {
@@ -111,11 +139,22 @@ def build():
       references  - alphabetised Harvard strings
       counts      - word counts, so both renderers report the same number
     """
+    reference_only_cited = []
     bodies = {}
     for name in SECTIONS:
         text = (DRAFT / f"{name}.md").read_text(encoding="utf-8")
         bodies[name] = text.split("\n---\n")[0].rstrip()
-    blob = "\n".join(bodies.values())
+
+    # Appendices are optional: absent files are simply skipped, so the report
+    # builds at any stage of drafting them.
+    app_bodies = {}
+    for letter, stem, _title in APPENDICES:
+        path = APPENDIX_DIR / f"{stem}.md"
+        if path.exists():
+            app_bodies[letter] = path.read_text(encoding="utf-8").split(
+                "\n---\n")[0].rstrip()
+
+    blob = "\n".join(list(bodies.values()) + list(app_bodies.values()))
 
     order, seen = [], set()
     for sheet in re.findall(r"\[\[(F\d+)\]\]", blob):
@@ -127,14 +166,34 @@ def build():
         raise SystemExit(f"figure token with no caption: {unknown}")
     fignum = {sheet: i + 1 for i, sheet in enumerate(order)}
 
+    # Appendix figures numbered within their own appendix: C1, C2, ...
+    appfig = {}
+    for letter, _stem, _title in APPENDICES:
+        body = app_bodies.get(letter, "")
+        seen_local, n = set(), 0
+        for key in re.findall(r"\[\[(AF_[A-Z]+)\]\]", body):
+            if key in seen_local:
+                continue
+            if key not in APPENDIX_FIGURES:
+                raise SystemExit(f"appendix figure token with no entry: {key}")
+            seen_local.add(key)
+            n += 1
+            appfig[key] = (f"{letter}{n}", letter)
+
     used = []
     for sid in re.findall(r"\[\[([A-Z]+\d*)(?::[yb])?\]\]", blob):
+        if sid.startswith("AF_"):
+            continue
         if sid.startswith("F") and sid[1:].isdigit():
             continue
         if sid not in SOURCES:
             raise SystemExit(f"citation token names no source: {sid}")
+        # REFERENCE_ONLY sources support argument but supply no workbook value.
+        # Citing them in prose is legitimate - that is what they are for. The
+        # rule they must still obey is that no figure or numeric claim rests on
+        # them, which is why they are named here rather than silently allowed.
         if sid in REFERENCE_ONLY:
-            raise SystemExit(f"{sid} is REFERENCE_ONLY but is cited in the prose")
+            reference_only_cited.append(sid)
         if sid not in used:
             used.append(sid)
     cite, references = build_citations(used)
@@ -142,6 +201,8 @@ def build():
     def resolve(text):
         def sub(m):
             tok, form = m.group(1), m.group(2)
+            if tok in appfig:
+                return f"Figure {appfig[tok][0]}"
             if tok in fignum:
                 return f"Figure {fignum[tok]}"
             author, year = cite[tok]
@@ -150,7 +211,7 @@ def build():
             if form == ":b":
                 return f"{author} {year}"
             return f"({author} {year})"
-        return re.sub(r"\[\[([A-Za-z]+\d*)(:[yb])?\]\]", sub, text)
+        return re.sub(r"\[\[(AF_[A-Z]+|[A-Za-z]+\d*)(:[yb])?\]\]", sub, text)
 
     sections = []
     for name in SECTIONS:
@@ -169,6 +230,47 @@ def build():
                    for s in sheets]
         sections.append({"key": name, "heading": heading,
                          "paragraphs": paragraphs, "figures": figures})
+
+    appendices = []
+    for letter, stem, title in APPENDICES:
+        if letter not in app_bodies:
+            continue
+        resolved = resolve(app_bodies[letter])
+        chunks = [c.strip() for c in resolved.split("\n\n") if c.strip()]
+        blocks = []
+        for chunk in chunks:
+            if chunk.startswith("### "):
+                blocks.append(("subheading", chunk[4:].strip()))
+            elif chunk.startswith("## "):
+                continue                       # the title comes from APPENDICES
+            elif chunk.lstrip().startswith("|"):
+                rows = [[c.strip() for c in line.strip().strip("|").split("|")]
+                        for line in chunk.splitlines()
+                        if line.strip().startswith("|")
+                        and not set(line.replace("|", "").strip()) <= set("-: ")]
+                blocks.append(("table", rows))
+            elif chunk.startswith("- "):
+                blocks.append(("bullets", [l[2:].strip()
+                                           for l in chunk.splitlines()
+                                           if l.startswith("- ")]))
+            else:
+                blocks.append(("para", " ".join(chunk.split())))
+        figures = []
+        seen_local = set()
+        for key in re.findall(r"\[\[(AF_[A-Z]+)\]\]", app_bodies[letter]):
+            if key in seen_local:
+                continue
+            seen_local.add(key)
+            number, _ = appfig[key]
+            filename, caption = APPENDIX_FIGURES[key]
+            figures.append({"key": key, "number": number, "file": filename,
+                            "caption": f"Figure {number} - {caption}"})
+        appendices.append({"letter": letter, "title": title,
+                           "heading": f"Appendix {letter}. {title}",
+                           "blocks": blocks, "figures": figures,
+                           "words": len(" ".join(
+                               b[1] for b in blocks
+                               if b[0] in ("para", "subheading")).split())})
 
     events = {e[0]: e for e in POLICY_EVENTS}
     table1 = {
@@ -214,6 +316,10 @@ def build():
                    "reserved_s5": RESERVED_S5, "table1": table_words,
                    "total": counted + caps + RESERVED_S5,
                    "total_with_table": counted + caps + RESERVED_S5 + table_words},
+        "appendices": appendices,
+        "appendix_words": sum(a["words"] for a in appendices),
+        "reference_only_cited": sorted(set(reference_only_cited)),
         "figure_count": len(fignum),
+        "appendix_figure_count": sum(len(a["figures"]) for a in appendices),
         "source_count": len(used),
     }

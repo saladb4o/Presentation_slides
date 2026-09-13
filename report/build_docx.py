@@ -160,13 +160,57 @@ def main():
         p.paragraph_format.left_indent = Cm(1.27)
         p.paragraph_format.first_line_indent = Cm(-1.27)
 
+    for app in r["appendices"]:
+        doc.add_page_break()
+        para(doc, app["heading"], size=13, bold=True,
+             align=WD_ALIGN_PARAGRAPH.LEFT, space_after=8)
+        for kind, payload in app["blocks"]:
+            if kind == "subheading":
+                para(doc, payload, size=12, bold=True,
+                     align=WD_ALIGN_PARAGRAPH.LEFT, space_before=8, space_after=4)
+            elif kind == "para":
+                para(doc, payload)
+            elif kind == "bullets":
+                for item in payload:
+                    bp = doc.add_paragraph(style="List Bullet")
+                    run = bp.add_run(item)
+                    run.font.name, run.font.size = BODY_FONT, Pt(12)
+                    bp.paragraph_format.space_after = Pt(3)
+            elif kind == "table":
+                tbl = doc.add_table(rows=0, cols=len(payload[0]))
+                tbl.style = "Table Grid"
+                for i, row in enumerate(payload):
+                    cells = tbl.add_row().cells
+                    for cell, value in zip(cells, row):
+                        run = cell.paragraphs[0].add_run(value)
+                        run.font.size, run.font.name = Pt(10), BODY_FONT
+                        run.bold = (i == 0)
+                        pf = cell.paragraphs[0].paragraph_format
+                        pf.line_spacing_rule = WD_LINE_SPACING.SINGLE
+                        pf.space_after = Pt(2)
+                para(doc, "", size=6, space_after=0)
+        for fig in app["figures"]:
+            path = FIGURES_DIR / fig["file"]
+            if not path.exists():
+                raise SystemExit(f"missing appendix figure: {path}")
+            pic = doc.add_paragraph()
+            pic.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            pic.paragraph_format.space_before = Pt(8)
+            pic.paragraph_format.space_after = Pt(2)
+            pic.add_run().add_picture(str(path), width=Cm(16))
+            cap = para(doc, fig["caption"], size=10, italic=True,
+                       align=WD_ALIGN_PARAGRAPH.CENTER, space_after=10)
+            cap.paragraph_format.line_spacing_rule = WD_LINE_SPACING.SINGLE
+
     name = f"Assignment 2 ECON1596 _ {CLASS_GROUP} _ s4040040.docx"
     out = ROOT / name
     doc.save(str(out))
     c = r["counts"]
     print(f"wrote {name}")
-    print(f"  {c['total']} words ({c['total_with_table']} if tables count), "
+    print(f"  body {c['total']} words ({c['total_with_table']} if tables count), "
           f"{r['figure_count']} figures, {len(r['references'])} references")
+    print(f"  {len(r['appendices'])} appendices: {r['appendix_words']} words, "
+          f"{r['appendix_figure_count']} figures (outside the word count)")
     return out
 
 

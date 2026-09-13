@@ -358,9 +358,246 @@ def verify():
     print(f"  verified {len(claims)} derived values against the report prose")
 
 
+
+
+# ==========================================================================
+# Appendix figures. Numbered within their appendix (C1, C2, ...) by render.py,
+# so adding one never renumbers a body figure.
+# ==========================================================================
+
+def _cross_section():
+    pairs = []
+    for o in OBS:
+        if o[0].endswith("ECM.ENT.TRN") and o[3] == 2024 and o[2] != "EU27":
+            x = V.get((f"{o[2]}.ECM.IND.BUY", 2024))
+            if x is not None:
+                pairs.append((o[2], x, o[4]))
+    pairs.sort(key=lambda p: p[1])
+    xs = np.array([p[1] for p in pairs])
+    ys = np.array([p[2] for p in pairs])
+    slope, intercept = np.polyfit(xs, ys, 1)
+    return pairs, xs, ys, slope, intercept
+
+
+def figC1_residuals():
+    pairs, xs, ys, slope, intercept = _cross_section()
+    fit = intercept + slope * xs
+    res = ys - fit
+    rmse = np.sqrt((res ** 2).sum() / (len(xs) - 2))
+
+    fig, ax = plt.subplots(figsize=(WIDTH, 3.2))
+    frame(ax, grid_axis="both")
+    ax.axhline(0, color=MUTED, linewidth=1)
+    for band, style in ((1, ":"), (2, "--")):
+        for sign in (1, -1):
+            ax.axhline(sign * band * rmse, color=GREY, linewidth=0.8,
+                       linestyle=style, zorder=2)
+    for (code, _x, _y), f, r in zip(pairs, fit, res):
+        dk = code == "DK"
+        ax.scatter(f, r, s=52 if dk else 34, color=ACCENT if dk else GREY,
+                   zorder=5 if dk else 4, edgecolor="white", linewidth=1.1)
+        if dk or abs(r) > 1.2 * rmse:
+            ax.annotate(code, (f, r), textcoords="offset points", xytext=(7, -3),
+                        fontsize=8.5, color=INK if dk else MUTED,
+                        weight="bold" if dk else "normal")
+    ax.text(ax.get_xlim()[1], rmse, " ±1 RMSE", va="center", ha="left",
+            fontsize=7.5, color=MUTED)
+    ax.set_xlabel("Fitted e-sales (% of turnover)")
+    ax.set_ylabel("Residual (pp)")
+    title(ax, "No fitted value is mispredicted by more than two standard errors",
+          f"RMSE {rmse:.2f} pp. Denmark sits +{res[[p[0] for p in pairs].index('DK')]:.2f}, "
+          f"inside one")
+    return save(fig, "figA_c1_residuals.png")
+
+
+def figC2_jackknife():
+    pairs, xs, ys, slope, _ = _cross_section()
+    drops = []
+    for i in range(len(xs)):
+        keep = np.ones(len(xs), bool)
+        keep[i] = False
+        s, _ = np.polyfit(xs[keep], ys[keep], 1)
+        drops.append((pairs[i][0], s))
+    drops.sort(key=lambda d: d[1])
+    codes = [d[0] for d in drops]
+    slopes = [d[1] for d in drops]
+
+    fig, ax = plt.subplots(figsize=(WIDTH, 3.4))
+    frame(ax, grid_axis="x")
+    y = np.arange(len(codes))
+    ax.axvline(slope, color=DARK, linewidth=1.4, zorder=3)
+    ax.axvspan(0.380, 0.824, color=ACCENT, alpha=0.10, zorder=1)
+    ax.scatter(slopes, y, s=38, color=[ACCENT if abs(s - slope) > 0.05 else GREY
+                                       for s in slopes],
+               zorder=5, edgecolor="white", linewidth=1.0)
+    ax.set_yticks(y, [f"without {c}" for c in codes], fontsize=8)
+    ax.invert_yaxis()
+    ax.set_xlim(0.30, 0.90)
+    ax.set_xlabel("Slope re-estimated on the remaining 17 states")
+    # Both annotations go ABOVE the first row; at the bottom the full-sample
+    # label landed on the x tick labels.
+    ax.text(slope + 0.008, -0.85, f"full sample {slope:.3f}", fontsize=8,
+            color=DARK, va="center", ha="left")
+    ax.text(0.824, -0.85, "95% CI  ", fontsize=7.5, color=MUTED,
+            ha="right", va="center")
+    title(ax, "The slope survives dropping any single member state",
+          f"Range [{min(slopes):.3f}, {max(slopes):.3f}] — never near zero, never sign-flipping")
+    return save(fig, "figA_c2_jackknife.png")
+
+
+def figC3_tailselection():
+    pairs, xs, ys, slope, intercept = _cross_section()
+    # The earlier figure used the ROUNDED values printed in the press release,
+    # not the databrowser's. Recomputing from the databrowser gives 0.658, not
+    # the 0.655 the report quotes - so the rounded values are used here, and
+    # the appendix says so.
+    rounded = {"IE": 96, "DK": 91, "DE": 83, "IT": 60, "BG": 57, "HU": 79}
+    tx = np.array([rounded[c] for c in rounded])
+    ty = np.array([V[(f"{c}.ECM.ENT.TRN", 2024)] for c in rounded])
+    ts, ti = np.polyfit(tx, ty, 1)
+
+    fig, ax = plt.subplots(figsize=(WIDTH, 3.4))
+    frame(ax, grid_axis="both")
+    gx = np.linspace(54, 99, 10)
+    ax.plot(gx, ti + ts * gx, color=ACCENT, linewidth=1.6, linestyle="-",
+            zorder=4, label=f"Six tail countries (slope {ts:.3f}, R² 0.853)")
+    ax.plot(gx, intercept + slope * gx, color=DARK, linewidth=1.6,
+            linestyle="--", zorder=4,
+            label=f"All 18 states (slope {slope:.3f}, R² 0.674)")
+    for code, x, y in pairs:
+        tail = code in rounded
+        ax.scatter(x, y, s=44 if tail else 30,
+                   color=ACCENT if tail else GREY, zorder=5 if tail else 3,
+                   edgecolor="white", linewidth=1.0)
+    ax.set_xlabel("Individuals purchasing online (% of internet users)")
+    ax.set_ylabel("E-sales (% of turnover)")
+    ax.legend(frameon=False, fontsize=8, loc="upper left")
+    title(ax, "Selection on the tails inflates the fit, not the slope",
+          "Blue: the six countries a press release happened to name")
+    return save(fig, "figA_c3_tailselection.png")
+
+
+def figD1_denominators():
+    """The exclusion ladder converted to people on each estimate's own base.
+
+    Two of the five sources say "adult population" without defining it. Denmark
+    has no verified adult-population figure in this dataset, so those two are
+    drawn as a RANGE between the two defensible bases - the 15+ base implied by
+    the Digital Post statistics and the total population - rather than silently
+    picking one. Picking one is precisely the error this appendix documents.
+    """
+    pop = V[("DK.POP.TOT", 2026)]
+    base15 = V[("DK.DGP.EXMP.N", 2026)] / (V[("DK.DGP.EXMP", 2026)] / 100)
+    items = [
+        ("Formally exempt", V[("DK.DGP.EXMP", 2026)], base15, base15,
+         "citizens 15+, stated"),
+        ("Do not use at all", V[("DK.DGX.NOUSE", 2026)], pop, pop,
+         "population, stated"),
+        ("Report difficulty", V[("DK.DGX.DIFF", 2026)], pop, pop,
+         "population, stated"),
+        ("Digitally disadvantaged", V[("DK.DGX.DISADV.LO", 2025)], base15, pop,
+         "adult population, undefined"),
+        ("Justitia estimate", V[("DK.DGX.JUST", 2022)], base15, pop,
+         "adult population, undefined"),
+    ]
+    labels = [f"{n}\n({d})" for n, _p, _lo, _hi, d in items]
+
+    fig, ax = plt.subplots(figsize=(WIDTH, 3.6))
+    frame(ax, grid_axis="x")
+    y = np.arange(len(items))
+    for i, (_n, pct, lo_base, hi_base, _d) in enumerate(items):
+        lo = pct / 100 * lo_base / 1000
+        hi = pct / 100 * hi_base / 1000
+        col = ACCENT if i == 0 else GREY
+        ax.barh(i, lo, height=0.55, color=col, zorder=3)
+        if hi > lo:
+            ax.barh(i, hi - lo, left=lo, height=0.55, color=col, alpha=0.40,
+                    zorder=3)
+            ax.text(hi + 14, i, f"{lo:,.0f}–{hi:,.0f}k  ({pct:g}%)", va="center",
+                    fontsize=8.5, color=INK)
+        else:
+            ax.text(lo + 14, i, f"{lo:,.0f}k  ({pct:g}%)", va="center",
+                    fontsize=8.5, color=INK)
+    ax.set_yticks(y, labels, fontsize=8)
+    ax.invert_yaxis()
+    ax.set_xlim(0, 1900)
+    ax.set_xlabel("People (thousands) on the estimate's own base")
+    title(ax, "The same ladder in people rather than percentages",
+          "Faded extensions are base uncertainty: two sources say \u201cadult\u201d "
+          "and do not define it")
+    return save(fig, "figA_d1_denominators.png")
+
+
+def figE1_eu27():
+    rows = sorted(((o[2], o[4]) for o in OBS
+                   if o[0].endswith("ECM.IND.BUY") and o[3] == 2024
+                   and o[2] != "EU27"), key=lambda r: r[1])
+    eu = V[("EU.ECM.IND.BUY", 2024)]
+    codes = [r[0] for r in rows]
+    vals = [r[1] for r in rows]
+
+    fig, ax = plt.subplots(figsize=(WIDTH, 4.4))
+    frame(ax, grid_axis="x")
+    colors = [ACCENT if c == "DK" else GREY for c in codes]
+    ax.barh(codes, vals, height=0.68, color=colors, zorder=3)
+    ax.axvline(eu, color=DARK, linewidth=1.2, linestyle="--", zorder=4)
+    ax.text(eu + 0.7, len(codes) - 0.4, f"EU-27 {eu:.2f}", fontsize=8, color=DARK,
+            va="center")
+    for c, v in zip(codes, vals):
+        # A white surface behind each label: the EU reference line runs through
+        # this band and cut seven of them in half without it.
+        ax.text(v + 0.8, codes.index(c), f"{v:.1f}", va="center", fontsize=7.5,
+                color=INK if c == "DK" else MUTED, zorder=6,
+                bbox=dict(boxstyle="square,pad=0.12", fc="white", ec="none"))
+    ax.set_xlim(0, 108)
+    ax.tick_params(axis="y", labelsize=8)
+    ax.set_xlabel("Individuals purchasing online (% of internet users), 2024")
+    title(ax, "Denmark is third of twenty-seven",
+          "The three countries the report names by number are IE, DK and BG")
+    return save(fig, "figA_e1_eu27.png")
+
+
+def figE2_payments():
+    cash_y = [2017, 2023, 2025]
+    cash = [V[("DK.PAY.CASH.POS", y)] for y in cash_y]
+    card_y = [2017, 2025]
+    card = [V[("DK.PAY.CRD.PHYS", y)] for y in card_y]
+    wallet = V[("DK.PAY.WLT.SHR", 2025)]
+
+    fig, ax = plt.subplots(figsize=(WIDTH, 3.2))
+    frame(ax)
+    ax.plot(card_y, card, color=GREY, linewidth=2, zorder=3, marker="o",
+            markersize=6, markeredgecolor="white", label="Physical card")
+    ax.plot(cash_y, cash, color=ACCENT, linewidth=2, zorder=4, marker="o",
+            markersize=6, markeredgecolor="white", label="Cash")
+    ax.scatter([2025], [wallet], s=60, color=DARK, zorder=5, marker="D",
+               edgecolor="white", linewidth=1.1, label="Mobile wallet (observed once)")
+    for x, y, v in ((2017, cash[0], cash[0]), (2025, cash[-1], cash[-1]),
+                    (2017, card[0], card[0]), (2025, card[-1], card[-1])):
+        ax.annotate(f"{v:g}%", (x, y), textcoords="offset points",
+                    xytext=(0, 10), ha="center", fontsize=8.5, color=INK)
+    ax.annotate(f"{wallet:g}%", (2025, wallet), textcoords="offset points",
+                xytext=(0, -16), ha="center", fontsize=8.5, color=DARK)
+    ax.set_xlim(2016, 2026)
+    ax.set_ylim(0, 85)
+    ax.set_xticks([2017, 2019, 2021, 2023, 2025])
+    ax.set_ylabel("% of the NUMBER of payments")
+    ax.legend(frameon=False, fontsize=8, loc="center left")
+    title(ax, "Cash fell; most of what replaced it was still a card",
+          "Shares of the number of payments in physical retail, not their value")
+    return save(fig, "figA_e2_payments.png")
+
+
+APPENDIX_FIGURES_FNS = [figC1_residuals, figC2_jackknife, figC3_tailselection,
+                        figD1_denominators, figE1_eu27, figE2_payments]
+
+
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
     print(f"writing {len(FIGURES)} figures to report/figures/")
     for f in FIGURES:
+        f()
+    print(f"writing {len(APPENDIX_FIGURES_FNS)} appendix figures")
+    for f in APPENDIX_FIGURES_FNS:
         f()
     verify()

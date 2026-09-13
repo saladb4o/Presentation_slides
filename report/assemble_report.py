@@ -42,6 +42,25 @@ def main():
     out += ["## References", ""]
     out += ["\n\n".join(r["references"]), ""]
 
+    for app in r["appendices"]:
+        out += ["---", "", f"## {app['heading']}", ""]
+        figs = {f["key"]: f for f in app["figures"]}
+        for kind, payload in app["blocks"]:
+            if kind == "subheading":
+                out += [f"### {payload}", ""]
+            elif kind == "para":
+                out += [payload, ""]
+            elif kind == "bullets":
+                out += [f"- {b}" for b in payload] + [""]
+            elif kind == "table":
+                out += ["| " + " | ".join(payload[0]) + " |",
+                        "|" + "---|" * len(payload[0])]
+                out += ["| " + " | ".join(row) + " |" for row in payload[1:]]
+                out += [""]
+        for fig in app["figures"]:
+            out += [f"![{fig['caption']}](figures/{fig['file']})", "",
+                    f"*{fig['caption']}*", ""]
+
     path = ROOT / "report" / "DRAFT_REPORT.md"
     path.write_text("\n".join(out), encoding="utf-8")
     c = r["counts"]
@@ -53,6 +72,9 @@ def main():
     print(f"  {r['source_count']} sources cited, {len(r['references'])} "
           f"references, {r['figure_count']} figures numbered "
           f"1-{r['figure_count']}")
+    if r["appendices"]:
+        print(f"  {len(r['appendices'])} appendices, {r['appendix_words']} words, "
+              f"{r['appendix_figure_count']} appendix figures (outside the count)")
 
 
 if __name__ == "__main__":

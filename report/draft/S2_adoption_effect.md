@@ -10,15 +10,16 @@ digitalisation destroyed banking employment. The longer series refuses it. Betwe
 while bank employment fell by only 29.4%, from roughly 51,000 to 36,000 ([[F9]]).
 Staff per surviving institution therefore rose from 233 to 706, an increase of
 203%: consolidation concentrated the sector rather than shedding it. The branch
-series begins in 2004, so its −67.2% is measured over a different window and the
-three changes must not be differenced against one another.
+series begins in 2004, so its −67.2% spans a different window and the three
+changes must not be differenced (Appendix B).
 
 Payments moved with it. Cash fell from 23% to 9% of the *number* of payments in
 physical retail between 2017 and 2025 — 14 percentage points, to under two-fifths
 of its 2017 share — while card-based mobile wallets reached 32% of that same
 measure [[NB1]]. Much of this is displacement within digital instruments:
 wallet payments are card payments, and the physical card share fell from 73% to
-54%. Cash acceptance remains a statutory
+54% (Appendix E). What replaced cash was mostly a new interface onto existing
+card infrastructure — which is what a rail makes cheap to build. Cash acceptance remains a statutory
 obligation on shops under *lov om betalinger* §81, narrowed but not removed on
 1 July 2022 [[RI2]].
 
@@ -29,17 +30,13 @@ holding both measures, the fitted slope is +0.602 percentage points of turnover
 per percentage point of adoption (standard error 0.105; t = 5.75 on 16 degrees of
 freedom; 95% confidence interval [0.380, 0.824]; R² = 0.674) ([[ES7:b]]; [[ES6:b]]).
 
-Two features add credibility beyond the sample size. An
-earlier version drew its adoption values from a Eurostat news release [[ES4]],
-which named only nine countries — the three highest, the three lowest and three
-notable movers — six of which also report the turnover measure. On those six the
-fit was R² 0.853 with a slope of +0.655. Replacing them with the complete
-databrowser extract moved the slope by about 8% while the fit fell by 0.18: the
-signature of selection on the tails, measured rather than asserted. Second, the
-nine member states dropped for want of the turnover measure average 75.67% on
-adoption against the plotted eighteen's 77.23%, a difference not statistically
-distinguishable (p ≈ 0.71). They are absent through data availability, not
-selection on the axis.
+Appendix C reports the diagnostics; three matter here. An earlier version of this
+figure drew its adoption values from a Eurostat news release [[ES4]] naming only
+the distribution's ends, where the fit was R² 0.853 against 0.674 here while the
+slope moved by 8% — selection bias measured rather than asserted. The slope
+survives dropping any single state, ranging [0.516, 0.672]. And the nine states
+absent for want of the turnover measure are indistinguishable from the plotted
+eighteen on adoption (p ≈ 0.71).
 
 Causation is neither established nor establishable from this design. Adoption
 measures consumers; turnover measures enterprises, including business-to-business
