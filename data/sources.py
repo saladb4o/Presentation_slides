@@ -364,6 +364,38 @@ SOURCES = {
             "DE/2022/bemerkungen2022-hauptband.html>."
         ),
     ),
+    "CE1": dict(
+        authority="Conseil d'Etat (France)",
+        title=(
+            "Decision No. 452798 - partial annulment of the ANEF decree "
+            "mandating online-only residence permit applications"
+        ),
+        dataset_code="No. 452798",
+        url="https://www.conseil-etat.fr/fr/arianeweb/CE/decision/2022-06-03/452798",
+        accessed="13 September 2026",
+        harvard=(
+            "Conseil d'Etat 2022, Decision No. 452798, 3 June 2022, Conseil "
+            "d'Etat, Paris, accessed 13 September 2026, "
+            "<https://www.conseil-etat.fr/fr/arianeweb/CE/decision/2022-06-03/"
+            "452798>."
+        ),
+    ),
+    "BE1": dict(
+        authority="Cour constitutionnelle (Belgium)",
+        title=(
+            "Arret no. 126/2025 - Brussels Digital ordinance; cumulative "
+            "non-digital access guarantees"
+        ),
+        dataset_code="ECLI:BE:GHCC:2025:ARR.126",
+        url="https://fr.const-court.be/public/f/2025/2025-126f.pdf",
+        accessed="13 September 2026",
+        harvard=(
+            "Cour constitutionnelle 2025, Arret no. 126/2025, 25 September "
+            "2025, ECLI:BE:GHCC:2025:ARR.126, Cour constitutionnelle, "
+            "Brussels, accessed 13 September 2026, "
+            "<https://fr.const-court.be/public/f/2025/2025-126f.pdf>."
+        ),
+    ),
 }
 
 # Sources held for the report's reference list that no workbook observation uses
@@ -382,6 +414,8 @@ REFERENCE_ONLY = frozenset({
              # Section 6 as another party's estimate, not re-used as data here:
              # the underlying register linkage is not public, so nothing in the
              # workbook could be traced back to a row.
+    "CE1",   # Conseil d'Etat and Cour constitutionnelle: comparative legal
+    "BE1",   # authority for Appendix G. Rulings, not observations.
     "BRH1",  # German Federal Court of Auditors on lottery allocation - the
              # reason Appendix F rejects that instrument. Argument, not data.
 })

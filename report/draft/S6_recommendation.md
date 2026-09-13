@@ -2,10 +2,9 @@
 
 The report opened on a projection of roughly DKK 1,000 million a year.
 Rigsrevisionen could verify DKK 450 million of it — postage, paper and envelopes.
-The wage and overhead component was never substantiated, and the study intended to
+The wage and overhead component was never substantiated, and the study meant to
 settle it was abandoned when the municipalities declined to take part [[RR1]].
-Denmark compels its adult population onto a business case that remains 55%
-unaudited.
+Denmark compels its adult population onto a business case 55% unaudited.
 
 Two measures follow. First, the exemption criteria in *Lov om Offentlig Digital
 Post* should be widened to admit documented difficulty. Denmark already fixed the
@@ -14,11 +13,13 @@ on request, to a non-digital alternative to any mandatory self-service solution
 [[LOV1]]. That decoupled the channel from the obligation but left the gate
 untouched, because the right runs only to those already exempt. Section 4 measured
 that gate: roughly three-quarters of a million people report the difficulty the
-2023 Act relieves and cannot reach the relief.
+2023 Act relieves and cannot reach the relief. The Conseil d'État [[CE1]] and the
+Belgian Cour constitutionnelle [[BE1]] have both since attached the entitlement to
+the difficulty rather than to a prior status (Appendix G).
 
 Second, SMV:Digital should be redirected toward complementary capability — data
-integration and specialist skills, which Section 3 identified as the binding
-constraint. Its effect is better evidenced than most such schemes:
+integration and specialist skills, the binding constraint identified in Section 3.
+Its effect is better evidenced than most such schemes:
 Digitaliseringsstyrelsen matches recipients to comparable firms in the Danmarks
 Statistik registers and finds revenue growth five percentage points higher
 [[DG5]]. But matching handles selection on what the registers record — sector,

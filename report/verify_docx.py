@@ -113,9 +113,10 @@ def main():
     # --- word count -------------------------------------------------------
     # Tripwire against runaway generation across the WHOLE document, not the
     # 2,000-word assessment limit - that one is enforced on the body alone by
-    # assemble_report.py. Raised from 5,200 when Appendix F was added.
+    # assemble_report.py. Raised from 5,200 when Appendix F was added, and again
+    # when Appendix G added the comparative case law.
     body_words = len(text.split())
-    check(body_words < 6500,
+    check(body_words < 7200,
           f"document body has {body_words} words, unexpectedly long")
 
     print(f"{checks} checks run")
