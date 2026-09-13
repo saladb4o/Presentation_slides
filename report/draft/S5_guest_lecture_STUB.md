@@ -22,12 +22,13 @@ Mapped by likely theme:
 | If the question concerns... | Use |
 |---|---|
 | Trust in digital government | `DK.TRU.DPS` 82% (2024) → 84% (2025, record high); `DK.TRU.DGP.SEC` 77% → 89% (2017–2025) |
-| Payment resilience / cash | Cash 9% of payments (2025); *kontantreglen*, Lov om betalinger §81 amended 1 July 2022; Nationalbank on offline-payment preparedness (source NB2, currently reference-only) |
-| Digital rights / rule of law | Justitia 25% (JU1); Institut for Menneskerettigheder (IMR1, reference-only); §10 deemed-delivery point from §1 |
+| Payment resilience / cash | Cash 9% of payments (2025); *kontantreglen*, Lov om betalinger §81 amended 1 July 2022; Nationalbank on offline-payment preparedness (NB2, now cited in E.3) |
+| Digital rights / rule of law | Justitia 25% (JU1); Institut for Menneskerettigheder (IMR1, cited in G.3); the comparative rulings in Appendix G (CE1, BE1); §10 deemed-delivery point from §1 |
 | Sustainability of ICT | `DK.ENV.WEEE` 15.37% against an EU 80.23% — Denmark's clearest digital failure, and the SDG 12 pivot if wanted |
 | Skills and labour | `DK.SKL.*` age bands; banking employment −29.4% against institutions −76.7% |
-| SME policy / firm capability | The Figure 7 diffusion gap; SMV:Digital and its missing control group |
+| SME policy / firm capability | The Figure 5 diffusion gap; SMV:Digital's matched-control evaluation (DG5) and what matching cannot identify — Appendix F |
 
-Note that two of these (NB2, IMR1) are flagged `REFERENCE_ONLY` in `03_SOURCES`:
-they support argument but supply no workbook value, so they enter the reference
-list only if §5 actually cites them.
+NB2 and IMR1 carry no workbook value; both are now cited in the appendices, so
+they are already in the reference list whether or not §5 uses them. The sources
+still flagged `REFERENCE_ONLY` are LOV1, DG5, BRH1, CE1 and BE1 — the statute, the
+scheme evaluation and the three audit and court findings.

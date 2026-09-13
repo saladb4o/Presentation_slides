@@ -131,6 +131,7 @@ check(r2019[7] != r2020[7], "2019 and 2020 denominators are identical")
 import re
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import pathlib
 from sources import REFERENCE_ONLY
 
 LOOKUP_RE = re.compile(
@@ -403,10 +404,24 @@ for ws in wb:
 used_by_obs = {m.cell(row=r, column=10).value
                for r in range(2, m.max_row + 1)
                if m.cell(row=r, column=2).value}
+# The workbook is not the only consumer. A source may legitimately carry no
+# observation and appear in no workbook cell, and still be doing real work by
+# supporting an argument in the report - the two Danish and comparative legal
+# sources are exactly that. Scanning the report drafts here keeps this check
+# from forcing such a source into REFERENCE_ONLY, which would in turn make the
+# report-side check on REFERENCE_ONLY vacuous. Between them the two checks
+# leave no way for a declared source to be reachable from nothing.
+_draft_dir = pathlib.Path(__file__).resolve().parent.parent / "report" / "draft"
+_draft_text = "".join(f.read_text() for f in sorted(_draft_dir.rglob("*.md")))
+# Bracketed citation tokens only. A bare mention in prose or in the Section 5
+# planning stub is scaffolding, not a citation, and must not satisfy this check.
+cited_in_report = set(re.findall(r"\[\[([A-Z]+\d*)(?::[yb])?\]\]", _draft_text))
 for sid in sid_list:
-    check(sid in all_cited or sid in used_by_obs or sid in REFERENCE_ONLY,
-          f"source {sid} is declared but carries no observation, is cited "
-          f"nowhere, and is not declared REFERENCE_ONLY - remove it or cite it")
+    check(sid in all_cited or sid in used_by_obs or sid in cited_in_report
+          or sid in REFERENCE_ONLY,
+          f"source {sid} is declared but carries no observation and is cited "
+          f"nowhere - not in the workbook, not in the report - and is not "
+          f"declared REFERENCE_ONLY. Remove it or cite it")
 
 # 19. (code,year) must be unique. Every figure lookup is a SUMIFS on those two
 # keys, so a duplicate pair would be silently SUMMED into a doubled value that

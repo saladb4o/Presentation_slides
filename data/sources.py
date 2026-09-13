@@ -405,9 +405,6 @@ SOURCES = {
 # A source may sit here ONLY if nothing in the workbook depends on it; anything
 # a figure actually draws on must be cited in that figure's source note.
 REFERENCE_ONLY = frozenset({
-    "NB2",   # Nationalbank on offline-payment resilience - context for F2/F9.
-    "IMR1",  # Danish Institute for Human Rights on the digital welfare state -
-             # corroborates the F4 exclusion argument without supplying a value.
     "LOV1",  # Act 603/2023 - a legal instrument, not a data source. It settles
              # what Section 6 may recommend; it supplies no observation.
     "DG5",   # SMV:Digital effect measurement. Its figures are reported in

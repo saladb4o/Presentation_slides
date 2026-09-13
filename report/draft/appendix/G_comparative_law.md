@@ -54,3 +54,9 @@ already exempt from Digital Post [[LOV1]]. The French and Belgian rulings attach
 the entitlement to the *difficulty*, not to a prior administrative status. That is
 precisely the gap Section 4 measured and Section 6 proposes to close, and the
 comparison shows the proposal is not an outlier but a convergence.
+
+The point has also been made domestically. The Danish Institute for Human Rights,
+Denmark's national human rights institution, examined rights in the digital
+welfare state in December 2023 [[IMR1]]. That a domestic body reached the subject
+independently of the litigation abroad is the more relevant fact here: the
+question is live in Denmark, not imported into it.

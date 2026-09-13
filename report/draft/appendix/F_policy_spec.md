@@ -7,8 +7,8 @@ states it at the level of detail an administering agency would need to act on it
 
 SMV:Digital is better evaluated than most such schemes. Digitaliseringsstyrelsen
 links recipients to Danmarks Statistik registers and compares them with matched
-control firms, reporting revenue growth of 18 percentage points against the
-controls' 13, and employment growth of 8% against 4% [[DG5]]. That is register
+control firms, reporting revenue growth of 18% against the controls' 13% — a gap
+of five percentage points — and employment growth of 8% against 4% [[DG5]]. That is register
 data with a comparison group, and it disposes of the naive reading of the scheme's
 own headline — that 65% of participants invested further [[DG3:b]] —
 which compares applicants with the general SME population and is besides
@@ -40,7 +40,7 @@ that is independent of the firm, and matching cannot manufacture that.
 | Primary outcome | Subsequent own-funded digital investment, from register data |
 | Secondary outcomes | Employment, turnover, survival |
 | Data source | Danmarks Statistik register linkage, not self-report |
-| Measurement window | Baseline at scoring; endline 24 months after disbursement |
+| Measurement window | Baseline at scoring; endline 24 months after project start |
 | Required disclosure | Publication of all applicant scores and the cut-off |
 | Marginal cost | Administrative only; neither budget nor allocation rule changes |
 

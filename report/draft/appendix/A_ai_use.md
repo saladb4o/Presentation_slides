@@ -16,7 +16,7 @@ rather than taking this appendix's word for it.
 
 | Step | Assistance used | How it was validated | Outcome |
 |---|---|---|---|
-| Source identification | Candidate authorities and dataset codes | Each source opened or search-verified against the issuing authority | Register of 23 sources in `03_SOURCES` |
+| Source identification | Candidate authorities and dataset codes | Each source opened or search-verified against the issuing authority | Register of 29 sources in `03_SOURCES`, 23 of them cited |
 | Value retrieval | Search for published values by indicator | Each value checked against the issuing authority's own publication | Every observation carries a `source_id` |
 | Workbook construction | The Python build script | Structural assertions at build time; a separate 1,782-check suite | `build_workbook.py`, re-runnable |
 | Figure production | The matplotlib figure script | Nine derived values re-computed and asserted against the report prose | `build_figures.py` |

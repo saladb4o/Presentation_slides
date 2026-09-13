@@ -17,6 +17,7 @@ import zipfile
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "report"))
 from render import build, FIGURE_FILES                      # noqa: E402
+from sources import REFERENCE_ONLY                          # noqa: E402
 
 W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 failures, checks = [], 0
@@ -118,6 +119,17 @@ def main():
     body_words = len(text.split())
     check(body_words < 7200,
           f"document body has {body_words} words, unexpectedly long")
+
+    # REFERENCE_ONLY declares a source as supporting ARGUMENT in the report
+    # rather than supplying a workbook value. The workbook verifier cannot test
+    # that claim, because the report is not the workbook - so an entry could sit
+    # there indefinitely describing a citation that had been edited away. Found
+    # by audit: two did. The claim is testable here and now it is tested.
+    cited = set(r["reference_only_cited"])
+    for sid in sorted(REFERENCE_ONLY):
+        check(sid in cited,
+              f"{sid} is declared REFERENCE_ONLY - meaning it supports argument "
+              f"in the report - but the report never cites it")
 
     print(f"{checks} checks run")
     if failures:

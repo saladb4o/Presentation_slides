@@ -33,7 +33,7 @@ import numpy as np                     # noqa: E402
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "data"))
 from dataset import OBS                                    # noqa: E402
-from build_workbook import C_ACCENT, C_GREY, C_DARK        # noqa: E402
+from build_workbook import C_ACCENT, C_GREY, C_DARK, C_PALE  # noqa: E402
 
 OUT = os.path.join(ROOT, "report", "figures")
 ACCENT, GREY, DARK = "#" + C_ACCENT, "#" + C_GREY, "#" + C_DARK
@@ -651,11 +651,23 @@ def figF1_gantt():
     labels = [t[0] for t in tasks][::-1]
     fig, ax = plt.subplots(figsize=(WIDTH, 3.9))
     frame(ax, grid_axis="x")
+    # The twelve months between the funded projects ending and the endline are
+    # not slack. They are the outcome window: the evaluation measures two years
+    # from project start, matching the existing effect measurement. Drawn,
+    # because an unexplained gap in a Gantt chart reads as a planning error.
+    ax.annotate("", xy=(4, -0.85), xytext=(28, -0.85),
+                arrowprops=dict(arrowstyle="|-|,widthA=0.35,widthB=0.35",
+                                color=GREY, linewidth=0.9,
+                                shrinkA=0, shrinkB=0))
+    ax.annotate("Outcomes accrue: 24 months from project start",
+                xy=(16, -1.25), ha="center", va="center",
+                fontsize=7.5, color=MUTED)
     for i, (lab, start, dur, causal) in enumerate(tasks[::-1]):
         ax.barh(i, dur, left=start, height=0.55, zorder=3,
                 color=ACCENT if causal else GREY)
     ax.set_yticks(range(len(labels)))
     ax.set_yticklabels(labels, fontsize=8.5)
+    ax.set_ylim(-1.7, len(labels) - 0.4)
     # Ticks every six months from the opening of the pool.
     marks = [0, 6, 12, 18, 24, 30, 34]
     names = ["Oct 2026", "Apr 2027", "Oct 2027", "Apr 2028", "Oct 2028",
@@ -665,7 +677,7 @@ def figF1_gantt():
     ax.set_xlim(-0.6, 34.6)
     title(ax, "The evaluation is built in, not bolted on",
           "Blue marks the five steps that make an effect estimate possible; "
-          "grey is scheme administration. Months from the pool opening")
+          "grey is scheme administration")
     return save(fig, "figA_f1_gantt.png")
 
 

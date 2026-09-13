@@ -38,7 +38,14 @@ way of presenting a card, not a new instrument — which is what one would expec
 where an identity rail lowers the cost of building a new interface on existing
 payment infrastructure.
 
-### E.4 Labour productivity against the EU-27 average
+One consequence is not an economic one. Danmarks Nationalbank notes that as
+payments move digital, offline payment capability becomes more important as
+national contingency rather than less [[NB2]]: a payment system with no working
+fallback concentrates risk at the same time as it lowers cost. The same logic
+applies to the identity rail this report describes, and Section 4 measures who
+bears it when no fallback exists.
+
+### E.3 Labour productivity against the EU-27 average
 
 [[AF_PROD]]
 

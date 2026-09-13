@@ -115,7 +115,7 @@ Two measures follow. First, the exemption criteria in *Lov om Offentlig Digital 
 
 Second, SMV:Digital should be redirected toward complementary capability — data integration and specialist skills, the binding constraint identified in Section 3. Its effect is better evidenced than most such schemes: Digitaliseringsstyrelsen matches recipients to comparable firms in the Danmarks Statistik registers and finds revenue growth five percentage points higher (Digitaliseringsstyrelsen 2025b). But matching handles selection on what the registers record — sector, size, age, prior trajectory — not on what they do not, and for a voluntary scheme that residual is the whole problem: a manager ambitious enough to apply is ambitious enough to grow unaided. The next pool opens 26 October 2026 (SMV:Digital 2026), and its eligibility scoring already produces a threshold that would identify the effect directly. Appendix F specifies the instrument, its outcome measures and its timeline.
 
-Both follow from one reading: Denmark built a rail, then left who could board it, and who could build on it, to a capability it never distributed. The evidence has limits, set out in Appendices A to C — not least that Section 2's cross-section establishes association, not cause.
+Both follow from one reading: Denmark built a rail, then left who could board it, and who could build on it, to a capability it never distributed. The evidence has limits, set out in Appendices A to G — not least that Section 2's cross-section establishes association, not cause.
 
 ---
 
@@ -128,6 +128,8 @@ Conseil d'Etat 2022, Decision No. 452798, 3 June 2022, Conseil d'Etat, Paris, ac
 Cour constitutionnelle 2025, Arret no. 126/2025, 25 September 2025, ECLI:BE:GHCC:2025:ARR.126, Cour constitutionnelle, Brussels, accessed 13 September 2026, <https://fr.const-court.be/public/f/2025/2025-126f.pdf>.
 
 Danmarks Nationalbank 2025, Danskernes betalingsvaner, Danmarks Nationalbank, Copenhagen, accessed 12 September 2026, <https://www.nationalbanken.dk/en/what-we-do/safe-and-efficient-payments/payment-habits-in-denmark>.
+
+Danmarks Nationalbank 2026, Danskerne betaler mere digitalt – det gør offline-betalinger endnu vigtigere som beredskab, press release, 26 June, Danmarks Nationalbank, Copenhagen, accessed 12 September 2026.
 
 Danmarks Statistik 2026, Befolkningstal, Statistics Denmark, Copenhagen, accessed 12 September 2026.
 
@@ -161,6 +163,8 @@ Finanstilsynet 2025, Kontantreglen, Danish Financial Supervisory Authority, Cope
 
 Folketinget 2023, Lov om fravigelse fra obligatorisk digital selvbetjening, LOV nr 603 af 31. maj 2023, in force 1 June 2023, Retsinformation, accessed 13 September 2026, <https://www.retsinformation.dk/eli/lta/2023/603>.
 
+Institut for Menneskerettigheder 2023, Rettigheder i den digitale velfaerdsstat, Danish Institute for Human Rights, Copenhagen, accessed 12 September 2026.
+
 Justitia 2022, Retssikkerhed for digitalt udsatte borgere, Justitia, Copenhagen, accessed 12 September 2026.
 
 Rigsrevisionen 2016, Beretning om besparelsespotentialet ved obligatorisk Digital Post på ca. 1 mia. kr. om året, National Audit Office of Denmark, Copenhagen, accessed 12 September 2026.
@@ -173,7 +177,7 @@ SMV:Digital 2026, Tilskudspuljer i 2026, SMV:Digital, Copenhagen, accessed 12 Se
 
 ### A.1 Declaration
 
-Generative AI was used throughout the assembly of this report's dataset and in drafting its prose. The tool and version were **[TOOL AND VERSION — to be completed by the author]**, used between the start of data assembly and submission on 17 September 2026. This appendix states what was delegated, how each delegation was checked, and — the part that matters — three occasions on which AI assistance introduced an error that validation caught and removed.
+Generative AI was used throughout the assembly of this report's dataset and in drafting its prose. The tool and version were **[TOOL AND VERSION — to be completed by the author]**, used between the start of data assembly and submission on 17 September 2026. This appendix states what was delegated, how each delegation was checked, and — the part that matters — four occasions on which AI assistance introduced an error that validation caught and removed.
 
 The governing principle was that corrections are recorded, not erased. Every error described below is still visible in the accompanying workbook, in sheets `07_LIMITATIONS` and `08_AI_LOG`. A marker can verify that the checks happened rather than taking this appendix's word for it.
 
@@ -181,9 +185,9 @@ The governing principle was that corrections are recorded, not erased. Every err
 
 | Step | Assistance used | How it was validated | Outcome |
 |---|---|---|---|
-| Source identification | Candidate authorities and dataset codes | Each source opened or search-verified against the issuing authority | Register of 23 sources in `03_SOURCES` |
+| Source identification | Candidate authorities and dataset codes | Each source opened or search-verified against the issuing authority | Register of 29 sources in `03_SOURCES`, 23 of them cited |
 | Value retrieval | Search for published values by indicator | Each value checked against the issuing authority's own publication | Every observation carries a `source_id` |
-| Workbook construction | The Python build script | Structural assertions at build time; a separate 1,610-check suite | `build_workbook.py`, re-runnable |
+| Workbook construction | The Python build script | Structural assertions at build time; a separate 1,782-check suite | `build_workbook.py`, re-runnable |
 | Figure production | The matplotlib figure script | Nine derived values re-computed and asserted against the report prose | `build_figures.py` |
 | Report drafting | Prose drafting and structuring | Every number traced to `02_MASTER`; arithmetic re-derived independently | The report body |
 | Self-audit | Adversarial review of the workbook and the draft | Findings checked against raw file contents before acceptance | Eleven defects fixed; see A.4 |
@@ -411,7 +415,9 @@ The series is plotted on the number of payments rather than their value, and the
 
 The displacement matters for Section 2's argument. Wallet payments are card payments, and the physical card share fell from 73% to 54% across the same period. Most of what replaced cash at the point of sale was therefore a different way of presenting a card, not a new instrument — which is what one would expect where an identity rail lowers the cost of building a new interface on existing payment infrastructure.
 
-### E.4 Labour productivity against the EU-27 average
+One consequence is not an economic one. Danmarks Nationalbank notes that as payments move digital, offline payment capability becomes more important as national contingency rather than less (Danmarks Nationalbank 2026): a payment system with no working fallback concentrates risk at the same time as it lowers cost. The same logic applies to the identity rail this report describes, and Section 4 measures who bears it when no fallback exists.
+
+### E.3 Labour productivity against the EU-27 average
 
 Figure E3
 
@@ -441,7 +447,7 @@ Section 6 recommends two measures. The second — restructuring SMV:Digital's al
 
 ### F.1 What the present scheme can and cannot establish
 
-SMV:Digital is better evaluated than most such schemes. Digitaliseringsstyrelsen links recipients to Danmarks Statistik registers and compares them with matched control firms, reporting revenue growth of 18 percentage points against the controls' 13, and employment growth of 8% against 4% (Digitaliseringsstyrelsen 2025b). That is register data with a comparison group, and it disposes of the naive reading of the scheme's own headline — that 65% of participants invested further Digitaliseringsstyrelsen 2025c — which compares applicants with the general SME population and is besides self-reported to the scheme's own funder.
+SMV:Digital is better evaluated than most such schemes. Digitaliseringsstyrelsen links recipients to Danmarks Statistik registers and compares them with matched control firms, reporting revenue growth of 18% against the controls' 13% — a gap of five percentage points — and employment growth of 8% against 4% (Digitaliseringsstyrelsen 2025b). That is register data with a comparison group, and it disposes of the naive reading of the scheme's own headline — that 65% of participants invested further Digitaliseringsstyrelsen 2025c — which compares applicants with the general SME population and is besides self-reported to the scheme's own funder.
 
 The residual problem is the one matching cannot reach. Recipients are matched on what the registers record: sector, size, age, prior trajectory. Selection into a voluntary scheme runs on what they do not record — managerial ambition, an existing digitalisation plan, the slack to write an application. Those are precisely the traits that also produce revenue growth, so the matched estimate retains an upward bias of unknown size. Closing it requires variation in funding that is independent of the firm, and matching cannot manufacture that.
 
@@ -463,7 +469,7 @@ Figure F1
 | Primary outcome | Subsequent own-funded digital investment, from register data |
 | Secondary outcomes | Employment, turnover, survival |
 | Data source | Danmarks Statistik register linkage, not self-report |
-| Measurement window | Baseline at scoring; endline 24 months after disbursement |
+| Measurement window | Baseline at scoring; endline 24 months after project start |
 | Required disclosure | Publication of all applicant scores and the cut-off |
 | Marginal cost | Administrative only; neither budget nor allocation rule changes |
 
@@ -516,3 +522,5 @@ That last holding is the one that bites hardest on a business case. Denmark's ju
 Neither ruling binds Denmark. The Conseil d'État decision concerns French administrative law and a specific applicant population — foreign nationals seeking residence permits — whose vulnerability the court treated as material. The Belgian ruling construes a Brussels regional ordinance against Belgian constitutional guarantees. Neither is a holding about *Lov om Offentlig Digital Post*, and this appendix does not claim that Denmark's mandate is unlawful.
 
 What they establish is narrower and still useful: that mandatory digital administration is contested law in comparable European jurisdictions, and that where courts have examined it they have converged on a condition Denmark's scheme does not satisfy. Act 603 of 2023 gives a non-digital alternative to citizens already exempt from Digital Post (Folketinget 2023). The French and Belgian rulings attach the entitlement to the *difficulty*, not to a prior administrative status. That is precisely the gap Section 4 measured and Section 6 proposes to close, and the comparison shows the proposal is not an outlier but a convergence.
+
+The point has also been made domestically. The Danish Institute for Human Rights, Denmark's national human rights institution, examined rights in the digital welfare state in December 2023 (Institut for Menneskerettigheder 2023). That a domestic body reached the subject independently of the litigation abroad is the more relevant fact here: the question is live in Denmark, not imported into it.

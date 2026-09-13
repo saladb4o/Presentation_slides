@@ -32,5 +32,5 @@ instrument, its outcome measures and its timeline.
 
 Both follow from one reading: Denmark built a rail, then left who could board it,
 and who could build on it, to a capability it never distributed. The evidence has
-limits, set out in Appendices A to C — not least that Section 2's cross-section
+limits, set out in Appendices A to G — not least that Section 2's cross-section
 establishes association, not cause.
