@@ -9,7 +9,7 @@ why, because the spread is the finding rather than an embarrassment.
 | Formally exempt from Digital Post | 4.7% | 2026 | Citizens aged 15+ | [[DG1:b]] |
 | Do not use digital public services | 6.5% | 2026 | Population | [[EC1:b]] |
 | Report difficulty using them | 16.5% | 2026 | Population | [[EC1:b]] |
-| "Digitally disadvantaged" | 17–22% | 2025 | Adult population | [[DG2:b]] |
+| "Digitally disadvantaged" | 17-22% | 2025 | Adult population | [[DG2:b]] |
 | Justitia estimate | Up to 25% | 2022 | Adult population | [[JU1:b]] |
 
 Three things vary together: what is being measured (a legal status, a behaviour,
@@ -37,7 +37,7 @@ different populations do not.
 
 Two of the five sources say "adult population" without defining it, and Denmark
 has no verified adult-population figure in this dataset. Those two are therefore
-shown as a range between the two defensible bases — the 15+ base of about 5.07
+shown as a range between the two defensible bases: the 15+ base of about 5.07
 million implied by the Digital Post statistics, and the total population of
 6,025,603 [[DST2]]. Choosing one silently is the error D.2 describes.
 
@@ -47,5 +47,5 @@ Exemption reaches 238,479 people. The narrowest estimate of need that measures
 difficulty rather than legal status is 16.5%, or roughly 994,000 on the stated
 base. The gap between the relief mechanism and the difficulty it relieves is
 therefore on the order of three-quarters of a million people, and that statement
-holds under any of the bases considered here — which is why Section 4 makes it in
+holds under any of the bases considered here, which is why Section 4 makes it in
 that form rather than as a precise subtraction.

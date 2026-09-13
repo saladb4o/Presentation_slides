@@ -121,13 +121,20 @@ def build_citations(used_ids):
     for sid in used_ids:
         author, year, title = author_year(SOURCES[sid]["harvard"])
         groups.setdefault((author, year), []).append((title, sid))
+
     cite, refs = {}, []
     for (author, year), entries in groups.items():
         entries.sort()
         multiple = len(entries) > 1
         for i, (title, sid) in enumerate(entries):
             suffix = chr(ord("a") + i) if multiple else ""
-            cite[sid] = (author, f"{year}{suffix}")
+            # Personal authors are listed "Surname, Initials" in the reference
+            # list but cited "Surname" in text, and four or more authors become
+            # "et al." A source may therefore carry an explicit in-text name;
+            # organisational authors, which are the great majority here, need
+            # none because the two forms coincide.
+            intext = SOURCES[sid].get("intext", author)
+            cite[sid] = (intext, f"{year}{suffix}")
             harvard = SOURCES[sid]["harvard"]
             refs.append(harvard.replace(f"{author} {year},",
                                         f"{author} {year}{suffix},", 1))

@@ -110,7 +110,7 @@ def fig1_branches():
     ax.set_xticks(yrs)
     ax.set_ylabel("Number of branches")
     ax.annotate("−67.2%", xy=(2016, 1250), fontsize=11, color=DARK, weight="bold")
-    title(ax, "Danish retail bank branches, 2004–2024",
+    title(ax, "Danish retail bank branches, 2004-2024",
           "Points at their true years; the gaps are real, not evenly spaced")
     return save(fig, "fig1_branches.png")
 
@@ -119,9 +119,9 @@ def fig2_consolidation():
     inst = (V[("DK.FIN.INST", 2024)] / V[("DK.FIN.INST", 1991)] - 1) * 100
     brch = (V[("DK.FIN.BRCH", 2024)] / V[("DK.FIN.BRCH", 2004)] - 1) * 100
     emp = (V[("DK.FIN.EMP", 2024)] / V[("DK.FIN.EMP", 1991)] - 1) * 100
-    labels = ["Financial institutions\n1991–2024",
-              "Bank branches\n2004–2024",
-              "Bank employment\n1991–2024"]
+    labels = ["Financial institutions\n1991-2024",
+              "Bank branches\n2004-2024",
+              "Bank employment\n1991-2024"]
     vals = [inst, brch, emp]
     fig, ax = plt.subplots(figsize=(WIDTH, 2.9))
     frame(ax, grid_axis="x")
@@ -137,7 +137,7 @@ def fig2_consolidation():
     ax.invert_yaxis()
     ax.set_xlabel("Change over the stated period (%)")
     title(ax, "Danish banking consolidated rather than shrank",
-          "Each bar spans its own window — the three are not comparable to each other")
+          "Each bar spans its own window; the three are not comparable to each other")
     return save(fig, "fig2_consolidation.png")
 
 
@@ -175,7 +175,7 @@ def fig3_regression():
             f"slope +{slope:.3f}   R² {r2:.3f}   n = {len(pairs)}",
             transform=ax.transAxes, ha="right", fontsize=8.5, color=MUTED)
     title(ax, "Consumer adoption and enterprise e-commerce, EU 2024",
-          "Denmark in blue. Association only — the fit does not establish cause")
+          "Denmark in blue. Association only; the fit does not establish cause")
     return save(fig, "fig3_regression.png")
 
 
@@ -225,7 +225,7 @@ def fig5_ai():
     ax.set_ylim(0, 88)
     ax.set_xlim(-0.55, 2.95)
     title(ax, "Who could build on the rail: AI adoption by firm size, 2025",
-          "The aggregate is greyed — it sits between the other two by construction")
+          "The aggregate is greyed; it sits between the other two by construction")
     return save(fig, "fig5_ai_firmsize.png")
 
 
@@ -251,7 +251,7 @@ def fig6_exclusion():
         if hi:
             ax.barh(y, hi - lo, left=lo, height=0.55, color=col,
                     alpha=0.45, zorder=3)
-            ax.text(hi + 0.6, y, f"{lo:.0f}–{hi:.0f}%", va="center",
+            ax.text(hi + 0.6, y, f"{lo:.0f}-{hi:.0f}%", va="center",
                     fontsize=9, color=INK)
         else:
             ax.text(lo + 0.6, y, f"{lo:.1f}%".replace(".0%", "%"), va="center",
@@ -261,14 +261,14 @@ def fig6_exclusion():
     ax.set_xlim(0, 30)
     ax.set_xlabel("Share of the stated population (%)")
     title(ax, "The relief mechanism is narrower than the need",
-          "Denominators and years differ — a ladder of estimates, not a series")
+          "Denominators and years differ: a ladder of estimates, not a series")
     return save(fig, "fig6_exclusion.png")
 
 
 def fig7_skills():
-    bands = [("16–24", "DK.SKL.1624", "EU.SKL.1624"),
-             ("25–54", "DK.SKL.2554", "EU.SKL.2554"),
-             ("55–74", "DK.SKL.5574", "EU.SKL.5574")]
+    bands = [("16-24", "DK.SKL.1624", "EU.SKL.1624"),
+             ("25-54", "DK.SKL.2554", "EU.SKL.2554"),
+             ("55-74", "DK.SKL.5574", "EU.SKL.5574")]
     dk = [V[(b[1], 2025)] for b in bands]
     eu = [V[(b[2], 2025)] for b in bands]
     x = np.arange(3)
@@ -302,7 +302,7 @@ def fig8_smv():
                 ha="center", fontsize=9, color=INK)
     ax.set_ylabel("% of participants")
     ax.set_ylim(0, 78)
-    title(ax, "SMV:Digital participation — self-reported, no control group",
+    title(ax, "SMV:Digital participation, as reported by the scheme",
           f"Shares of ~{int(n):,} supported projects. The count is off-axis: it is "
           f"not a percentage")
     return save(fig, "fig8_smvdigital.png")
@@ -334,8 +334,6 @@ def verify():
         "67.2": abs(brch), "76.7": abs(inst), "29.4": abs(emp),
         "0.602": slope, "0.674": r2, "18": float(len(pairs)),
         "33.53": V[("DK.ENT.AI.LRG", 2025)] - V[("DK.ENT.AI.SME", 2025)],
-        "24.25": V[("DK.SKL.1624", 2025)] - V[("DK.SKL.5574", 2025)],
-        "31.95": V[("EU.SKL.1624", 2025)] - V[("EU.SKL.5574", 2025)],
     }
     prose = ""
     draft = os.path.join(ROOT, "report", "draft")
@@ -441,7 +439,7 @@ def figC2_jackknife():
     ax.text(0.824, -0.85, "95% CI  ", fontsize=7.5, color=MUTED,
             ha="right", va="center")
     title(ax, "The slope survives dropping any single member state",
-          f"Range [{min(slopes):.3f}, {max(slopes):.3f}] — never near zero, never sign-flipping")
+          f"Range [{min(slopes):.3f}, {max(slopes):.3f}]: never near zero, never sign-flipping")
     return save(fig, "figA_c2_jackknife.png")
 
 
@@ -513,7 +511,7 @@ def figD1_denominators():
         if hi > lo:
             ax.barh(i, hi - lo, left=lo, height=0.55, color=col, alpha=0.40,
                     zorder=3)
-            ax.text(hi + 14, i, f"{lo:,.0f}–{hi:,.0f}k  ({pct:g}%)", va="center",
+            ax.text(hi + 14, i, f"{lo:,.0f}-{hi:,.0f}k  ({pct:g}%)", va="center",
                     fontsize=8.5, color=INK)
         else:
             ax.text(lo + 14, i, f"{lo:,.0f}k  ({pct:g}%)", va="center",

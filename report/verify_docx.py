@@ -134,6 +134,22 @@ def main():
               f"{sid} is declared REFERENCE_ONLY - meaning it supports argument "
               f"in the report - but the report never cites it")
 
+    # House style, set by the author: no em or en dashes anywhere in the
+    # document. They are checked on the rendered text rather than the drafts
+    # because figure titles, captions and generated reference strings also
+    # reach the page and are easy to forget.
+    # Remove the reference-list strings from the text first, so what remains is
+    # only prose this report wrote. Counting instead of removing would let a
+    # stray dash in the body hide behind a dash in a title.
+    prose = text
+    for ref in r["references"]:
+        prose = prose.replace(ref, "")
+    for ch, name in (("\u2014", "em dash"), ("\u2013", "en dash")):
+        n = prose.count(ch)
+        check(n == 0,
+              f"{n} {name}(s) in the report's own prose; house style is none. "
+              f"Quoted source titles in the reference list are exempt")
+
     print(f"{checks} checks run")
     if failures:
         print(f"\n{len(failures)} FAILURES:")

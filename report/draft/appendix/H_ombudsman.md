@@ -11,7 +11,7 @@ In FOB 2015-22 the Ombudsman held that Public Digital Post must be arranged in
 accordance with general administrative law requirements [[OMB1]]. Two requirements
 were at issue in the design as built. A message from a public authority must carry
 a correct sender designation, the governing principle being that it must be
-visible to the citizen which authority they are dealing with — without which an
+visible to the citizen which authority they are dealing with, without which an
 administrative appeal cannot be directed at anyone. And the system had to secure
 the integrity and authenticity of a stored document: that its content is original,
 and that it genuinely originates from the stated sender.
@@ -46,7 +46,7 @@ delivery and the risk of any gap falls on the citizen. Where the citizen sends,
 the same twenty-second infrastructure was treated as too uncertain to rely on, and
 the risk fell on the citizen again. It took the Ombudsman to disturb the second.
 Section 4's claim that the exclusion is administrative rather than technical is
-precisely this — the infrastructure worked; the allocation of risk around it did
+precisely this: the infrastructure worked; the allocation of risk around it did
 not.
 
 ### H.3 What this appendix does not claim

@@ -10,14 +10,14 @@ Section 3 names three of these twenty-seven by number. The full ranking places
 Denmark third at 90.86%, behind Ireland (95.79%) and the Netherlands (94.42%) and
 above Sweden (89.89%), against an EU-27 average of 76.58% [[ES7]]. The measure is
 the share of **internet users** who made an online purchase in the preceding
-twelve months, not the share of all individuals — the denominator that changed in
+twelve months, not the share of all individuals, which is the denominator that changed in
 2020 and is flagged in `02_MASTER`.
 
 This cross-section is complete: all twenty-seven member states report the
 adoption measure. It is the outcome measure, e-sales turnover, that is missing
 for nine of them, which is why the regression in Appendix C rests on eighteen.
 
-### E.2 Payment instruments in physical retail, 2017–2025
+### E.2 Payment instruments in physical retail, 2017-2025
 
 [[AF_PAY]]
 
@@ -34,7 +34,7 @@ only once, in 2025, so it is drawn as a single point rather than a trend.
 The displacement matters for Section 2's argument. Wallet payments are card
 payments, and the physical card share fell from 73% to 54% across the same
 period. Most of what replaced cash at the point of sale was therefore a different
-way of presenting a card, not a new instrument — which is what one would expect
+way of presenting a card rather than a new instrument, which is what one would expect
 where an identity rail lowers the cost of building a new interface on existing
 payment infrastructure.
 
@@ -65,6 +65,6 @@ What it establishes is therefore modest and worth stating plainly: across the
 period Denmark built its digital infrastructure, its productivity position
 improved against the EU average and has not returned to where it started. The
 series is consistent with the report's argument. It does not demonstrate it, and
-no single-country time series could — the 2021 peak coincides with a pandemic
+no single-country time series could: the 2021 peak coincides with a pandemic
 that moved measured productivity everywhere, which is the clearest possible
 illustration that this series responds to more than digital policy.

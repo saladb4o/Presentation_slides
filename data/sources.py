@@ -450,6 +450,7 @@ SOURCES = {
         ),
     ),
     "HOW1": dict(
+        intext="Howell",
         authority="Howell, S.T.",
         title="Financing Innovation: Evidence from R&D Grants",
         dataset_code="American Economic Review 107(4)",
@@ -461,6 +462,7 @@ SOURCES = {
         ),
     ),
     "SAN1": dict(
+        intext="Santoleri et al.",
         authority="Santoleri, P., Barrows, G., Caravella, S., Crespi, F. and Pellegrino, G.",
         title=(
             "The Causal Effects of R&D Grants: Evidence from a Regression "

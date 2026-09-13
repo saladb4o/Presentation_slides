@@ -1,10 +1,10 @@
 ### A.1 Declaration
 
 Generative AI was used throughout the assembly of this report's dataset and in
-drafting its prose. The tool and version were **[TOOL AND VERSION — to be
+drafting its prose. The tool and version were **[TOOL AND VERSION: to be
 completed by the author]**, used between the start of data assembly and
 submission on 17 September 2026. This appendix states what was delegated, how
-each delegation was checked, and — the part that matters — four occasions on
+each delegation was checked and, most importantly, four occasions on
 which AI assistance introduced an error that validation caught and removed.
 
 The governing principle was that corrections are recorded, not erased. Every
@@ -31,7 +31,7 @@ The word is used operationally, not as reassurance. Four rules were enforced:
 - Every retained observation resolves to a named issuing authority in
   `03_SOURCES`, with a URL and an access date.
 - No value appears in the report that is not in `02_MASTER`. No figure sheet in
-  the workbook contains a typed number — only formulas referencing `02_MASTER`.
+  the workbook contains a typed number, only formulas referencing `02_MASTER`.
 - Structural claims are enforced by executable assertions, not by reading. The
   suite runs 1,782 checks and fails the build if any is violated.
 - Where a value could not be verified against its issuing authority, it was
@@ -42,7 +42,7 @@ The word is used operationally, not as reassurance. Four rules were enforced:
 **A fabricated dataset.** An early candidate dataset produced with AI assistance
 carried real Eurostat dataset codes and plausible extraction dates. Cross-checking
 its country values against Eurostat's published ranking showed the ordering was
-inverted — the values were not merely wrong but fabricated around correct-looking
+inverted: the values were not merely wrong but fabricated around correct-looking
 metadata. The dataset was rejected in full, not repaired. This is the most
 dangerous failure mode encountered, because the metadata was more convincing than
 the numbers.
@@ -78,9 +78,9 @@ harder to notice, because a critical claim reads as caution rather than as a
 factual assertion requiring a source.
 
 A fifth class is worth recording because it is the opposite failure. During
-self-audit, the audit tooling raised four alarms — an under-cited figure, an
-off-palette chart, scatters with no y-values, and a mis-sized figure — all four
-of which were false, caused by the tooling's own regexes not handling XML
+self-audit, the audit tooling raised four alarms: an under-cited figure, an
+off-palette chart, scatters with no y-values and a mis-sized figure. All four
+were false, caused by the tooling's own regexes not handling XML
 namespaces and object types. They were cleared against the raw file contents. An
 AI-generated check is itself an AI artefact and needs the same scepticism as an
 AI-generated number.
@@ -90,7 +90,7 @@ AI-generated number.
 The research question, the country, the policy instrument, the SDG selection, the
 argument and its thesis, and the judgement about which findings are defensible.
 Where the evidence and a preferred conclusion disagreed, the evidence was
-followed — four times, as recorded above.
+followed, on four occasions recorded above.
 
 ### A.6 Residual risk
 
