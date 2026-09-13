@@ -36,13 +36,33 @@ that is independent of the firm, and matching cannot manufacture that.
 | Allocation | Unchanged: highest-scoring applicants funded until the pool is exhausted |
 | Treatment arm | Applicants scoring just above the funding cut-off |
 | Control arm | Applicants scoring just below it |
-| Identifying assumption | Firms cannot precisely control their own score |
+| Identifying assumption | Baseline outcomes vary continuously across the cut-off; firms cannot precisely manipulate their own score |
 | Primary outcome | Subsequent own-funded digital investment, from register data |
 | Secondary outcomes | Employment, turnover, survival |
 | Data source | Danmarks Statistik register linkage, not self-report |
+| Legal basis for linkage | Statistical and research processing, as the existing effect measurement already relies on |
 | Measurement window | Baseline at scoring; endline 24 months after project start |
 | Required disclosure | Publication of all applicant scores and the cut-off |
 | Marginal cost | Administrative only; neither budget nor allocation rule changes |
+
+The design is not novel, which is the point of proposing it. Howell evaluated the
+US Department of Energy's SBIR programme by exploiting the ranking of applicants,
+finding that an early-stage award roughly doubles the probability of subsequent
+venture capital and raises patenting and revenue — with effects strongest among
+the most financially constrained firms [[HOW1]], which is the subgroup a Danish
+SME scheme is aimed at. Santoleri and colleagues applied the same approach to the
+Horizon 2020 SME Instrument's own scoring threshold [[SAN1]]. SMV:Digital already
+scores applicants; what it does not do is retain the scores in a form that permits
+the comparison those studies made.
+
+Two assumptions do the work, and the table separates them because they are
+routinely conflated. Continuity requires that firms just below the cut-off would,
+absent the grant, have done about as well as those just above — it is what makes
+the comparison a counterfactual. No-manipulation requires that firms cannot place
+themselves on the funded side at will, which is testable after the fact by
+inspecting the density of scores around the threshold. Assessor-scored
+applications satisfy the second more credibly than a self-reported eligibility
+rule would.
 
 Three features carry the argument. Near the cut-off, whether a firm is funded
 turns on assessor variation rather than on the firm — so above and below are

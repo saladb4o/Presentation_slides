@@ -1,10 +1,10 @@
 ## 6. Recommendation and limitations
 
 The report opened on a projection of roughly DKK 1,000 million a year.
-Rigsrevisionen could verify DKK 450 million of it — postage, paper and envelopes.
-The wage and overhead component was never substantiated, and the study meant to
-settle it was abandoned when the municipalities declined to take part [[RR1]].
-Denmark compels its adult population onto a business case 55% unaudited.
+Rigsrevisionen could verify DKK 450 million of it — postage, paper and envelopes. The
+wage and overhead component was never substantiated, and the study meant to settle
+it was abandoned when the municipalities declined to take part [[RR1]]. Denmark
+compels its adult population onto a business case 55% unaudited.
 
 Two measures follow. First, the exemption criteria in *Lov om Offentlig Digital
 Post* should be widened to admit documented difficulty. Denmark already fixed the
@@ -23,9 +23,9 @@ Its effect is better evidenced than most such schemes:
 Digitaliseringsstyrelsen matches recipients to comparable firms in the Danmarks
 Statistik registers and finds revenue growth five percentage points higher
 [[DG5]]. But matching handles selection on what the registers record — sector,
-size, age, prior trajectory — not on what they do not, and for a voluntary scheme
-that residual is the whole problem: a manager ambitious enough to apply is
-ambitious enough to grow unaided. The next pool opens 26 October 2026 [[SMV1]],
+size, age, prior trajectory — not on what they do not, and for a voluntary scheme that
+residual is the whole problem: a manager ambitious enough to apply is ambitious
+enough to grow unaided. The next pool opens 26 October 2026 [[SMV1]],
 and its eligibility scoring already produces a threshold that would identify the
 effect directly. Appendix F specifies the
 instrument, its outcome measures and its timeline.

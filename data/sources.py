@@ -396,6 +396,87 @@ SOURCES = {
             "<https://fr.const-court.be/public/f/2025/2025-126f.pdf>."
         ),
     ),
+    "OMB1": dict(
+        authority="Folketingets Ombudsmand",
+        title=(
+            "Offentlig Digital Post skal indrettes i overensstemmelse med de "
+            "almindelige forvaltningsretlige krav"
+        ),
+        dataset_code="FOB 2015-22",
+        url="https://www.ombudsmanden.dk/find-viden/udtalelser/2015/2015-22",
+        accessed="13 September 2026",
+        harvard=(
+            "Folketingets Ombudsmand 2015, Offentlig Digital Post skal "
+            "indrettes i overensstemmelse med de almindelige forvaltningsretlige "
+            "krav, FOB 2015-22, Parliamentary Ombudsman, Copenhagen, accessed "
+            "13 September 2026, <https://www.ombudsmanden.dk/find-viden/"
+            "udtalelser/2015/2015-22>."
+        ),
+    ),
+    "OMB2": dict(
+        authority="Folketingets Ombudsmand",
+        title=(
+            "Klage har foert til ny praksis i forhold til sene digitale klager "
+            "- complaint sent through Digital Post at 23:43 on the deadline day"
+        ),
+        dataset_code="News item, 2024",
+        url=(
+            "https://www.ombudsmanden.dk/find-viden/nyheder/2024/klage-har-"
+            "foert-til-ny-praksis-i-forhold-til-sene-digitale-klager"
+        ),
+        accessed="13 September 2026",
+        harvard=(
+            "Folketingets Ombudsmand 2024, Klage har foert til ny praksis i "
+            "forhold til sene digitale klager, Parliamentary Ombudsman, "
+            "Copenhagen, accessed 13 September 2026, "
+            "<https://www.ombudsmanden.dk/find-viden/nyheder/2024/klage-har-"
+            "foert-til-ny-praksis-i-forhold-til-sene-digitale-klager>."
+        ),
+    ),
+    "NO1": dict(
+        authority="Digitaliseringsdirektoratet (Digdir)",
+        title=(
+            "Kontakt- og reservasjonsregisteret and the statutory right to opt "
+            "out of digital communication under eForvaltningsforskriften"
+        ),
+        dataset_code="KRR",
+        url="https://www.digdir.no/digitale-felleslosninger/kontakt-og-reservasjonsregisteret-krr/865",
+        accessed="13 September 2026",
+        harvard=(
+            "Digitaliseringsdirektoratet 2025, Kontakt- og "
+            "reservasjonsregisteret, Norwegian Digitalisation Agency, accessed "
+            "13 September 2026, <https://www.digdir.no/digitale-felleslosninger/"
+            "kontakt-og-reservasjonsregisteret-krr/865>."
+        ),
+    ),
+    "HOW1": dict(
+        authority="Howell, S.T.",
+        title="Financing Innovation: Evidence from R&D Grants",
+        dataset_code="American Economic Review 107(4)",
+        url="https://www.aeaweb.org/articles?id=10.1257%2Faer.20150808",
+        accessed="13 September 2026",
+        harvard=(
+            "Howell, ST 2017, 'Financing innovation: evidence from R&D grants', "
+            "American Economic Review, vol. 107, no. 4, pp. 1136-1164."
+        ),
+    ),
+    "SAN1": dict(
+        authority="Santoleri, P., Barrows, G., Caravella, S., Crespi, F. and Pellegrino, G.",
+        title=(
+            "The Causal Effects of R&D Grants: Evidence from a Regression "
+            "Discontinuity - the Horizon 2020 SME Instrument scoring threshold"
+        ),
+        dataset_code="Working paper",
+        url="https://pietrosantoleri.github.io/files/Santoleri_et_al_The_effects_of_R_D_grants.pdf",
+        accessed="13 September 2026",
+        harvard=(
+            "Santoleri, P, Barrows, G, Caravella, S, Crespi, F and Pellegrino, "
+            "G 2022, The causal effects of R&D grants: evidence from a "
+            "regression discontinuity, working paper, accessed 13 September "
+            "2026, <https://pietrosantoleri.github.io/files/"
+            "Santoleri_et_al_The_effects_of_R_D_grants.pdf>."
+        ),
+    ),
 }
 
 # Sources held for the report's reference list that no workbook observation uses
@@ -413,6 +494,11 @@ REFERENCE_ONLY = frozenset({
              # workbook could be traced back to a row.
     "CE1",   # Conseil d'Etat and Cour constitutionnelle: comparative legal
     "BE1",   # authority for Appendix G. Rulings, not observations.
+    "OMB1",  # The Parliamentary Ombudsman on Digital Post's design and on
+    "OMB2",  # deadlines; Norway's opt-out register; and the two regression
+    "NO1",   # discontinuity papers behind Appendix F's instrument. All are
+    "HOW1",  # argument or comparative authority, not Danish observations.
+    "SAN1",
     "BRH1",  # German Federal Court of Auditors on lottery allocation - the
              # reason Appendix F rejects that instrument. Argument, not data.
 })

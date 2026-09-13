@@ -10,7 +10,7 @@ Accompanying data file: ECON1596_A2_Denmark_DataWorkbook_s4040040.xlsx
 
 ## 1. The instrument and what it was meant to buy
 
-Denmark did not persuade its citizens onto digital public services. It required them. *Lov om Offentlig Digital Post* (Denmark 2012) made a state-run digital mailbox the default legal channel for public correspondence — compulsory for businesses from 2013 and for every citizen aged 15 and over from 1 November 2014. Enrolment is automatic, and §10 deems delivery effective when a message becomes available rather than when it is read, so the consequence of non-engagement falls on the recipient. Exemption exists, but only against statutory criteria (Table 1).
+Denmark did not persuade its citizens onto digital public services. It required them. *Lov om Offentlig Digital Post* (Denmark 2012) made a state-run digital mailbox the default legal channel for public correspondence — compulsory for businesses from 2013 and for every citizen aged 15 and over from 1 November 2014. Enrolment is automatic, and §10 deems delivery effective when a message becomes available rather than when it is read, placing the consequence of non-engagement on the recipient. Exemption exists only against statutory criteria (Table 1).
 
 The mandate rode on a single national identity credential: NemID, replaced by MitID from October 2021 and withdrawn on 31 October 2023 (Digitaliseringsstyrelsen 2025a). That pairing is the design. A mandate alone moves letters; a mandate plus one universal credential builds a *rail* — an authentication layer every Dane must hold and every firm may build on without financing its adoption. Rails are innovation infrastructure: they lower the fixed cost of whatever is built on top.
 
@@ -33,15 +33,15 @@ The programme was justified on a number: the Ministry of Finance business case p
 
 The rail's value is not that Danes use it — compulsion settles that — but what others built on it, and where that building stopped.
 
-Banking shows the magnitude. Danish retail bank branches fell from 2,025 in 2004 to 665 in 2024, a decline of 67.2% (Figure 1; Finans Danmark 2025). Read alone, that suggests digitalisation destroyed banking employment. The longer series refuses it: between 1991 and 2024 the number of financial institutions fell by 76.7%, from 219 to 51, while bank employment fell by only 29.4%, from roughly 51,000 to 36,000 (Figure 2). Staff per surviving institution therefore rose from 233 to 706, an increase of 203%: consolidation concentrated the sector rather than shedding it. The branch series begins only in 2004, so the three changes span different windows and must not be differenced (Appendix B).
+Banking shows the magnitude. Danish retail bank branches fell from 2,025 in 2004 to 665 in 2024, a decline of 67.2% (Figure 1; Finans Danmark 2025). Read alone, that suggests digitalisation destroyed banking employment. The longer series refuses it. Between 1991 and 2024 the number of financial institutions fell by 76.7%, from 219 to 51, while bank employment fell by only 29.4%, from roughly 51,000 to 36,000 (Figure 2). Staff per surviving institution therefore rose from 233 to 706, an increase of 203%: consolidation concentrated the sector rather than shedding it. The branch series begins only in 2004, so the three changes span different windows and must not be differenced (Appendix B).
 
-Payments moved with it. Cash fell from 23% to 9% of the *number* of payments in physical retail between 2017 and 2025, to under two-fifths of its 2017 share, while card-based mobile wallets reached 32% of the same measure (Danmarks Nationalbank 2025). Much of this is displacement within digital instruments: wallet payments are card payments, and the physical card share fell from 73% to 54% (Appendix E). What replaced cash was mostly a new interface onto existing card infrastructure — which is what a rail makes cheap to build. Cash acceptance remains a statutory obligation on shops under *lov om betalinger* §81, narrowed but not removed in 2022 (Finanstilsynet 2025).
+Payments moved with it. Cash fell from 23% to 9% of the *number* of payments in physical retail between 2017 and 2025, while card-based mobile wallets reached 32% of the same measure (Danmarks Nationalbank 2025). Much of this is displacement within digital instruments: wallet payments are card payments, and the physical card share fell from 73% to 54% (Appendix E). What replaced cash was mostly a new interface onto existing card infrastructure — which is what a rail makes cheap to build. Cash acceptance remains a statutory obligation on shops under *lov om betalinger* §81, narrowed but not removed in 2022 (Finanstilsynet 2025).
 
 Does wider consumer adoption accompany greater commercial activity? Figure 3 plots the share of internet users purchasing online against enterprise e-sales turnover across the European Union in 2024. On the 18 member states holding both measures, the fitted slope is +0.602 percentage points of turnover per percentage point of adoption (standard error 0.105; t = 5.75 on 16 degrees of freedom; 95% confidence interval [0.380, 0.824]; R² = 0.674) (Eurostat 2026a; Eurostat 2025c).
 
 Appendix C reports the diagnostics; three matter here. An earlier version drew its adoption values from a Eurostat news release (Eurostat 2025a) naming only the distribution's ends, where the fit was R² 0.853 against 0.674 here and the slope moved by 8% — selection bias measured rather than asserted. The slope survives dropping any single state, ranging [0.516, 0.672]. And the nine states absent for want of the turnover measure are indistinguishable from the plotted eighteen on adoption (p ≈ 0.71).
 
-Causation is neither established nor establishable from this design. Adoption measures consumers; turnover measures enterprises, including business-to-business ordering no consumer touches. Both plausibly rise with national income, which appears on neither axis. Denmark sits above the fitted line, but by less than one residual standard error and behind three other member states: consistent with the European pattern, not exceptional to it.
+Causation is neither established nor establishable from this design. Adoption measures consumers; turnover measures enterprises, including business-to-business ordering no consumer touches. Both plausibly rise with national income, which appears on neither axis. Denmark sits above the fitted line by less than one residual standard error, behind three other member states: consistent with the European pattern, not exceptional to it.
 
 ![Figure 1 - Danish retail bank branches, 2004-2024. Finans Danmark; workbook F1_BRANCHES.](figures/fig1_branches.png)
 
@@ -61,9 +61,9 @@ Causation is neither established nor establishable from this design. Adoption me
 
 "Breadth" has two subjects in Denmark and they point opposite ways. Citizen breadth is near-complete: 90.86% of Danish internet users bought online in 2024, third of the twenty-seven member states (Eurostat 2026a); the ranking is in Appendix E. Enterprise breadth is not. Only 38.78% of Danish enterprises make any e-sales at all — second in the Union, behind Lithuania's 43.03%, and still under two firms in five (Eurostat 2025b). Denmark leads Europe at a level most Danish firms have not reached.
 
-Intensity moved where breadth did not. E-sales rose from 17.05% of enterprise turnover in 2014 to 33.31% in 2024, while the EU-27 average rose from 16.43% to 19.49% (Figure 4). Both began the decade level; Denmark roughly doubled, the EU gained three percentage points.
+Intensity moved where breadth did not. E-sales rose from 17.05% of enterprise turnover in 2014 to 33.31% in 2024, against an EU-27 average moving from 16.43% to 19.49% (Figure 4). Both began level; Denmark roughly doubled, the EU gained three points.
 
-The same pattern governs the newest technology, and identifies who could build on the rail. In 2025, 42.03% of Danish enterprises used artificial intelligence — but 74.52% of large firms against 40.99% of small and medium-sized ones, a gap of 33.53 points (Figure 5; European Commission 2026). This is not a connectivity or literacy failure: 92.45% of Danish SMEs clear the basic digital-intensity threshold, against an EU average of 71.39%. What they lack is the complementary capital — data, integration, specialist staff — that turns access into application, and that capital is distributed by firm size. Compulsion can mandate access to infrastructure; it cannot mandate the absorptive capacity that turns infrastructure into product.
+The same pattern governs the newest technology, and identifies who could build on the rail. In 2025, 42.03% of Danish enterprises used artificial intelligence — but 74.52% of large firms against 40.99% of SMEs, a gap of 33.53 points (Figure 5; European Commission 2026). This is not a connectivity or literacy failure: 92.45% of Danish SMEs clear the basic digital-intensity threshold, against an EU average of 71.39%. What they lack is the complementary capital — data, integration, specialist staff — that turns access into application, and that capital is distributed by firm size. Compulsion can mandate access to infrastructure; it cannot mandate the absorptive capacity that turns infrastructure into product.
 
 Nor did it guarantee quality. Denmark scores 82.2 on the Digital Decade measure of digital public services for citizens, below the EU average of 84.64: Europe's most compulsory digital government delivers below-average services through it.
 
@@ -85,11 +85,11 @@ Start where the mandate bites hardest. Among Danish citizens aged 75–84, 20% h
 
 Against that, the aggregate looks small: in the first quarter of 2026, 4.7% of citizens aged 15 and over — 238,479 people — were exempt. It is small because the affected population is small, not because exclusion is rare where it lands.
 
-Exemption is also the narrowest available measure. Figure 6 sets it against four wider estimates. They are not strictly comparable — measure, year and denominator all differ — so read it as a ladder, not a series; Appendix D reconciles them. Some 6.5% of Danes do not use digital public services at all and 16.5% report difficulty using them (European Commission 2026); the widest estimates reach a quarter of adults ((Digitaliseringsstyrelsen 2025d); (Justitia 2022)). The counts are clearer than the percentages: exemption reaches 238,479 people, while 16.5% of a population of 6.03 million (Danmarks Statistik 2026) is roughly 994,000, the lowest credible estimate of need. On the order of 750,000 Danes struggle with a compulsory system and hold no formal standing outside it.
+Exemption is also the narrowest available measure. Figure 6 sets it against four wider estimates. They are not comparable — measure, year and denominator all differ — so read it as a ladder, not a series; Appendix D reconciles them. Some 6.5% of Danes do not use digital public services at all and 16.5% report difficulty using them (European Commission 2026); the widest estimates reach a quarter of adults ((Digitaliseringsstyrelsen 2025d); (Justitia 2022)). The counts are clearer than the percentages: exemption reaches 238,479 people, while 16.5% of a population of 6.03 million (Danmarks Statistik 2026) is roughly 994,000, the lowest credible estimate of need. On the order of 750,000 Danes struggle with a compulsory system and hold no formal standing outside it.
 
 Weak digital skills would be the convenient explanation; the data refuse it. Denmark's weakest age band, 55–74, reaches 67.81% with at least basic digital skills against an EU average of 42.60%. Denmark leads the Union in all three bands, and its gradient from youngest to oldest is 24.25 percentage points against the EU's 31.95 (Figure 7).
 
-The exclusion is therefore administrative, not a capability deficit: the mandate was calibrated above the bottom of its own distribution, and the exemption criteria were drawn narrower than the difficulty they relieve. A rail everyone must board and a sixth of the population finds hard to use is a universal obligation, not a universal opportunity.
+The exclusion is administrative, not a capability deficit: the mandate was calibrated above the bottom of its own distribution, and the exemption criteria were drawn narrower than the difficulty they relieve. The Ombudsman has twice found the same asymmetry in the design (Appendix H). A rail everyone must board and a sixth of the population finds hard to use is a universal obligation, not a universal opportunity.
 
 ![Figure 6 - Five estimates of Danish digital exclusion; denominators and years differ. Workbook F4.](figures/fig6_exclusion.png)
 
@@ -135,6 +135,8 @@ Danmarks Statistik 2026, Befolkningstal, Statistics Denmark, Copenhagen, accesse
 
 Denmark 2012, Lov om Offentlig Digital Post (LOV nr 528 af 11/06/2012), Retsinformation, Copenhagen, accessed 12 September 2026.
 
+Digitaliseringsdirektoratet 2025, Kontakt- og reservasjonsregisteret, Norwegian Digitalisation Agency, accessed 13 September 2026, <https://www.digdir.no/digitale-felleslosninger/kontakt-og-reservasjonsregisteret-krr/865>.
+
 Digitaliseringsstyrelsen 2025a, Digital Post – lovgivning, Agency for Digital Government, Copenhagen, accessed 12 September 2026.
 
 Digitaliseringsstyrelsen 2025b, Effektmaaling af SMV:Digital, June 2025, Agency for Digital Government, accessed 13 September 2026, <https://digst.dk/media/yz2ouzzz/effektmaaling-af-smvdigital-2025.pdf>.
@@ -163,6 +165,12 @@ Finanstilsynet 2025, Kontantreglen, Danish Financial Supervisory Authority, Cope
 
 Folketinget 2023, Lov om fravigelse fra obligatorisk digital selvbetjening, LOV nr 603 af 31. maj 2023, in force 1 June 2023, Retsinformation, accessed 13 September 2026, <https://www.retsinformation.dk/eli/lta/2023/603>.
 
+Folketingets Ombudsmand 2015, Offentlig Digital Post skal indrettes i overensstemmelse med de almindelige forvaltningsretlige krav, FOB 2015-22, Parliamentary Ombudsman, Copenhagen, accessed 13 September 2026, <https://www.ombudsmanden.dk/find-viden/udtalelser/2015/2015-22>.
+
+Folketingets Ombudsmand 2024, Klage har foert til ny praksis i forhold til sene digitale klager, Parliamentary Ombudsman, Copenhagen, accessed 13 September 2026, <https://www.ombudsmanden.dk/find-viden/nyheder/2024/klage-har-foert-til-ny-praksis-i-forhold-til-sene-digitale-klager>.
+
+Howell, ST 2017, 'Financing innovation: evidence from R&D grants', American Economic Review, vol. 107, no. 4, pp. 1136-1164.
+
 Institut for Menneskerettigheder 2023, Rettigheder i den digitale velfaerdsstat, Danish Institute for Human Rights, Copenhagen, accessed 12 September 2026.
 
 Justitia 2022, Retssikkerhed for digitalt udsatte borgere, Justitia, Copenhagen, accessed 12 September 2026.
@@ -170,6 +178,8 @@ Justitia 2022, Retssikkerhed for digitalt udsatte borgere, Justitia, Copenhagen,
 Rigsrevisionen 2016, Beretning om besparelsespotentialet ved obligatorisk Digital Post på ca. 1 mia. kr. om året, National Audit Office of Denmark, Copenhagen, accessed 12 September 2026.
 
 SMV:Digital 2026, Tilskudspuljer i 2026, SMV:Digital, Copenhagen, accessed 12 September 2026.
+
+Santoleri, P, Barrows, G, Caravella, S, Crespi, F and Pellegrino, G 2022, The causal effects of R&D grants: evidence from a regression discontinuity, working paper, accessed 13 September 2026, <https://pietrosantoleri.github.io/files/Santoleri_et_al_The_effects_of_R_D_grants.pdf>.
 
 ---
 
@@ -337,6 +347,8 @@ Nine member states report adoption but not turnover: EE, EL, FI, LT, LV, NL, PT,
 
 They average **75.67%** on adoption against the plotted eighteen's **77.23%** — a difference of −1.57pp, with a two-sample t of −0.372 on 25 degrees of freedom, p ≈ 0.71. The two groups are statistically indistinguishable on the x-axis. The sample is missing on availability of the outcome measure, not selected on the regressor.
 
+That test has a limit worth stating, because it is the strongest objection to this section. Balance on the regressor is not balance on the outcome, and the reasons a national statistical institute fails to publish an e-sales turnover figure are not all random with respect to economic structure. Eurostat requires turnover at basic prices excluding VAT, and rejects national submissions failing coherence checks against Structural Business Statistics. Web and EDI sales behave differently — EDI carries industrial business-to-business volume, so a small change in which large manufacturers fall into the sample can move a national share by several points. And secondary suppression removes a national total outright where one or two dominant firms in a NACE division would let their figure be recovered by subtraction. That last mechanism is the troubling one: it makes missingness a function of market concentration, which is plausibly related to enterprise e-commerce intensity. A balance test on consumer adoption cannot detect it. The honest statement is that the nine are missing for administrative and disclosure reasons rather than for anything this section could observe, which is weaker than missing at random and stronger than selected on the outcome.
+
 ### C.6 What this design still cannot do
 
 Adoption is measured on consumers and turnover on enterprises, including business-to-business ordering no consumer ever touches, so the two axes are not two sides of one transaction. National income appears on neither axis and would plausibly raise both. Both are single-year cross-sections, so nothing here identifies a direction of causation. The relationship is an association that survives every robustness check available on eighteen observations, and that is the whole of the claim.
@@ -465,13 +477,18 @@ Figure F1
 | Allocation | Unchanged: highest-scoring applicants funded until the pool is exhausted |
 | Treatment arm | Applicants scoring just above the funding cut-off |
 | Control arm | Applicants scoring just below it |
-| Identifying assumption | Firms cannot precisely control their own score |
+| Identifying assumption | Baseline outcomes vary continuously across the cut-off; firms cannot precisely manipulate their own score |
 | Primary outcome | Subsequent own-funded digital investment, from register data |
 | Secondary outcomes | Employment, turnover, survival |
 | Data source | Danmarks Statistik register linkage, not self-report |
+| Legal basis for linkage | Statistical and research processing, as the existing effect measurement already relies on |
 | Measurement window | Baseline at scoring; endline 24 months after project start |
 | Required disclosure | Publication of all applicant scores and the cut-off |
 | Marginal cost | Administrative only; neither budget nor allocation rule changes |
+
+The design is not novel, which is the point of proposing it. Howell evaluated the US Department of Energy's SBIR programme by exploiting the ranking of applicants, finding that an early-stage award roughly doubles the probability of subsequent venture capital and raises patenting and revenue — with effects strongest among the most financially constrained firms (Howell, ST 2017), which is the subgroup a Danish SME scheme is aimed at. Santoleri and colleagues applied the same approach to the Horizon 2020 SME Instrument's own scoring threshold (Santoleri, P, Barrows, G, Caravella, S, Crespi, F and Pellegrino, G 2022). SMV:Digital already scores applicants; what it does not do is retain the scores in a form that permits the comparison those studies made.
+
+Two assumptions do the work, and the table separates them because they are routinely conflated. Continuity requires that firms just below the cut-off would, absent the grant, have done about as well as those just above — it is what makes the comparison a counterfactual. No-manipulation requires that firms cannot place themselves on the funded side at will, which is testable after the fact by inspecting the density of scores around the threshold. Assessor-scored applications satisfy the second more credibly than a self-reported eligibility rule would.
 
 Three features carry the argument. Near the cut-off, whether a firm is funded turns on assessor variation rather than on the firm — so above and below are comparable on the unobservables that defeat matching, which is the entire gain over the present evaluation. Nothing about who receives money changes: the highest-scoring applicants are still funded, so the reform imposes no cost on applicants and needs no new appropriation. And the control arm already exists — those firms are being turned away today; the scheme simply stops discarding the information that it turned them away at a known distance from a known threshold.
 
@@ -517,10 +534,40 @@ In *Arrêt* No. 126/2025 of 25 September 2025, the Cour constitutionnelle ruled 
 
 That last holding is the one that bites hardest on a business case. Denmark's justification for compulsory Digital Post is a projected saving (Section 6). The Belgian court's position is that the saving is not a reason the obligation ceases to apply — which, applied to a Danish debate conducted almost entirely in administrative-cost terms, reverses the burden of argument.
 
-### G.3 What this does and does not establish
+### G.3 Norway: the digital default binds the administration, not the citizen
 
-Neither ruling binds Denmark. The Conseil d'État decision concerns French administrative law and a specific applicant population — foreign nationals seeking residence permits — whose vulnerability the court treated as material. The Belgian ruling construes a Brussels regional ordinance against Belgian constitutional guarantees. Neither is a holding about *Lov om Offentlig Digital Post*, and this appendix does not claim that Denmark's mandate is unlawful.
+The sharper contrast is not litigated at all. Norway made electronic communication the administrative default — *digitalt førstevalg* — but under the eGovernment regulations the obligation runs to the public body, and every citizen keeps a statutory right to opt out, the *reservasjonsrett*. The opt-out is recorded in the Contact and Reservation Register, which authorities must check before dispatching; a citizen who has opted out must be sent decisions on paper (Digitaliseringsdirektoratet 2025). Roughly 200,000 people hold a reservation, against about five million who have registered contact details in the register — and Digdir notes the number reserving has lately been falling rather than rising.
+
+Two features distinguish this from the Danish arrangement, and neither is about how digital the state is. The entitlement attaches to the citizen rather than to an administrative status they must first qualify for, so there is no gate of the kind Section 4 measures. And it is exercisable by telephone or on paper, which matters because an opt-out reachable only through the digital channel would be self-defeating. Roughly 200,000 against roughly five million registered is about 4%, close to Denmark's 4.7% exemption rate — though the two rates rest on different bases and Appendix D explains why that forbids treating the gap between them as a quantity. The comparison worth making is not the rate but the route: similar shares of people end up outside the digital channel either way, and what differs is whether reaching that position requires the state's permission.
+
+### G.4 What this does and does not establish
+
+Neither ruling binds Denmark, and Norway's arrangement is a policy choice rather than a legal requirement on anyone else. The Conseil d'État decision concerns French administrative law and a specific applicant population — foreign nationals seeking residence permits — whose vulnerability the court treated as material. The Belgian ruling construes a Brussels regional ordinance against Belgian constitutional guarantees. Neither is a holding about *Lov om Offentlig Digital Post*, and this appendix does not claim that Denmark's mandate is unlawful.
 
 What they establish is narrower and still useful: that mandatory digital administration is contested law in comparable European jurisdictions, and that where courts have examined it they have converged on a condition Denmark's scheme does not satisfy. Act 603 of 2023 gives a non-digital alternative to citizens already exempt from Digital Post (Folketinget 2023). The French and Belgian rulings attach the entitlement to the *difficulty*, not to a prior administrative status. That is precisely the gap Section 4 measured and Section 6 proposes to close, and the comparison shows the proposal is not an outlier but a convergence.
 
 The point has also been made domestically. The Danish Institute for Human Rights, Denmark's national human rights institution, examined rights in the digital welfare state in December 2023 (Institut for Menneskerettigheder 2023). That a domestic body reached the subject independently of the litigation abroad is the more relevant fact here: the question is live in Denmark, not imported into it.
+
+---
+
+## Appendix H. The Parliamentary Ombudsman on Digital Post
+
+Section 1 describes *Lov om Offentlig Digital Post* §10, which deems a message delivered when it becomes available rather than when it is read. Section 4 argues that the resulting exclusion is administrative rather than a capability deficit. Neither claim rests only on this report's reading of the statute. Denmark's Parliamentary Ombudsman has examined the system twice on the points that matter, and both findings run the same way.
+
+### H.1 The system had to be redesigned to meet ordinary administrative law
+
+In FOB 2015-22 the Ombudsman held that Public Digital Post must be arranged in accordance with general administrative law requirements (Folketingets Ombudsmand 2015). Two defects were identified in the design as built. Messages did not reliably carry a correct sender designation, where the governing principle is that it must be visible to the citizen which public authority they are dealing with — without which an administrative appeal cannot be directed at anyone. And the system had to secure the integrity and authenticity of a stored document: that its content is original, and that it genuinely originates from the stated sender.
+
+The finding matters to this report's argument for a reason beyond the specific defects. Denmark made the channel compulsory in 2014 and the Ombudsman was still establishing in 2015 that it had to satisfy the administrative-law guarantees the paper channel had always satisfied. The mandate preceded the safeguards.
+
+### H.2 The asymmetry in §10, demonstrated
+
+A citizen sent an appeal through Digital Post at 23:43 on the last day of a statutory deadline. The municipality did not receive it until the following day. Ankestyrelsen refused the appeal as out of time, reasoning that a citizen could not assume a message sent through Digital Post would reach the authority's mailbox immediately (Folketingets Ombudsmand 2024).
+
+The Ombudsman established what the ministry's own service data showed: since 2022 the target has been that 95% of messages are available in the recipient's system within twenty seconds of leaving the sender's outbox, and that target has been met consistently since autumn of that year. Practice changed as a result. A citizen who sends a complaint digitally may now generally assume it is available to the authority within a very short time, Ankestyrelsen issued a new principle statement, and affected cases are being reopened.
+
+This is §10's asymmetry made concrete. Where the state sends, availability is deemed to be delivery and the risk of any gap falls on the citizen. Where the citizen sent, the same twenty-second infrastructure was treated as too uncertain to rely on, and the risk fell on the citizen again. The positions are irreconcilable, and it took the Ombudsman to say so. Section 4's claim that the exclusion is administrative rather than technical is precisely this — the infrastructure worked; the allocation of risk around it did not.
+
+### H.3 What this appendix does not claim
+
+Two findings are not a pattern, and the Ombudsman's interventions are evidence that Danish administrative law has a functioning corrective, not evidence that it has failed. The 2024 case ended with the practice corrected and earlier cases reopened. The report's argument is narrower and survives that: the safeguards arrived after the mandate and by external intervention rather than by design, and a citizen without the capability to reach an ombudsman is not reached by either.

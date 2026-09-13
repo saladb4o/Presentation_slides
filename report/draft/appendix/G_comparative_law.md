@@ -37,9 +37,34 @@ Belgian court's position is that the saving is not a reason the obligation cease
 to apply — which, applied to a Danish debate conducted almost entirely in
 administrative-cost terms, reverses the burden of argument.
 
-### G.3 What this does and does not establish
+### G.3 Norway: the digital default binds the administration, not the citizen
 
-Neither ruling binds Denmark. The Conseil d'État decision concerns French
+The sharper contrast is not litigated at all. Norway made electronic communication
+the administrative default — *digitalt førstevalg* — but under the eGovernment
+regulations the obligation runs to the public body, and every citizen keeps a
+statutory right to opt out, the *reservasjonsrett*. The opt-out is recorded in the
+Contact and Reservation Register, which authorities must check before dispatching;
+a citizen who has opted out must be sent decisions on paper [[NO1]]. Roughly
+200,000 people hold a reservation, against about five million who have registered
+contact details in the register — and Digdir notes the number reserving has lately
+been falling rather than rising.
+
+Two features distinguish this from the Danish arrangement, and neither is about
+how digital the state is. The entitlement attaches to the citizen rather than to
+an administrative status they must first qualify for, so there is no gate of the
+kind Section 4 measures. And it is exercisable by telephone or on paper, which
+matters because an opt-out reachable only through the digital channel would be
+self-defeating. Roughly 200,000 against roughly five million registered is about
+4%, close to Denmark's 4.7% exemption rate — though the two rates rest on
+different bases and Appendix D explains why that forbids treating the gap between
+them as a quantity. The comparison worth making is not the rate but the route:
+similar shares of people end up outside the digital channel either way, and what
+differs is whether reaching that position requires the state's permission.
+
+### G.4 What this does and does not establish
+
+Neither ruling binds Denmark, and Norway's arrangement is a policy choice rather
+than a legal requirement on anyone else. The Conseil d'État decision concerns French
 administrative law and a specific applicant population — foreign nationals seeking
 residence permits — whose vulnerability the court treated as material. The Belgian
 ruling construes a Brussels regional ordinance against Belgian constitutional

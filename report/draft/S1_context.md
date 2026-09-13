@@ -5,8 +5,8 @@ them. *Lov om Offentlig Digital Post* [[RI1]] made a state-run digital mailbox t
 default legal channel for public correspondence — compulsory for businesses from
 2013 and for every citizen aged 15 and over from 1 November 2014. Enrolment is
 automatic, and §10 deems delivery effective when a message becomes available
-rather than when it is read, so the consequence of non-engagement falls on the
-recipient. Exemption exists, but only against statutory criteria (Table 1).
+rather than when it is read, placing the consequence of non-engagement on the
+recipient. Exemption exists only against statutory criteria (Table 1).
 
 The mandate rode on a single national identity credential: NemID, replaced by
 MitID from October 2021 and withdrawn on 31 October 2023 [[DG4]]. That pairing is

@@ -10,8 +10,8 @@ citizens aged 15 and over — 238,479 people — were exempt. It is small becaus
 affected population is small, not because exclusion is rare where it lands.
 
 Exemption is also the narrowest available measure. [[F4]] sets it against four
-wider estimates. They are not strictly comparable — measure, year and denominator
-all differ — so read it as a ladder, not a series; Appendix D reconciles them.
+wider estimates. They are not comparable — measure, year and denominator all
+differ — so read it as a ladder, not a series; Appendix D reconciles them.
 Some 6.5% of Danes do not use digital public services at all and 16.5% report
 difficulty using them [[EC1]]; the widest estimates reach a quarter of adults
 ([[DG2]]; [[JU1]]). The counts are clearer than the percentages: exemption reaches
@@ -25,8 +25,9 @@ skills against an EU average of 42.60%. Denmark leads the Union in all three
 bands, and its gradient from youngest to oldest is 24.25 percentage points against
 the EU's 31.95 ([[F10]]).
 
-The exclusion is therefore administrative, not a capability deficit: the mandate
-was calibrated above the bottom of its own distribution, and the exemption
-criteria were drawn narrower than the difficulty they relieve. A rail everyone
-must board and a sixth of the population finds hard to use is a universal
-obligation, not a universal opportunity.
+The exclusion is administrative, not a capability deficit: the mandate was
+calibrated above the bottom of its own distribution, and the exemption criteria
+were drawn narrower than the difficulty they relieve. The Ombudsman has twice found the
+same asymmetry in the design (Appendix H). A rail everyone must
+board and a sixth of the population finds hard to use is a universal obligation,
+not a universal opportunity.

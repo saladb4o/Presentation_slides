@@ -48,6 +48,7 @@ APPENDICES = [
     ("E", "E_cross_sections", "Full Cross-Sections and Series"),
     ("F", "F_policy_spec", "Policy Specification and Implementation Timeline"),
     ("G", "G_comparative_law", "Comparative Law on Mandatory Digital Administration"),
+    ("H", "H_ombudsman", "The Parliamentary Ombudsman on Digital Post"),
 ]
 
 # Appendix figures are numbered WITHIN their appendix (Figure C1, C2, ...), so

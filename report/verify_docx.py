@@ -115,9 +115,12 @@ def main():
     # Tripwire against runaway generation across the WHOLE document, not the
     # 2,000-word assessment limit - that one is enforced on the body alone by
     # assemble_report.py. Raised from 5,200 when Appendix F was added, and again
-    # when Appendix G added the comparative case law.
+    # when Appendix G added the comparative case law, and again when H and the
+    # regression-discontinuity literature were added. The appendices now run
+    # well past the body; that is a judgement call for the author, not a
+    # generation failure, which is all this guard is for.
     body_words = len(text.split())
-    check(body_words < 7200,
+    check(body_words < 9000,
           f"document body has {body_words} words, unexpectedly long")
 
     # REFERENCE_ONLY declares a source as supporting ARGUMENT in the report

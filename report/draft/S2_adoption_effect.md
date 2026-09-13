@@ -5,7 +5,7 @@ others built on it, and where that building stopped.
 
 Banking shows the magnitude. Danish retail bank branches fell from 2,025 in 2004
 to 665 in 2024, a decline of 67.2% ([[F1]]; [[FD1:b]]). Read alone, that suggests
-digitalisation destroyed banking employment. The longer series refuses it: between
+digitalisation destroyed banking employment. The longer series refuses it. Between
 1991 and 2024 the number of financial institutions fell by 76.7%, from 219 to 51,
 while bank employment fell by only 29.4%, from roughly 51,000 to 36,000 ([[F9]]).
 Staff per surviving institution therefore rose from 233 to 706, an increase of
@@ -14,8 +14,8 @@ series begins only in 2004, so the three changes span different windows and must
 not be differenced (Appendix B).
 
 Payments moved with it. Cash fell from 23% to 9% of the *number* of payments in
-physical retail between 2017 and 2025, to under two-fifths of its 2017 share,
-while card-based mobile wallets reached 32% of the same measure [[NB1]]. Much of this is displacement within digital instruments:
+physical retail between 2017 and 2025, while card-based mobile wallets reached 32%
+of the same measure [[NB1]]. Much of this is displacement within digital instruments:
 wallet payments are card payments, and the physical card share fell from 73% to
 54% (Appendix E). What replaced cash was mostly a new interface onto existing card
 infrastructure — which is what a rail makes cheap to build. Cash acceptance
@@ -40,6 +40,6 @@ adoption (p ≈ 0.71).
 Causation is neither established nor establishable from this design. Adoption
 measures consumers; turnover measures enterprises, including business-to-business
 ordering no consumer touches. Both plausibly rise with national income, which
-appears on neither axis. Denmark sits above the fitted line, but by less than one
-residual standard error and behind three other member states: consistent with the
+appears on neither axis. Denmark sits above the fitted line by less than one
+residual standard error, behind three other member states: consistent with the
 European pattern, not exceptional to it.
