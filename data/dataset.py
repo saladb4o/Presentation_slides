@@ -364,6 +364,57 @@ OBS = [
      "Postage, paper and envelopes only. The wage and overhead component was "
      "never verified: the cross-government study was abandoned after KL declined "
      "to take part."),
+
+    # ------------------------------------------------------------------
+    # Labour productivity - Eurostat tesem160
+    # Nominal labour productivity per person, indexed on EU27_2020 = 100,
+    # current prices in purchasing power standards. The index base is
+    # load-bearing: a rise means Denmark gained on the EU average, NOT that
+    # Danish productivity grew. Those are different claims and only the first
+    # is supported by this series.
+    # ------------------------------------------------------------------
+    ("DK.PRD.LP.PER", "Nominal labour productivity per person", "DK", 2005, 109.2,
+     "index", "EU27_2020 = 100, current prices, PPS", "", "ES8", ""),
+    ("DK.PRD.LP.PER", "Nominal labour productivity per person", "DK", 2006, 109.3,
+     "index", "EU27_2020 = 100, current prices, PPS", "", "ES8", ""),
+    ("DK.PRD.LP.PER", "Nominal labour productivity per person", "DK", 2007, 107.1,
+     "index", "EU27_2020 = 100, current prices, PPS", "", "ES8", ""),
+    ("DK.PRD.LP.PER", "Nominal labour productivity per person", "DK", 2008, 108.5,
+     "index", "EU27_2020 = 100, current prices, PPS", "", "ES8", ""),
+    ("DK.PRD.LP.PER", "Nominal labour productivity per person", "DK", 2009, 109.9,
+     "index", "EU27_2020 = 100, current prices, PPS", "", "ES8", ""),
+    ("DK.PRD.LP.PER", "Nominal labour productivity per person", "DK", 2010, 115.0,
+     "index", "EU27_2020 = 100, current prices, PPS", "", "ES8", ""),
+    ("DK.PRD.LP.PER", "Nominal labour productivity per person", "DK", 2011, 113.8,
+     "index", "EU27_2020 = 100, current prices, PPS", "", "ES8", ""),
+    ("DK.PRD.LP.PER", "Nominal labour productivity per person", "DK", 2012, 113.9,
+     "index", "EU27_2020 = 100, current prices, PPS", "", "ES8", ""),
+    ("DK.PRD.LP.PER", "Nominal labour productivity per person", "DK", 2013, 115.3,
+     "index", "EU27_2020 = 100, current prices, PPS", "", "ES8", ""),
+    ("DK.PRD.LP.PER", "Nominal labour productivity per person", "DK", 2014, 115.1,
+     "index", "EU27_2020 = 100, current prices, PPS", "", "ES8", ""),
+    ("DK.PRD.LP.PER", "Nominal labour productivity per person", "DK", 2015, 113.9,
+     "index", "EU27_2020 = 100, current prices, PPS", "", "ES8", ""),
+    ("DK.PRD.LP.PER", "Nominal labour productivity per person", "DK", 2016, 114.1,
+     "index", "EU27_2020 = 100, current prices, PPS", "", "ES8", ""),
+    ("DK.PRD.LP.PER", "Nominal labour productivity per person", "DK", 2017, 116.3,
+     "index", "EU27_2020 = 100, current prices, PPS", "", "ES8", ""),
+    ("DK.PRD.LP.PER", "Nominal labour productivity per person", "DK", 2018, 115.3,
+     "index", "EU27_2020 = 100, current prices, PPS", "", "ES8", ""),
+    ("DK.PRD.LP.PER", "Nominal labour productivity per person", "DK", 2019, 113.2,
+     "index", "EU27_2020 = 100, current prices, PPS", "", "ES8", ""),
+    ("DK.PRD.LP.PER", "Nominal labour productivity per person", "DK", 2020, 119.6,
+     "index", "EU27_2020 = 100, current prices, PPS", "", "ES8", ""),
+    ("DK.PRD.LP.PER", "Nominal labour productivity per person", "DK", 2021, 121.0,
+     "index", "EU27_2020 = 100, current prices, PPS", "", "ES8", ""),
+    ("DK.PRD.LP.PER", "Nominal labour productivity per person", "DK", 2022, 120.2,
+     "index", "EU27_2020 = 100, current prices, PPS", "", "ES8", ""),
+    ("DK.PRD.LP.PER", "Nominal labour productivity per person", "DK", 2023, 113.1,
+     "index", "EU27_2020 = 100, current prices, PPS", "", "ES8", ""),
+    ("DK.PRD.LP.PER", "Nominal labour productivity per person", "DK", 2024, 116.7,
+     "index", "EU27_2020 = 100, current prices, PPS", "", "ES8", ""),
+    ("DK.PRD.LP.PER", "Nominal labour productivity per person", "DK", 2025, 116.8,
+     "index", "EU27_2020 = 100, current prices, PPS", "", "ES8", ""),
 ]
 
 

@@ -293,6 +293,24 @@ SOURCES = {
             "Copenhagen, accessed 12 September 2026."
         ),
     ),
+    "ES8": dict(
+        authority="Eurostat",
+        title=(
+            "Labour productivity per person employed and hour worked "
+            "(EU27_2020=100) - custom extraction, nominal labour productivity "
+            "per person, Denmark, 2005-2025"
+        ),
+        dataset_code="tesem160",
+        url="https://ec.europa.eu/eurostat/databrowser/view/tesem160/default/table?lang=en",
+        accessed="13 September 2026",
+        harvard=(
+            "Eurostat 2026, Labour productivity per person employed and hour "
+            "worked (EU27_2020=100), dataset tesem160, last updated 9 September "
+            "2026, Eurostat, accessed 13 September 2026, "
+            "<https://ec.europa.eu/eurostat/databrowser/view/tesem160/default/"
+            "table?lang=en>."
+        ),
+    ),
 }
 
 # Sources held for the report's reference list that no workbook observation uses

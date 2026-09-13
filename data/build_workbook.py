@@ -464,6 +464,13 @@ def sheet_definitions(wb):
          "Share of CITIZENS with a wallet solution on their phone.",
          "Different denominator from the payment-share series. Memo only - "
          "deliberately excluded from Figure 2."),
+        ("DK.PRD.LP.PER",
+         "Nominal labour productivity per person employed, indexed so that the "
+         "EU27 (2020 composition) equals 100 in each year.",
+         "RELATIVE measure. A rise means Denmark gained ON THE EU AVERAGE; it is "
+         "not a Danish growth rate and must never be read as one. Per PERSON, so "
+         "it is sensitive to part-time work - the per-HOUR variant is the "
+         "cleaner productivity measure. Current prices in PPS, so nominal."),
         ("DK.FIN.BRCH",
          "Number of retail bank branches operated by Danish credit institutions.",
          "Consolidation and digitalisation both reduce this. The series alone "

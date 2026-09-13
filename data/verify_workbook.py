@@ -61,7 +61,7 @@ src_ids = {r[0].value for r in wb["03_SOURCES"].iter_rows(min_row=2, max_col=1)
 check(len(src_ids) > 0, "SOURCES sheet has no source_ids")
 
 rows = list(m.iter_rows(min_row=2, values_only=True))
-check(len(rows) == 113, f"expected 113 observations, found {len(rows)}")
+check(len(rows) == 134, f"expected 134 observations, found {len(rows)}")
 
 seen = set()
 for r in rows:
