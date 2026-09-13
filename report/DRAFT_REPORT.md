@@ -198,7 +198,7 @@ The word is used operationally, not as reassurance. Four rules were enforced:
 - Structural claims are enforced by executable assertions, not by reading. The
 - Where a value could not be verified against its issuing authority, it was
 
-### A.4 Three errors AI assistance introduced, and how each was caught
+### A.4 Four errors AI assistance introduced, and how each was caught
 
 **A fabricated dataset.** An early candidate dataset produced with AI assistance carried real Eurostat dataset codes and plausible extraction dates. Cross-checking its country values against Eurostat's published ranking showed the ordering was inverted — the values were not merely wrong but fabricated around correct-looking metadata. The dataset was rejected in full, not repaired. This is the most dangerous failure mode encountered, because the metadata was more convincing than the numbers.
 
@@ -206,11 +206,13 @@ The word is used operationally, not as reassurance. Four rules were enforced:
 
 **An overclaim about Denmark.** A drafting plan asserted that Denmark "converts consumer adoption into enterprise e-commerce better than the EU pattern predicts." Computing the residual distribution refuted it: Denmark's residual is +0.97 residual standard errors and ranks fourth of eighteen, with Belgium, Ireland and Italy all further above the line (Appendix C). The claim was cut, and the workbook now computes the standardised residual as a live cell so the overclaim cannot quietly return.
 
-A fourth class is worth recording because it is the opposite failure. During self-audit, the audit tooling raised four alarms — an under-cited figure, an off-palette chart, scatters with no y-values, and a mis-sized figure — all four of which were false, caused by the tooling's own regexes not handling XML namespaces and object types. They were cleared against the raw file contents. An AI-generated check is itself an AI artefact and needs the same scepticism as an AI-generated number.
+**A criticism that was already answered.** A late draft of Section 6 asserted that the SMV:Digital scheme was "self-reported and uncontrolled: it measures participation, not effect." The first half was correct. The second was false: a search for the scheme's evaluation found a register-based effect measurement in which Digitaliseringsstyrelsen links recipients to Danmarks Statistik records and compares them with matched control firms (Digitaliseringsstyrelsen 2025b). The report was criticising an absence that does not exist. The same search established that Act 603 of 2023 (Folketinget 2023) had already granted the entitlement a second recommendation proposed, and that a supreme audit institution had rejected the allocation mechanism Appendix F specified (Bundesrechnungshof 2022). All three were rewritten on the verified position, which in each case produced a sharper argument than the one it replaced. The lesson is that an unverified criticism is as much a fabrication risk as an unverified number, and harder to notice, because a critical claim reads as caution rather than as a factual assertion requiring a source.
+
+A fifth class is worth recording because it is the opposite failure. During self-audit, the audit tooling raised four alarms — an under-cited figure, an off-palette chart, scatters with no y-values, and a mis-sized figure — all four of which were false, caused by the tooling's own regexes not handling XML namespaces and object types. They were cleared against the raw file contents. An AI-generated check is itself an AI artefact and needs the same scepticism as an AI-generated number.
 
 ### A.5 What was not delegated
 
-The research question, the country, the policy instrument, the SDG selection, the argument and its thesis, and the judgement about which findings are defensible. Where the evidence and a preferred conclusion disagreed, the evidence was followed — three times, as recorded above.
+The research question, the country, the policy instrument, the SDG selection, the argument and its thesis, and the judgement about which findings are defensible. Where the evidence and a preferred conclusion disagreed, the evidence was followed — four times, as recorded above.
 
 ### A.6 Residual risk
 
