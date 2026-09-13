@@ -167,7 +167,7 @@ check(resolved >= 40, f"only {resolved} lookups resolved; expected more")
 # 8. charts present
 expected_charts = {"F1_BRANCHES": 1, "F2_PAYMENTS": 2, "F3_ESALES": 1,
                    "F4_EXCLUSION": 1, "F5_EU27": 1,
-                   "F6_ADOPT_BENEFIT": 1, "F7_QUALITY": 1, "F8_SMVDIGITAL": 1,
+                   "F6_ADOPT_BENEFIT": 1, "F7_QUALITY": 2, "F8_SMVDIGITAL": 1,
                    "F9_CONSOLIDATION": 1, "F10_SKILLS": 1}
 for name, n in expected_charts.items():
     check(len(wb[name]._charts) == n,
@@ -250,7 +250,12 @@ check(not any("defund" in str(r[11] or "") for r in rows),
 # because a later edit that re-adds an Excel style preset or a chart-object
 # title would undo the whole presentation pass silently - the workbook would
 # still build, still verify, and just look generic again.
-ACCENT, GREY, DARK, PALE = "2E6DB4", "A3A3A3", "1F3A5F", "E8E8E8"
+# Imported rather than restated. These were duplicated as literals here, so
+# changing a palette constant in the builder failed this check instead of
+# updating it - the verifier was asserting against a stale copy of the thing it
+# was meant to be verifying.
+from build_workbook import C_ACCENT as ACCENT, C_GREY as GREY  # noqa: E402
+from build_workbook import C_DARK as DARK, C_PALE as PALE      # noqa: E402
 PALETTE = {ACCENT, GREY, DARK, PALE}
 
 for name, n_charts in expected_charts.items():

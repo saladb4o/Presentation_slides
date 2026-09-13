@@ -60,7 +60,12 @@ T_MONO = Font(name="Consolas", size=9, color=INK)
 # Chart colours are bare RGB (no leading alpha byte), unlike the cell fills
 # above, because DrawingML and the styles API disagree about the format.
 C_PALE = "E8E8E8"     # context, furthest back
-C_GREY = "A3A3A3"     # context
+# Darkened from A3A3A3 after running the palette validator: against a near-white
+# surface the old grey scored 2.46:1, below the 3:1 floor, so comparator bars read
+# as faint in print. 8F8F8F clears the floor while keeping normal-vision
+# separation from the accent at dE 17.6 and CVD separation at 14.4 (tritan).
+# Darkening further fixes contrast but collapses separation against the blue.
+C_GREY = "8F8F8F"     # context / comparator series
 C_ACCENT = "2E6DB4"   # focus - Denmark, or the single series in view
 C_DARK = "1F3A5F"     # emphasis - matches NAVY
 
@@ -1574,6 +1579,59 @@ def sheet_f7(wb):
         ws.row_dimensions[r].height = 44
         r += 1
 
+    # The firm-size split used to sit only in the gap table above, as a single
+    # subtracted number. It is the report's central diffusion finding - the rail
+    # was built, and only the firms with complementary capital built on it - so
+    # it gets plotted rather than merely computed. Without this block the report
+    # cites a figure for a chart the workbook does not contain.
+    r += 1
+    ws.cell(row=r, column=1,
+            value="AI ADOPTION BY FIRM SIZE - who could build on the rail").font = T_SUB
+    r += 1
+    header_row(ws, r, ["firm size", "% adopting AI", "reading"], [46, 14, 74])
+    size_head = r
+    r += 1
+    sizes = [
+        ("All enterprises", lookup("DK.ENT.AI", 2025),
+         "Denmark's headline AI adoption rate."),
+        ("Large enterprises", lookup("DK.ENT.AI.LRG", 2025),
+         "Roughly three in four."),
+        ("Small and medium enterprises", lookup("DK.ENT.AI.SME", 2025),
+         "Two in five, though 92.45% of them clear the basic digital-intensity "
+         "threshold. The constraint is complementary capital, not connectivity."),
+    ]
+    for label, value, note in sizes:
+        ws.cell(row=r, column=1, value=label).font = T_BODY
+        c = ws.cell(row=r, column=2, value=value)
+        c.font, c.fill, c.number_format = T_BODY, F_CALC, N_DEC
+        ws.cell(row=r, column=3, value=note).font = T_SMALL
+        ws.cell(row=r, column=3).alignment = WRAP
+        for j in range(1, 4):
+            ws.cell(row=r, column=j).border = BOX
+        ws.row_dimensions[r].height = 30
+        r += 1
+    size_last = r - 1
+
+    ch2 = BarChart()
+    ch2.type, ch2.grouping = "col", "clustered"
+    ch2.y_axis.title = "% of enterprises"
+    ch2.height, ch2.width = 9, 14
+    data = Reference(ws, min_col=2, min_row=size_head, max_row=size_last)
+    cats = Reference(ws, min_col=1, min_row=size_head + 1, max_row=size_last)
+    ch2.add_data(data, titles_from_data=True)
+    ch2.set_categories(cats)
+    paint(ch2.series[0], C_ACCENT)
+    # The two bars that carry the finding are the outer ones; grey the aggregate
+    # so the eye compares large against SME rather than either against the mean.
+    dp = DataPoint(idx=0)
+    dp.graphicalProperties = GraphicalProperties(solidFill=C_GREY)
+    ch2.series[0].data_points = [dp]
+    style_chart(ch2)
+    chart_title(ws, "F26", "AI adoption by firm size, Denmark 2025",
+                "Large firms against SMEs. The aggregate is greyed because it "
+                "sits between them by construction.")
+    ws.add_chart(ch2, "F27")
+
     source_note(ws, r + 1,
                 "Source: European Commission, Digital Decade 2026 country report for "
                 "Denmark (EC1). CAUTION: the eGovernment Benchmark is a scored "
@@ -1614,13 +1672,19 @@ def sheet_f8(wb):
                 "matched comparison; the three values below do not come from it.")
     header_row(ws, 4, ["measure", "value", "unit"], [52, 14, 30])
 
+    # Order matters here. The two percentages come first so the chart can cover a
+    # contiguous range that EXCLUDES the project count. Plotting ~7,000 projects
+    # on the same axis as 65% and 2% - as this sheet did until an audit caught it
+    # - put a count and two proportions on one scale, and the percentage bars
+    # were flattened to nothing beside it. The count is kept in the table, where
+    # it belongs, and named in the chart subtitle.
     rows = [
-        ("Digitalisation projects supported since 2018",
-         lookup("DK.SME.SMVD.PROJ", 2025), "count"),
         ("Participants investing further during the project",
          lookup("DK.SME.SMVD.INV", 2025), "% of participants"),
         ("Participants with no further investment plans",
          lookup("DK.SME.SMVD.NOINV", 2025), "% of participants"),
+        ("Digitalisation projects supported since 2018",
+         lookup("DK.SME.SMVD.PROJ", 2025), "count"),
     ]
     r = 5
     for label, formula, unit in rows:
@@ -1636,16 +1700,17 @@ def sheet_f8(wb):
 
     ch = BarChart()
     ch.type, ch.grouping = "bar", "clustered"
-    ch.x_axis.title = "% of participating enterprises / count"
+    ch.x_axis.title = "% of participating enterprises"
     ch.height, ch.width = 8, 16
-    data = Reference(ws, min_col=2, min_row=4, max_row=last)
-    cats = Reference(ws, min_col=1, min_row=5, max_row=last)
+    data = Reference(ws, min_col=2, min_row=4, max_row=last - 1)
+    cats = Reference(ws, min_col=1, min_row=5, max_row=last - 1)
     ch.add_data(data, titles_from_data=True)
     ch.set_categories(cats)
     paint(ch.series[0], C_ACCENT)
     style_chart(ch, legend=None)
     chart_title(ws, "E3", "SMV:Digital participant outcomes",
-                "Participation measures only. No effect size is plotted "
+                "Shares of the ~7,000 supported projects (count in the table, "
+                "off-axis). Participation only; no effect size is plotted "
                 "because none was verified.")
     ws.add_chart(ch, "E4")
 
