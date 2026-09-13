@@ -418,7 +418,7 @@ POLICY_EVENTS = [
      "DK.TRU.DPS"),
 
     ("2022-07-01", "day", "Kontantreglen amended",
-     "Lov om betalinger, ss 81", "RI2",
+     "Lov om betalinger, § 81", "RI2",
      "Businesses may refuse cash from other businesses; temporary events are "
      "exempted; the notification duty for 06:00-20:00 acceptance is removed. The "
      "obligation on shops to accept cash from consumers remains.",

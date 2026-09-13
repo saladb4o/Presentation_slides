@@ -28,14 +28,14 @@ SOURCES = {
     "NB2": dict(
         authority="Danmarks Nationalbank",
         title=(
-            "Danskerne betaler mere digitalt - det goer offline-betalinger endnu "
+            "Danskerne betaler mere digitalt – det gør offline-betalinger endnu "
             "vigtigere som beredskab (press release, 26 June 2026)"
         ),
         dataset_code="",
         url="https://www.nationalbanken.dk/da/viden-og-nyheder/presse/arkiv/2026/danskerne-betaler-mere-digitalt-det-goer-offline-betalinger-endnu-vigtigere-som-beredskab-26-06-2026",
         accessed=ACCESSED,
         harvard=(
-            "Danmarks Nationalbank 2026, Danskerne betaler mere digitalt - det goer "
+            "Danmarks Nationalbank 2026, Danskerne betaler mere digitalt – det gør "
             "offline-betalinger endnu vigtigere som beredskab, press release, "
             "26 June, Danmarks Nationalbank, Copenhagen, accessed 12 September 2026."
         ),
@@ -161,12 +161,12 @@ SOURCES = {
     ),
     "DG3": dict(
         authority="Digitaliseringsstyrelsen / Danmarks Statistik",
-        title="Effektmaaling af SMV:Digital, June 2025",
+        title="Effektmåling af SMV:Digital, June 2025",
         dataset_code="",
         url="https://digst.dk/media/yz2ouzzz/effektmaaling-af-smvdigital-2025.pdf",
         accessed=ACCESSED,
         harvard=(
-            "Digitaliseringsstyrelsen 2025, Effektmaaling af SMV:Digital, prepared by "
+            "Digitaliseringsstyrelsen 2025, Effektmåling af SMV:Digital, prepared by "
             "Danmarks Statistik, Agency for Digital Government, Copenhagen, accessed "
             "12 September 2026."
         ),
@@ -184,7 +184,7 @@ SOURCES = {
     ),
     "IMR1": dict(
         authority="Institut for Menneskerettigheder (Danish Institute for Human Rights)",
-        title="Rettigheder i den digitale velfaerdsstat, December 2023",
+        title="Rettigheder i den digitale velfærdsstat, December 2023",
         dataset_code="",
         url="https://menneskeret.dk/sites/menneskeret.dk/files/media/document/Rettigheder%20i%20den%20digitale%20velf%C3%A6rdsstat.%20Analyse,%20Institut%20for%20Menneskerettigheder,%20december%202023.PDF",
         accessed=ACCESSED,
@@ -209,21 +209,21 @@ SOURCES = {
         authority="Rigsrevisionen (Danish National Audit Office)",
         title=(
             "Beretning om besparelsespotentialet ved obligatorisk Digital Post "
-            "paa ca. 1 mia. kr. om aaret, January 2016"
+            "på ca. 1 mia. kr. om året, January 2016"
         ),
         dataset_code="",
         url="https://www.rigsrevisionen.dk/revisionssager-arkiv/2016/jan/beretning-om-besparelsespotentialet-ved-obligatorisk-digital-post-paa-ca-1-mia-kr-om-aaret",
         accessed=ACCESSED,
         harvard=(
             "Rigsrevisionen 2016, Beretning om besparelsespotentialet ved "
-            "obligatorisk Digital Post paa ca. 1 mia. kr. om aaret, National Audit "
+            "obligatorisk Digital Post på ca. 1 mia. kr. om året, National Audit "
             "Office of Denmark, Copenhagen, accessed 12 September 2026."
         ),
     ),
     "RI2": dict(
         authority="Finanstilsynet (Danish Financial Supervisory Authority)",
-        title="Kontantreglen - lov om betalinger section 81",
-        dataset_code="Lov om betalinger, ss 81",
+        title="Kontantreglen – lov om betalinger § 81",
+        dataset_code="Lov om betalinger, § 81",
         url="https://www.finanstilsynet.dk/finansielle-temaer/betalingstjenester-og-e-penge/kontantreglen",
         accessed=ACCESSED,
         harvard=(
@@ -233,12 +233,12 @@ SOURCES = {
     ),
     "DG4": dict(
         authority="Digitaliseringsstyrelsen (Danish Agency for Digital Government)",
-        title="Digital Post - lovgivning, and the MitID transition news archive",
+        title="Digital Post – lovgivning, and the MitID transition news archive",
         dataset_code="",
         url="https://digst.dk/it-loesninger/digital-post/lovgivning/",
         accessed=ACCESSED,
         harvard=(
-            "Digitaliseringsstyrelsen 2025, Digital Post - lovgivning, Agency for "
+            "Digitaliseringsstyrelsen 2025, Digital Post – lovgivning, Agency for "
             "Digital Government, Copenhagen, accessed 12 September 2026."
         ),
     ),
@@ -284,12 +284,12 @@ SOURCES = {
     ),
     "DST1": dict(
         authority="Danmarks Statistik",
-        title="Detailomsaetningsindeks (retail trade turnover index)",
+        title="Detailomsætningsindeks (retail trade turnover index)",
         dataset_code="StatBank; base year rebased 2015 -> 2021",
         url="https://www.dst.dk/da/Statistik/dokumentation/statistikdokumentation/detailomsaetningsindeks",
         accessed=ACCESSED,
         harvard=(
-            "Danmarks Statistik 2025, Detailomsaetningsindeks, Statistics Denmark, "
+            "Danmarks Statistik 2025, Detailomsætningsindeks, Statistics Denmark, "
             "Copenhagen, accessed 12 September 2026."
         ),
     ),
