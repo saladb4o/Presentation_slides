@@ -1,8 +1,7 @@
 ## 1. The instrument and what it was meant to buy
 
 Denmark did not persuade its citizens to adopt digital public services; it
-required them to do so. *Lov om Offentlig Digital Post*, enacted in 2012
-[[RI1:y]], established a state-run digital mailbox as the default legal channel
+required them to do so. *Lov om Offentlig Digital Post* [[RI1]] established a state-run digital mailbox as the default legal channel
 for public correspondence, binding businesses from 2013 and every citizen aged 15
 and over from 1 November 2014. Enrolment is automatic, and §10 deems delivery effective when a message becomes
 available rather than when it is read, placing the consequence of non-engagement

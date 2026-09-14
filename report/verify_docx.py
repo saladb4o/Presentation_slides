@@ -17,7 +17,7 @@ import zipfile
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "report"))
 from render import build, FIGURE_FILES                      # noqa: E402
-from sources import REFERENCE_ONLY                          # noqa: E402
+from sources import REFERENCE_ONLY, SOURCES                 # noqa: E402
 
 W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 failures, checks = [], 0
@@ -92,6 +92,35 @@ def main():
     for stale in ("DO NOT SUBMIT", "NOT DRAFTED", "[Guest lecture question]"):
         check(stale not in text, f"section 5 stub text {stale!r} is still in the document")
 
+    # --- citations and reference list ------------------------------------
+    # A narrative citation renders "(Year)" and relies on the sentence to name
+    # the author. When the sentence does not, the reader gets a bare "(2012)".
+    for m in re.finditer(r"(.{0,40}?)\((?:19|20)\d{2}[a-z]?\)", text):
+        before = m.group(1).rstrip()
+        check(bool(re.search(r"[A-Za-z\u00C0-\u024F]$", before)),
+              f"citation {m.group(0)[-7:]!r} has no author before it: ...{before[-40:]!r}")
+
+    draft = pathlib.Path(__file__).resolve().parent / "draft"
+    for f in sorted(draft.rglob("*.md")):
+        for n, line in enumerate(f.read_text().splitlines(), 1):
+            check("]]" not in line or ":b]]" not in line or line.startswith("|"),
+                  f"{f.name}:{n} uses a bare citation outside a table row, "
+                  f"which renders an author and year loose in the prose")
+
+    # Harvard orders the list letter by letter. Sorting raw strings puts every
+    # capital before every lowercase letter, which is not the same thing.
+    def alpha(s):
+        return re.sub(r"[^a-z0-9 ]", "", s.lower())
+    refs = r["references"]
+    check(refs == sorted(refs, key=alpha),
+          "reference list is not in letter-by-letter alphabetical order")
+
+    # Two ids pointing at one document produce two entries for one source.
+    # DG3 and DG5 did exactly that, under the same URL, as 2025b and 2025c.
+    urls = [u for s in SOURCES.values() if (u := s.get("url"))]
+    dupes = {u for u in urls if urls.count(u) > 1}
+    check(not dupes, f"more than one source shares a URL: {sorted(dupes)}")
+
     # --- Table 1 ----------------------------------------------------------
     app_tables = sum(1 for a in r["appendices"]
                      for kind, _p in a["blocks"] if kind == "table")
@@ -158,6 +187,12 @@ def main():
     prose = text
     for ref in r["references"]:
         prose = prose.replace(ref, "")
+    # A hyphen with a space either side is a dash by another name. The em and
+    # en dash check below never saw the one in the thesis line because that
+    # string lives in the renderer, not in a draft file.
+    check(" - " not in prose,
+          "a spaced hyphen is used as a dash in the report's own prose")
+
     for ch, name in (("\u2014", "em dash"), ("\u2013", "en dash")):
         n = prose.count(ch)
         check(n == 0,

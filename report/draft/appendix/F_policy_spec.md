@@ -8,9 +8,9 @@ states it at the level of detail an administering agency would need to act on it
 SMV:Digital is better evaluated than most such schemes. Digitaliseringsstyrelsen
 links recipients to Danmarks Statistik registers and compares them with matched
 control firms, reporting revenue growth of 18% against the controls' 13%, a gap of
-five percentage points, and employment growth of 8% against 4% [[DG5]]. That is register
+five percentage points, and employment growth of 8% against 4% [[DG3]]. That is register
 data with a comparison group, and it disposes of the naive reading of the scheme's
-own headline, that 65% of participants invested further [[DG3:b]], which compares
+own headline, that 65% of participants invested further, which compares
 applicants with the general SME population and is besides self-reported to the
 scheme's own funder.
 

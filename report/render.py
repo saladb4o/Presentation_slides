@@ -126,7 +126,12 @@ def build_citations(used_ids):
             harvard = SOURCES[sid]["harvard"]
             refs.append(harvard.replace(f"{author} {year},",
                                         f"{author} {year}{suffix},", 1))
-    return cite, sorted(refs)
+    return cite, sorted(refs, key=_alpha_key)
+
+
+def _alpha_key(reference):
+    """Letter-by-letter alphabetical order, ignoring case and punctuation."""
+    return re.sub(r"[^a-z0-9 ]", "", reference.lower())
 
 
 
@@ -232,7 +237,7 @@ def build():
                 sheets.append(s)
         figures = [{"number": fignum[s], "sheet": s,
                     "file": FIGURE_FILES[s],
-                    "caption": f"Figure {fignum[s]} - {CAPTIONS[s]}"}
+                    "caption": f"Figure {fignum[s]}. {CAPTIONS[s]}"}
                    for s in sheets]
         sections.append({"key": name, "heading": heading,
                          "paragraphs": paragraphs, "figures": figures})
@@ -270,7 +275,7 @@ def build():
             number, _ = appfig[key]
             filename, caption = APPENDIX_FIGURES[key]
             figures.append({"key": key, "number": number, "file": filename,
-                            "caption": f"Figure {number} - {caption}"})
+                            "caption": f"Figure {number}. {caption}"})
         appendices.append({"letter": letter, "title": title,
                            "heading": f"Appendix {letter}. {title}",
                            "blocks": blocks, "figures": figures,
@@ -280,7 +285,7 @@ def build():
 
     events = {e[0]: e for e in POLICY_EVENTS}
     table1 = {
-        "caption": ("Table 1 - The instruments this report turns on. "
+        "caption": ("Table 1. The instruments this report turns on. "
                     "Full timeline in workbook sheet 09_POLICY."),
         "header": ["Date", "Instrument", "What it did"],
         "rows": [[events[d][0], events[d][3], events[d][2]] for d in TABLE1_ROWS],
@@ -295,7 +300,7 @@ def build():
 
     return {
         "meta": {
-            "title": "Digital Policy and Innovation Report - Denmark",
+            "title": "Digital Policy and Innovation Report: Denmark",
             "lines": [
                 "ECON1596/ECON1597 Assessment 2 | s4040040 | "
                 "Class group: [TO BE CONFIRMED]",
@@ -307,7 +312,7 @@ def build():
         "thesis": (
             "Thesis. Danish digital adoption is near-universal among citizens "
             "and thin among firms and at the edges of the population, and the "
-            "instrument that delivered the universal part - legal compulsion - "
+            "instrument that delivered the universal part, legal compulsion, "
             "is why the rest is missing."
         ),
         "sections": sections,

@@ -23,7 +23,7 @@ nonetheless remains a statutory obligation under *lov om betalinger* §81 [[RI2]
 The question that follows is whether wider consumer adoption is associated with
 greater commercial activity. Using data from Eurostat [[ES7:y]], [[F6]] plots the share of
 internet users purchasing online against enterprise e-sales turnover across the
-European Union in 2024, the turnover measure from a separate extract [[ES6:b]]. Across the 18 states reporting both, the fitted slope is +0.602
+European Union in 2024, the turnover measure from a separate extract [[ES6]]. Across the 18 states reporting both, the fitted slope is +0.602
 percentage points of turnover per percentage point of adoption, with a standard
 error of 0.105 and an R² of 0.674.
 

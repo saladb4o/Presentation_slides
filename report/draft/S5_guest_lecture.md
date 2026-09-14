@@ -9,11 +9,11 @@ could identify revenue attributable to it. That is the
 distinction this report has drawn throughout: adoption is observable, rapid and
 easily counted, and effect is none of those things.
 
-Her test for whether a corporate net zero commitment is credible was whether an
+Tran's test for whether a corporate net zero commitment is credible was whether an
 external body, the Science Based Targets initiative or an equivalent, has
 validated it, because an unvalidated commitment is one the claimant grades
 itself. The same objection applies to SMV:Digital, whose reported gains rest on
-participants surveyed by the body funding the scheme [[DG5]], and it is why
+participants surveyed by the body funding the scheme [[DG3]], and it is why
 Appendix F proposes an evaluation independent of the administering agency.
 
 Asked about smaller firms, Tran put the cost of that validation at USD 10,000 to

@@ -21,7 +21,7 @@ entitlement to the difficulty rather than to a prior status (Appendix G).
 Second, SMV:Digital should be redirected toward the complementary capability,
 specifically data integration and specialist skills, that Section 3 identified as
 the binding constraint. Its effect is better evidenced than that of most comparable programmes, since
-Digitaliseringsstyrelsen [[DG5:y]] matches recipients to comparable firms in the
+Digitaliseringsstyrelsen [[DG3:y]] matches recipients to comparable firms in the
 Danmarks Statistik registers and finds revenue growth five percentage points
 higher. Matching, however, addresses selection on what the registers record,
 namely sector, size, age and prior trajectory, not on what they do not. For a

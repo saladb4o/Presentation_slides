@@ -153,7 +153,8 @@ SOURCES = {
         harvard=(
             "Digitaliseringsstyrelsen 2025, Effektmåling af SMV:Digital, prepared by "
             "Danmarks Statistik, Agency for Digital Government, Copenhagen, accessed "
-            "12 September 2026."
+            "12 September 2026, <https://digst.dk/media/yz2ouzzz/"
+            "effektmaaling-af-smvdigital-2025.pdf>."
         ),
     ),
     "JU1": dict(
@@ -175,7 +176,7 @@ SOURCES = {
         accessed=ACCESSED,
         harvard=(
             "Institut for Menneskerettigheder 2023, Rettigheder i den digitale "
-            "velfaerdsstat, Danish Institute for Human Rights, Copenhagen, accessed "
+            "velfærdsstat, Danish Institute for Human Rights, Copenhagen, accessed "
             "12 September 2026."
         ),
     ),
@@ -312,23 +313,6 @@ SOURCES = {
             "<https://www.retsinformation.dk/eli/lta/2023/603>."
         ),
     ),
-    "DG5": dict(
-        authority="Digitaliseringsstyrelsen",
-        title=(
-            "Effektmåling af SMV:Digital - register-based effect measurement "
-            "of grant recipients against a matched control group, with "
-            "accompanying method note"
-        ),
-        dataset_code="Effektmåling 2025",
-        url="https://digst.dk/media/yz2ouzzz/effektmaaling-af-smvdigital-2025.pdf",
-        accessed="13 September 2026",
-        harvard=(
-            "Digitaliseringsstyrelsen 2025, Effektmåling af SMV:Digital, June "
-            "2025, Agency for Digital Government, accessed 13 September 2026, "
-            "<https://digst.dk/media/yz2ouzzz/effektmaaling-af-smvdigital-2025"
-            ".pdf>."
-        ),
-    ),
     "BRH1": dict(
         authority="Bundesrechnungshof",
         title=(
@@ -457,10 +441,6 @@ REFERENCE_ONLY = frozenset({
              # supplies no observation to the workbook.
     "LOV1",  # Act 603/2023 - a legal instrument, not a data source. It settles
              # what Section 6 may recommend; it supplies no observation.
-    "DG5",   # SMV:Digital effect measurement. Its figures are reported in
-             # Section 6 as another party's estimate, not re-used as data here:
-             # the underlying register linkage is not public, so nothing in the
-             # workbook could be traced back to a row.
     "CE1",   # Conseil d'État and Cour constitutionnelle: comparative legal
     "BE1",   # authority for Appendix G. Rulings, not observations.
      # The Parliamentary Ombudsman on Digital Post's design and on
