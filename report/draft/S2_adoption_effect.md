@@ -11,14 +11,14 @@ while bank employment fell by only 29.4%, from roughly 51,000 to 36,000 ([[F9]])
 Staff per surviving institution therefore rose from 233 to 706, an increase of
 203%, indicating that consolidation concentrated the sector rather than reducing
 it. The branch series begins only in 2004, so the three changes span different
-observation windows and must not be differenced, as Appendix B explains.
+observation windows and must not be differenced.
 
 Payment behaviour moved in the same direction. Danmarks Nationalbank [[NB1:y]]
 reports that cash fell from 23% to 9% of the *number* of payments in physical
 retail between 2017 and 2025, while card-based mobile wallets reached 32% of the
 same measure. Much of this is displacement within digital instruments, because
-wallet payments are card payments and the physical card share fell from 73% to 54%
-(Appendix E). What replaced cash was largely a new interface onto existing card
+wallet payments are card payments and the physical card share fell from 73% to 54%.
+What replaced cash was largely a new interface onto existing card
 infrastructure, the kind of development shared infrastructure makes inexpensive.
 Cash acceptance nonetheless remains a statutory obligation under *lov om
 betalinger* §81, narrowed but not removed in 2022 [[RI2]].

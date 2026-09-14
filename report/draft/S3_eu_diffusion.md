@@ -3,7 +3,7 @@
 "Breadth" has two distinct subjects in the Danish case, and they point in opposite
 directions. Breadth among citizens is close to complete: Eurostat [[ES7:y]] records
 that 90.86% of Danish internet users bought online in 2024, third of the
-twenty-seven member states (Appendix E). Breadth among enterprises is not. Only
+twenty-seven member states. Breadth among enterprises is not. Only
 38.78% of Danish enterprises make any e-sales, second in the Union behind Lithuania
 at 43.03% and still under two firms in five [[ES5]]. Denmark therefore leads Europe at a
 level most Danish firms have not reached.

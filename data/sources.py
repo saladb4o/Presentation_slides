@@ -25,21 +25,6 @@ SOURCES = {
             "payment-habits-in-denmark>."
         ),
     ),
-    "NB2": dict(
-        authority="Danmarks Nationalbank",
-        title=(
-            "Danskerne betaler mere digitalt – det gør offline-betalinger endnu "
-            "vigtigere som beredskab (press release, 26 June 2026)"
-        ),
-        dataset_code="",
-        url="https://www.nationalbanken.dk/da/viden-og-nyheder/presse/arkiv/2026/danskerne-betaler-mere-digitalt-det-goer-offline-betalinger-endnu-vigtigere-som-beredskab-26-06-2026",
-        accessed=ACCESSED,
-        harvard=(
-            "Danmarks Nationalbank 2026, Danskerne betaler mere digitalt – det gør "
-            "offline-betalinger endnu vigtigere som beredskab, press release, "
-            "26 June, Danmarks Nationalbank, Copenhagen, accessed 12 September 2026."
-        ),
-    ),
     "FD1": dict(
         authority="Finans Danmark",
         title="Institutter, filialer & ansatte",
@@ -396,43 +381,6 @@ SOURCES = {
             "<https://fr.const-court.be/public/f/2025/2025-126f.pdf>."
         ),
     ),
-    "OMB1": dict(
-        authority="Folketingets Ombudsmand",
-        title=(
-            "Offentlig Digital Post skal indrettes i overensstemmelse med de "
-            "almindelige forvaltningsretlige krav"
-        ),
-        dataset_code="FOB 2015-22",
-        url="https://www.ombudsmanden.dk/find-viden/udtalelser/2015/2015-22",
-        accessed="13 September 2026",
-        harvard=(
-            "Folketingets Ombudsmand 2015, Offentlig Digital Post skal "
-            "indrettes i overensstemmelse med de almindelige forvaltningsretlige "
-            "krav, FOB 2015-22, Parliamentary Ombudsman, Copenhagen, accessed "
-            "13 September 2026, <https://www.ombudsmanden.dk/find-viden/"
-            "udtalelser/2015/2015-22>."
-        ),
-    ),
-    "OMB2": dict(
-        authority="Folketingets Ombudsmand",
-        title=(
-            "Klage har ført til ny praksis i forhold til sene digitale klager "
-            "- complaint sent through Digital Post at 23:43 on the deadline day"
-        ),
-        dataset_code="News item, 2024",
-        url=(
-            "https://www.ombudsmanden.dk/find-viden/nyheder/2024/klage-har-"
-            "foert-til-ny-praksis-i-forhold-til-sene-digitale-klager"
-        ),
-        accessed="13 September 2026",
-        harvard=(
-            "Folketingets Ombudsmand 2024, Klage har ført til ny praksis i "
-            "forhold til sene digitale klager, Parliamentary Ombudsman, "
-            "Copenhagen, accessed 13 September 2026, "
-            "<https://www.ombudsmanden.dk/find-viden/nyheder/2024/klage-har-"
-            "foert-til-ny-praksis-i-forhold-til-sene-digitale-klager>."
-        ),
-    ),
     "NO1": dict(
         authority="Digitaliseringsdirektoratet (Digdir)",
         title=(
@@ -496,8 +444,8 @@ REFERENCE_ONLY = frozenset({
              # workbook could be traced back to a row.
     "CE1",   # Conseil d'État and Cour constitutionnelle: comparative legal
     "BE1",   # authority for Appendix G. Rulings, not observations.
-    "OMB1",  # The Parliamentary Ombudsman on Digital Post's design and on
-    "OMB2",  # deadlines; Norway's opt-out register; and the two regression
+     # The Parliamentary Ombudsman on Digital Post's design and on
+     # deadlines; Norway's opt-out register; and the two regression
     "NO1",   # discontinuity papers behind Appendix F's instrument. All are
     "HOW1",  # argument or comparative authority, not Danish observations.
     "SAN1",

@@ -41,14 +41,10 @@ RESERVED_S5 = 280        # words held for the blocked guest-lecture section
 
 # Appendices, in order. Letter, source file stem, title.
 APPENDICES = [
-    ("A", "A_ai_use", "AI Use and Validation"),
-    ("B", "B_data_methods", "Data, Provenance and Verification"),
     ("C", "C_regression", "Regression Diagnostics"),
     ("D", "D_exclusion", "Reconciling the Exclusion Estimates"),
-    ("E", "E_cross_sections", "Full Cross-Sections and Series"),
     ("F", "F_policy_spec", "Policy Specification and Implementation Timeline"),
     ("G", "G_comparative_law", "Comparative Law on Mandatory Digital Administration"),
-    ("H", "H_ombudsman", "The Parliamentary Ombudsman on Digital Post"),
 ]
 
 # Appendix figures are numbered WITHIN their appendix (Figure C1, C2, ...), so
@@ -63,19 +59,12 @@ APPENDIX_FIGURES = {
                 "The six tail countries against the full cross-section. Workbook F6."),
     "AF_LADDER": ("figA_d1_denominators.png",
                   "The exclusion estimates converted to people on their own bases."),
-    "AF_RANK": ("figA_e1_eu27.png",
-                "Individuals purchasing online, all 27 member states, 2024. Workbook F5_EU27."),
-    "AF_PROD": ("figA_e3_productivity.png",
-                "Danish labour productivity against the EU-27 average, 2005-2025. "
-                "An index on EU27 = 100, so it shows relative position, not growth."),
     "AF_SMV": ("fig8_smvdigital.png",
                "SMV:Digital participation: self-reported by participants to the "
                "scheme's own funder. Workbook F8."),
     "AF_GANTT": ("figA_f1_gantt.png",
                  "Implementation and evaluation timeline for the SMV:Digital "
                  "scoring-threshold design proposed in Section 6."),
-    "AF_PAY": ("figA_e2_payments.png",
-               "Instrument shares of physical-retail payments, 2017-2025. Workbook F2_PAYMENTS."),
 }
 
 # Workbook sheet -> the PNG that report/build_figures.py writes for it.

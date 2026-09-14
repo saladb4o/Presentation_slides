@@ -29,8 +29,6 @@ the Union in all three bands ([[F10]]).
 
 The exclusion is therefore administrative rather than a capability deficit. The
 mandate was calibrated above the bottom of its own distribution, and the exemption
-criteria were drawn more narrowly than the difficulty they relieve. The
-Parliamentary Ombudsman has twice found the same asymmetry in the system's design
-(Appendix H). Infrastructure that every citizen must use and a sixth of the
+criteria were drawn more narrowly than the difficulty they relieve. Infrastructure that every citizen must use and a sixth of the
 population finds difficult is a universal obligation rather than a universal
 opportunity.
