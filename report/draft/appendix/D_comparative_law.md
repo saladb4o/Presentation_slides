@@ -1,4 +1,4 @@
-Section 6 recommends widening the exemption criteria in *Lov om Offentlig Digital
+Question 4 recommends widening the exemption criteria in *Lov om Offentlig Digital
 Post*. The case for doing so is not only domestic. Two European courts have in the
 last four years examined mandatory digital administration and set conditions
 Denmark's mandate does not meet, and one comparable state reached the same place
@@ -33,7 +33,7 @@ non-digital and deliver an equivalent level of service. And the obligation does
 not lapse where meeting it imposes a disproportionate burden on the authority.
 
 That last holding is the one that bites hardest on a business case. Denmark's
-justification for compulsory Digital Post is a projected saving (Section 6). The
+justification for compulsory Digital Post is a projected saving (Question 4). The
 Belgian court's position is that the saving is not a reason the obligation ceases
 to apply, which, applied to a Danish debate conducted almost entirely in
 administrative-cost terms, reverses the burden of argument.
@@ -52,7 +52,7 @@ falling rather than rising.
 Two features distinguish this from the Danish arrangement, and neither is about
 how digital the state is. The entitlement attaches to the citizen rather than to
 an administrative status they must first qualify for, so there is no gate of the
-kind Section 4 measures. And it is exercisable by telephone or on paper, which
+kind Question 4 measures. And it is exercisable by telephone or on paper, which
 matters because an opt-out reachable only through the digital channel would be
 self-defeating. No rate is offered against Denmark's 4.7%: the Norwegian figure is
 a count of registrations and the base it should be taken on is not established by
@@ -76,7 +76,7 @@ where courts have examined it they have converged on a condition Denmark's schem
 does not satisfy. Act 603 of 2023 gives a non-digital alternative to citizens
 already exempt from Digital Post [[LOV1]]. The French and Belgian rulings attach
 the entitlement to the *difficulty*, not to a prior administrative status. That is
-precisely the gap Section 4 measured and Section 6 proposes to close, and the
+precisely the gap Question 4 measured and Question 4 proposes to close, and the
 comparison shows the proposal is not an outlier but a convergence.
 
 The point has also been made domestically. The Danish Institute for Human Rights,

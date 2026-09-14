@@ -1,4 +1,4 @@
-Section 6 recommends two measures. The second of these, restructuring
+Question 2 recommends restructuring
 SMV:Digital's allocation so that the scheme can measure its own effect, is a
 research design as much as a policy, and a design is only as good as its specification. This appendix
 states it at the level of detail an administering agency would need to act on it.
@@ -94,7 +94,7 @@ a narrower quantity than the present evaluation claims, and a credible one, whic
 is the trade the design makes.
 
 It also cannot detect effects on firms deterred from applying at all, which
-Section 3 identifies as the larger population. A discontinuity measures the
+Question 2 identifies as the larger population. A discontinuity measures the
 scheme; it does not measure the gap the scheme was built to close.
 
 ### [[AP]].5 Timeline

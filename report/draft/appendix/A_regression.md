@@ -1,4 +1,4 @@
-This appendix supports the regression reported in Section 2. The cross-section is
+This appendix supports the regression reported in Question 1. The cross-section is
 eighteen member states holding both measures for 2024: the share of internet
 users who purchased online [[ES7]] and e-sales as a share of enterprise turnover
 [[ES6]]. All computation is reproducible from `02_MASTER`; the workbook computes
@@ -33,7 +33,7 @@ Denmark's residual is **+4.34pp, or +0.97 RMSE, fourth largest of eighteen**.
 This is the figure that killed an earlier version of this report's argument. A
 residual inside one standard error, with three states further above the line, is
 an ordinary position on the fitted relationship, not evidence that Denmark
-converts adoption into commercial activity unusually well. Section 2 says only
+converts adoption into commercial activity unusually well. Question 1 says only
 that Denmark sits above the line and within one standard error of it.
 
 ### [[AP]].3 Leave-one-out stability
@@ -45,7 +45,7 @@ a range of **[0.516, 0.672]**. The slope never approaches zero and never changes
 sign, and every re-estimate falls inside the full-sample confidence interval.
 Ireland is the most influential single observation: dropping it moves the slope
 by −0.086, about 14%. That is unsurprising, since Ireland is the extreme point on
-both axes, and it is the reason Section 2 quotes an interval rather than a point.
+both axes, and it is the reason Question 1 quotes an interval rather than a point.
 
 ### [[AP]].4 Selection on the tails, measured
 

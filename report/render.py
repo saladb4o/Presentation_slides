@@ -45,8 +45,8 @@ FIGURES_DIR = ROOT / "report" / "figures"
 # F and G after four appendices were cut from an A-to-H set.
 APPENDICES = [
     ("A", "A_regression", "Regression Diagnostics"),
-    ("B", "B_exclusion", "Reconciling the Exclusion Estimates"),
-    ("C", "C_policy_spec", "Policy Specification and Implementation Timeline"),
+    ("B", "B_policy_spec", "Policy Specification and Implementation Timeline"),
+    ("C", "C_exclusion", "Reconciling the Exclusion Estimates"),
     ("D", "D_comparative_law", "Comparative Law on Mandatory Digital Administration"),
 ]
 
@@ -72,7 +72,7 @@ APPENDIX_FIGURES = {
                "scheme's own funder. Workbook F8."),
     "AF_GANTT": ("figA_f1_gantt.png",
                  "Implementation and evaluation timeline for the SMV:Digital "
-                 "scoring-threshold design proposed in Section 6."),
+                 "scoring-threshold design proposed in Question 2."),
 }
 
 # Workbook sheet -> the PNG that report/build_figures.py writes for it.
@@ -81,9 +81,10 @@ FIGURE_FILES = {
     "F6": "fig3_regression.png", "F3": "fig4_esales.png",
     "F7": "fig5_ai_firmsize.png", "F4": "fig6_exclusion.png",
     "F10": "fig7_skills.png",
+    "F2": "figA_e2_payments.png", "F11": "fig9_ewaste.png",
 }
-SECTIONS = ["S1_context", "S2_adoption_effect", "S3_eu_diffusion",
-            "S4_left_behind", "S5_guest_lecture", "S6_recommendation"]
+SECTIONS = ["Q1_industries", "Q2_policy_comparison", "Q3_sdg",
+            "Q4_inclusion", "Q5_guest_speaker"]
 
 # Workbook sheet -> caption. The report figure NUMBER is assigned by first
 # appearance, so it never appears in this table.
@@ -95,6 +96,8 @@ CAPTIONS = {
     "F7":  "AI adoption by firm size, Denmark 2025. European Commission; workbook F7.",
     "F4":  "Five estimates of Danish digital exclusion; denominators and years differ. Workbook F4.",
     "F10": "Basic digital skills by age band, Denmark and EU-27, 2025. European Commission; workbook F10.",
+    "F2":  "Instrument shares of physical-retail payments, 2017-2025. Danmarks Nationalbank; workbook F2_PAYMENTS.",
+    "F11": "ICT waste recycled or prepared for reuse, 2023. European Commission; workbook F11_EWASTE.",
 }
 
 # Table 1 is trimmed to the instruments the argument actually turns on; the full
@@ -340,9 +343,14 @@ def build():
         "sections": sections,
         "table1": table1,
         "references": references,
+        # The brief excludes references, tables and figures from the limit, so
+        # the counted total is section prose alone. Caption and table words are
+        # reported beside it rather than added to it, because they were being
+        # added to it and the report was trimmed against a total the marker
+        # will not count.
         "counts": {"sections": counted, "captions": caps,
                    "table1": table_words,
-                   "total": counted + caps,
+                   "total": counted,
                    "total_with_table": counted + caps + table_words},
         "appendices": appendices,
         "appendix_words": sum(a["words"] for a in appendices),

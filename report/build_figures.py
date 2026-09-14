@@ -312,6 +312,28 @@ FIGURES = [fig1_branches, fig2_consolidation, fig3_regression, fig4_esales,
            fig5_ai, fig6_exclusion, fig7_skills, fig8_smv]
 
 
+def fig9_ewaste():
+    """Two bars. The whole point is the size of one gap, so nothing else is drawn."""
+    dk, eu = V[("DK.ENV.WEEE", 2023)], V[("EU.ENV.WEEE", 2023)]
+    fig, ax = plt.subplots(figsize=(WIDTH, 1.9))
+    frame(ax, grid_axis="x")
+    bars = ax.barh(["Denmark", "EU-27 average"], [dk, eu],
+                   height=0.5, color=[ACCENT, GREY], zorder=3)
+    for b, v in zip(bars, (dk, eu)):
+        ax.text(v + 1.6, b.get_y() + b.get_height() / 2, f"{v:.2f}%",
+                va="center", fontsize=9, color=INK)
+    ax.set_xlim(0, 100)
+    ax.set_ylim(1.6, -0.6)
+    ax.set_xlabel("% of ICT waste collected that is recycled or prepared for reuse")
+    title(ax, "Denmark recovers a fifth of the ICT waste the EU average does",
+          f"2023; a gap of {eu - dk:.2f} percentage points. "
+          f"Base is ICT waste collected, not equipment sold")
+    return save(fig, "fig9_ewaste.png")
+
+
+FIGURES.append(fig9_ewaste)
+
+
 def verify():
     """Cross-check the figures' derived numbers against the report prose.
 

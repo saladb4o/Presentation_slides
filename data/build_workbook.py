@@ -280,6 +280,7 @@ def sheet_cover(wb):
         ("F9_CONSOLIDATION", "Figure 9 - banking consolidation on three "
                              "measures, and the asymmetry between them"),
         ("F10_SKILLS", "Figure 10 - digital skills by age band, DK vs EU-27"),
+        ("F11_EWASTE", "Figure 11 - ICT waste recovery, DK vs EU-27"),
         ("09_POLICY", "Policy events - dated instruments with legal citations"),
         ("06_RETAIL_GAP", "Documented gap - retail volume index not retrieved"),
         ("07_LIMITATIONS", "Data quality statement - read before citing"),
@@ -1992,6 +1993,58 @@ def sheet_f10(wb):
     return ws
 
 
+def sheet_f11(wb):
+    """ICT waste recovery, Denmark against the EU-27.
+
+    Two observations and no trend: the source publishes one year. The sheet
+    exists so the figure has a traceable home like every other, not because
+    two numbers need a spreadsheet.
+    """
+    ws = wb.create_sheet("F11_EWASTE")
+    title_block(ws, "Figure 11 - ICT waste recycled or prepared for reuse, 2023",
+                "Denmark against the EU-27 average, as a share of ICT-related "
+                "WEEE collected. Same publication, same definition, same year.")
+
+    header_row(ws, 4, ["geography", "% recovered", "gap to EU-27"], [22, 16, 16])
+    for i, (label, geo) in enumerate((("Denmark", "DK"), ("EU-27", "EU"))):
+        r = 5 + i
+        ws.cell(row=r, column=1, value=label).font = T_MONO
+        c = ws.cell(row=r, column=2, value=lookup(f"{geo}.ENV.WEEE", 2023))
+        c.font, c.fill, c.number_format = T_BODY, F_CALC, N_DEC
+        c = ws.cell(row=r, column=3,
+                    value=f"={L(f'{geo}.ENV.WEEE', 2023)}-{L('EU.ENV.WEEE', 2023)}")
+        c.font, c.fill, c.number_format = T_BODY, F_CALC, N_SIGNED
+        for j in range(1, 4):
+            ws.cell(row=r, column=j).border = BOX
+
+    ch = BarChart()
+    ch.type, ch.grouping = "col", "clustered"
+    ch.y_axis.title = "% of ICT waste collected"
+    ch.height, ch.width = 9, 12
+    data = Reference(ws, min_col=2, max_col=2, min_row=4, max_row=6)
+    cats = Reference(ws, min_col=1, min_row=5, max_row=6)
+    ch.add_data(data, titles_from_data=True)
+    ch.set_categories(cats)
+    paint(ch.series[0], C_ACCENT)
+    ch.y_axis.scaling.max = 100
+    style_chart(ch)
+    chart_title(ws, "E3", "ICT waste recovery, Denmark against the EU-27",
+                "The one indicator on which Denmark's digital economy ranks "
+                "near the bottom of the Union rather than the top.")
+    ws.add_chart(ch, "E4")
+
+    source_note(ws, 9,
+                "Source: European Commission, Digital Decade 2026 country "
+                "report for Denmark (EC1). READING: Denmark recovers 15.37% of "
+                "the ICT waste it collects against an EU-27 average of 80.23%, "
+                "a gap of roughly 65 percentage points. DENOMINATOR: the base "
+                "is ICT-related WEEE COLLECTED, not ICT equipment placed on the "
+                "market, so this measures what happens to devices that reach "
+                "the waste stream and says nothing about how many never do. "
+                "The source publishes a single year, so no trend is available "
+                "and none is claimed.")
+
+
 def sheet_gap(wb):
     ws = wb.create_sheet("06_RETAIL_GAP")
     ws.column_dimensions["A"].width = 26
@@ -2302,6 +2355,7 @@ def main():
     sheet_f8(wb)
     sheet_f9(wb)
     sheet_f10(wb)
+    sheet_f11(wb)
     sheet_gap(wb)
     sheet_limitations(wb)
     sheet_ai_log(wb)

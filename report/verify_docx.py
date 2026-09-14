@@ -70,7 +70,9 @@ def main():
     text = re.sub(r"<[^>]+>", "", doc)
     for section in r["sections"]:
         check(section["heading"] in text, f"missing heading: {section['heading']}")
-        first = section["paragraphs"][0][:60]
+        # The rendered document carries emphasis as formatting, so the
+        # asterisks the draft writes are not in the text to match against.
+        first = re.sub(r"\*+", "", section["paragraphs"][0])[:60]
         check(first in text, f"missing opening prose of {section['heading']}")
     for section in r["sections"]:
         for fig in section["figures"]:
@@ -103,6 +105,9 @@ def main():
     draft = pathlib.Path(__file__).resolve().parent / "draft"
     for f in sorted(draft.rglob("*.md")):
         for n, line in enumerate(f.read_text().splitlines(), 1):
+            check(not re.search(r"Section \d", line),
+                  f"{f.name}:{n} refers to a Section; the report is structured "
+                  f"as Questions 1 to 5, which is what the brief marks")
             check(not re.search(r"Appendix [A-H]\b", line),
                   f"{f.name}:{n} writes an appendix letter into the prose; "
                   f"use [[AP:topic]] so the letter follows APPENDICES")
@@ -136,7 +141,8 @@ def main():
     # --- appendices -------------------------------------------------------
     for app in r["appendices"]:
         check(app["heading"] in text, f"missing appendix heading: {app['heading']}")
-        first = next((p for k, p in app["blocks"] if k == "para"), "")[:60]
+        first = re.sub(r"\*+", "",
+                       next((p for k, p in app["blocks"] if k == "para"), ""))[:60]
         check(first in text, f"missing opening prose of {app['heading']}")
         for fig in app["figures"]:
             check(fig["caption"][:35] in text,
@@ -168,9 +174,10 @@ def main():
     # the ceiling is enforced on the inclusive figure. This had been checked by
     # hand each build, which is exactly how a limit drifts: adding Section 5
     # pushed the body 252 words over and nothing said so.
-    with_table = r["counts"]["total_with_table"]
-    check(with_table <= 2200,
-          f"body is {with_table} words including Table 1, over the 2,200 ceiling")
+    counted = r["counts"]["total"]
+    check(1800 <= counted <= 2200,
+          f"body is {counted} words, outside the 1,800 to 2,200 band the brief "
+          f"sets (2,000 plus or minus 10%, excluding references, tables and figures)")
 
     # REFERENCE_ONLY declares a source as supporting ARGUMENT in the report
     # rather than supplying a workbook value. The workbook verifier cannot test

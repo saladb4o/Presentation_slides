@@ -8,6 +8,7 @@ Content comes from render.build(), the same call report/assemble_report.py
 makes, so the Word file and the markdown preview carry identical prose,
 citations, figure numbers and references.
 """
+import re
 import pathlib
 import sys
 
@@ -41,15 +42,36 @@ def style_base(doc):
             setattr(section, attr, Cm(2.54))
 
 
+def _emphasis(text):
+    """Split Markdown emphasis into (text, bold, italic) runs. Doubles first,
+    so **x** is bold rather than italic-then-stray-asterisk."""
+    out = []
+    for piece in re.split(r"(\*\*[^*]+\*\*|\*[^*]+\*)", text):
+        if not piece:
+            continue
+        if piece.startswith("**") and piece.endswith("**") and len(piece) > 4:
+            out.append((piece[2:-2], True, False))
+        elif piece.startswith("*") and piece.endswith("*") and len(piece) > 2:
+            out.append((piece[1:-1], False, True))
+        else:
+            out.append((piece, False, False))
+    return out
+
+
 def para(doc, text, *, size=12, bold=False, italic=False, align=None,
          space_before=0, space_after=6, color=None, spacing=None):
     p = doc.add_paragraph()
-    run = p.add_run(text)
-    run.font.name = BODY_FONT
-    run.font.size = Pt(size)
-    run.bold, run.italic = bold, italic
-    if color:
-        run.font.color.rgb = RGBColor.from_string(color)
+    # The drafts use Markdown emphasis, and a single run rendered it as literal
+    # asterisks: every Danish statute name printed as *Lov om ...*. Split the
+    # text into runs instead, so **bold** and *italic* become formatting.
+    for piece, em_bold, em_italic in _emphasis(text):
+        run = p.add_run(piece)
+        run.font.name = BODY_FONT
+        run.font.size = Pt(size)
+        run.bold = bold or em_bold
+        run.italic = italic or em_italic
+        if color:
+            run.font.color.rgb = RGBColor.from_string(color)
     p.alignment = align if align is not None else WD_ALIGN_PARAGRAPH.JUSTIFY
     p.paragraph_format.space_before = Pt(space_before)
     p.paragraph_format.space_after = Pt(space_after)
@@ -101,7 +123,7 @@ def main():
         for text in section["paragraphs"]:
             para(doc, text)
 
-        if section["key"] == "S1_context":
+        if section["key"] == "Q1_industries":
             t = r["table1"]
             cap = para(doc, t["caption"], size=10, bold=True,
                        align=WD_ALIGN_PARAGRAPH.LEFT, space_before=8,

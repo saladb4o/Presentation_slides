@@ -1,4 +1,4 @@
-Section 4 reports five estimates of Danish digital exclusion ranging from 4.7% to
+Question 4 reports five estimates of Danish digital exclusion ranging from 4.7% to
 25%. They are not five measurements of one quantity, and this appendix sets out
 why, because the spread is the finding rather than an embarrassment.
 
@@ -20,12 +20,12 @@ its rungs cannot be taken.
 
 ### [[AP]].2 What that rules out
 
-An earlier draft of Section 4 subtracted 4.7% from 16.5% and multiplied the
+An earlier draft of Question 4 subtracted 4.7% from 16.5% and multiplied the
 11.8-percentage-point gap by the 15+ base to obtain "roughly 600,000 citizens."
 That calculation is invalid twice over. The two rates rest on different
 denominators, so their difference is not a quantity; and applying the 15+ base to
 a percentage defined on the total population understates the count. The corrected
-figures appear in Section 4 as two separate counts rather than a difference.
+figures appear in Question 4 as two separate counts rather than a difference.
 
 ### [[AP]].3 The ladder in people
 
@@ -47,5 +47,5 @@ Exemption reaches 238,479 people. The narrowest estimate of need that measures
 difficulty rather than legal status is 16.5%, or roughly 994,000 on the stated
 base. The gap between the relief mechanism and the difficulty it relieves is
 therefore on the order of three-quarters of a million people, and that statement
-holds under any of the bases considered here, which is why Section 4 makes it in
+holds under any of the bases considered here, which is why Question 4 makes it in
 that form rather than as a precise subtraction.

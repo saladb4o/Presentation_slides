@@ -24,7 +24,7 @@ def main():
         out += [f"## {section['heading']}", ""]
         for para in section["paragraphs"]:
             out += [para, ""]
-        if section["key"] == "S1_context":
+        if section["key"] == "Q1_industries":
             t = r["table1"]
             out += [f"**{t['caption']}**", ""]
             out += ["| " + " | ".join(t["header"]) + " |",
