@@ -67,6 +67,7 @@ def main():
     check(all(abs(w - 5580000) < 20000 for w in widths),
           f"a figure is not 15.5cm wide: {widths}")
 
+
     # A4, not the US Letter python-docx defaults to.
     pg = re.search(r'<w:pgSz w:w="(\d+)" w:h="(\d+)"', doc)
     check(pg and (int(pg.group(1)), int(pg.group(2))) == (11906, 16838),
@@ -74,6 +75,17 @@ def main():
 
     # --- structure --------------------------------------------------------
     text = re.sub(r"<[^>]+>", "", doc)
+
+    # Every column the renderer defines must reach the document, and every
+    # date in Table 1 is a factual claim that must carry its source.
+    t1 = r["table1"]
+    grid = re.search(r"<w:tblGrid>(.*?)</w:tblGrid>", doc, re.S)
+    cols = len(re.findall(r"<w:gridCol", grid.group(1))) if grid else 0
+    check(cols == len(t1["header"]),
+          f"Table 1 renders {cols} columns but the renderer defines "
+          f"{len(t1['header'])}")
+    for cell in t1["header"] + [c for row in t1["rows"] for c in row]:
+        check(cell in text, f"Table 1 cell {cell!r} is missing from the document")
     for section in r["sections"]:
         check(section["heading"] in text, f"missing heading: {section['heading']}")
         # The rendered document carries emphasis as formatting, so the

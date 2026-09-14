@@ -334,6 +334,50 @@ def fig9_ewaste():
 FIGURES.append(fig9_ewaste)
 
 
+def fig10_reach():
+    """Two panels that must not share an axis.
+
+    Denmark's e-government reach is published on individuals aged 16-74;
+    the exemption rate is published on citizens aged 15 and over. Drawing
+    them on one axis would invite the subtraction the report forbids
+    everywhere else, so each panel carries its own base in its own label
+    and a rule separates them.
+    """
+    reach = [V[("DK.DGX.EGOV.USE", 2024)], V[("EU.DGX.EGOV.USE", 2024)]]
+    other = [V[("DK.DGX.DIFF", 2026)], V[("DK.DGX.NOUSE", 2026)],
+             V[("DK.DGP.EXMP", 2026)]]
+    fig, (ax1, ax2) = plt.subplots(
+        1, 2, figsize=(WIDTH, 2.5), gridspec_kw={"width_ratios": [1, 1.15],
+                                                 "wspace": 0.75})
+
+    frame(ax1, grid_axis="x")
+    b1 = ax1.barh(["Denmark", "EU-27 average"], reach, height=0.5,
+                  color=[ACCENT, GREY], zorder=3)
+    for b, v in zip(b1, reach):
+        ax1.text(v - 2.5, b.get_y() + b.get_height() / 2, f"{v:.1f}%",
+                 va="center", ha="right", fontsize=9, color="white")
+    ax1.set_xlim(0, 100)
+    ax1.set_ylim(1.6, -0.6)
+    ax1.set_xlabel("% of individuals aged 16 to 74, 2024")
+    title(ax1, "Reach", "Used a public authority site or app, last 12 months")
+
+    frame(ax2, grid_axis="x")
+    labels = ["Report difficulty", "Do not use at all", "Exempt from Post"]
+    b2 = ax2.barh(labels, other, height=0.5, color=DARK, zorder=3)
+    for b, v in zip(b2, other):
+        ax2.text(v + 2, b.get_y() + b.get_height() / 2, f"{v:.1f}%",
+                 va="center", fontsize=9, color=INK)
+    ax2.set_xlim(0, 100)
+    ax2.set_ylim(2.6, -0.6)
+    ax2.set_xlabel("% on each measure's own base, 2026")
+    title(ax2, "What reach does not measure",
+          "Three bases, three sources. Not comparable with the left panel")
+    return save(fig, "fig10_reach.png")
+
+
+FIGURES.append(fig10_reach)
+
+
 def verify():
     """Cross-check the figures' derived numbers against the report prose.
 

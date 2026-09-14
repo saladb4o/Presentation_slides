@@ -20,13 +20,13 @@ reduction of 22% against a 2019 baseline is stated against a target the Science
 Based Targets initiative validated. Applied to Denmark, that standard is
 uncomfortable. SMV:Digital's headline figures are reported by participants to
 the body funding the scheme [[DG3]], which is why Question 2 recommends an
-evaluation the agency does not run. The same standard applies to Question 3: Denmark's
-position on ICT waste recovery is measured and published by an external body
-rather than self-reported, which is why it can be stated against the EU-27
-average at all.
+evaluation the agency does not run. Question 3 meets the same standard from the
+other side: Denmark's position on ICT waste recovery is measured externally
+rather than self-reported, which is why it can be stated at all.
 
 One detail transfers directly to policy. Tran put the cost of that validation at
 USD 10,000 to 25,000, which in practice restricts it to large corporations, and
 described publicly funded programmes extending equivalent capability to smaller
-firms. That is the same instrument, and the same justification, as SMV:Digital. A fixed cost of proving anything, emissions or returns, is heavier the smaller
-the firm bearing it, and closing that gap is a government function in both.
+firms. That is the same instrument, and the same justification, as SMV:Digital.
+A fixed cost of proving anything, emissions or returns, is heavier the smaller
+the firm bearing it.

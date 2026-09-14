@@ -132,7 +132,9 @@ def main():
                        align=WD_ALIGN_PARAGRAPH.LEFT, space_before=8,
                        space_after=4)
             cap.paragraph_format.line_spacing_rule = WD_LINE_SPACING.SINGLE
-            table = doc.add_table(rows=1, cols=3)
+            # Width comes from the header, not a constant: a column added in
+            # render.py was silently dropped when this was hardcoded to 3.
+            table = doc.add_table(rows=1, cols=len(t["header"]))
             table.style = "Table Grid"
             table.alignment = WD_TABLE_ALIGNMENT.CENTER
             for cell, head in zip(table.rows[0].cells, t["header"]):

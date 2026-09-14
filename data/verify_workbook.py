@@ -24,13 +24,13 @@ EXPECTED = [
     "00_COVER", "01_README", "02_MASTER", "03_SOURCES", "04_DEFINITIONS",
     "05_CALC", "F1_BRANCHES", "F2_PAYMENTS", "F3_ESALES", "F4_EXCLUSION",
     "F5_EU27", "F6_ADOPT_BENEFIT", "F7_QUALITY", "F8_SMVDIGITAL",
-    "F9_CONSOLIDATION", "F10_SKILLS", "F11_EWASTE", "06_RETAIL_GAP", "07_LIMITATIONS", "08_AI_LOG",
+    "F9_CONSOLIDATION", "F10_SKILLS", "F11_EWASTE", "F12_REACH", "06_RETAIL_GAP", "07_LIMITATIONS", "08_AI_LOG",
     "09_POLICY",
 ]
 
 FIG_SHEETS = ["F1_BRANCHES", "F2_PAYMENTS", "F3_ESALES", "F4_EXCLUSION",
               "F5_EU27", "F6_ADOPT_BENEFIT", "F7_QUALITY", "F8_SMVDIGITAL",
-              "F9_CONSOLIDATION", "F10_SKILLS", "F11_EWASTE"]
+              "F9_CONSOLIDATION", "F10_SKILLS", "F11_EWASTE", "F12_REACH"]
 
 failures = []
 checks = 0
@@ -179,7 +179,8 @@ check(resolved >= 40, f"only {resolved} lookups resolved; expected more")
 expected_charts = {"F1_BRANCHES": 1, "F2_PAYMENTS": 2, "F3_ESALES": 1,
                    "F4_EXCLUSION": 1, "F5_EU27": 1,
                    "F6_ADOPT_BENEFIT": 1, "F7_QUALITY": 2, "F8_SMVDIGITAL": 1,
-                   "F9_CONSOLIDATION": 1, "F10_SKILLS": 1, "F11_EWASTE": 1}
+                   "F9_CONSOLIDATION": 1, "F10_SKILLS": 1, "F11_EWASTE": 1,
+                   "F12_REACH": 0}
 for name, n in expected_charts.items():
     check(len(wb[name]._charts) == n,
           f"{name}: expected {n} chart(s), found {len(wb[name]._charts)}")

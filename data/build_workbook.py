@@ -2000,6 +2000,63 @@ def sheet_f10(wb):
     return ws
 
 
+def sheet_f12(wb):
+    """E-government reach against what reach does not measure.
+
+    The two panels of Figure 12 sit on DIFFERENT bases and the sheet keeps
+    them in separate blocks so nobody subtracts one from the other. That is
+    the whole point of the figure: the indicator on which Denmark leads the
+    Union cannot see the population Question 4 is about.
+    """
+    ws = wb.create_sheet("F12_REACH")
+    title_block(ws, "Figure 12 - Reach, and what reach does not measure",
+                "Panel A and Panel B are NOT comparable. Different sources, "
+                "different reference years and different denominators. Read "
+                "each against its own base; never difference them.")
+
+    header_row(ws, 4, ["PANEL A - reach", "%", "base"], [34, 12, 40])
+    for i, (label, code) in enumerate((("Denmark", "DK.DGX.EGOV.USE"),
+                                       ("EU-27 average", "EU.DGX.EGOV.USE"))):
+        r = 5 + i
+        ws.cell(row=r, column=1, value=label).font = T_MONO
+        c = ws.cell(row=r, column=2, value=lookup(code, 2024))
+        c.font, c.fill, c.number_format = T_BODY, F_CALC, N_DEC
+        ws.cell(row=r, column=3,
+                value="individuals aged 16-74, 2024 (ES9)").font = T_SMALL
+        for j in range(1, 4):
+            ws.cell(row=r, column=j).border = BOX
+
+    header_row(ws, 8, ["PANEL B - what it does not measure", "%", "base"],
+               [34, 12, 40])
+    panel_b = (("Report difficulty using them", "DK.DGX.DIFF", 2026,
+                "individuals, 2026 (EC1)"),
+               ("Do not use them at all", "DK.DGX.NOUSE", 2026,
+                "individuals, 2026 (EC1)"),
+               ("Formally exempt from Digital Post", "DK.DGP.EXMP", 2026,
+                "citizens aged 15 and over, Q1 2026 (DG1)"))
+    for i, (label, code, yr, base) in enumerate(panel_b):
+        r = 9 + i
+        ws.cell(row=r, column=1, value=label).font = T_MONO
+        c = ws.cell(row=r, column=2, value=lookup(code, yr))
+        c.font, c.fill, c.number_format = T_BODY, F_CALC, N_DEC
+        ws.cell(row=r, column=3, value=base).font = T_SMALL
+        for j in range(1, 4):
+            ws.cell(row=r, column=j).border = BOX
+
+    source_note(ws, 13,
+                "Sources: Eurostat isoc_ciegi_ac (ES9); European Commission, "
+                "Digital Decade 2026 country report for Denmark (EC1); "
+                "Digitaliseringsstyrelsen (DG1). READING: 98.5% of Danish "
+                "individuals aged 16 to 74 used a public authority website or "
+                "app at least once during 2024, the highest share in the EU-27 "
+                "against an average of 70.0%. DENOMINATOR WARNING: the survey "
+                "records whether a person interacted AT ALL, ONCE, in twelve "
+                "months. It measures reach, not frequency, competence or "
+                "independent use, and Panel B is drawn on other bases "
+                "entirely. The two panels are shown together because the "
+                "contrast is the argument; they are never differenced.")
+
+
 def sheet_f11(wb):
     """ICT waste recovery, Denmark against the EU-27.
 
@@ -2363,6 +2420,7 @@ def main():
     sheet_f9(wb)
     sheet_f10(wb)
     sheet_f11(wb)
+    sheet_f12(wb)
     sheet_gap(wb)
     sheet_limitations(wb)
     sheet_ai_log(wb)

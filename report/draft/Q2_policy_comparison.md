@@ -1,10 +1,8 @@
 ## Question 2. Policy comparison: SME digitalisation support in Denmark and Germany
 
-**The problem both policies address.** Denmark leads Europe on citizen adoption,
-not on firm capability. Eurostat [[ES9:y]] records that 98.5% of Danish
-individuals aged 16 to 74 used the website or app of a public authority in 2024,
-the highest share in the Union against an EU-27 average of 70.0%. Firm-side
-adoption is not comparable: only 38.78% of Danish
+**The problem both policies address.** Denmark leads Europe on citizen adoption
+but not on firm capability. Against the first place it holds on e-government
+use, only 38.78% of Danish
 enterprises make any e-sales, second in the Union behind Lithuania at 43.03% and
 still under two firms in five [[ES5]]. Intensity rose where breadth did not: e-sales grew from 17.05% of enterprise
 turnover in 2014 to 33.31% in 2024, against an EU-27 average moving from 16.43%
@@ -33,8 +31,7 @@ rule drew an objection Denmark's does not face: the Bundesrechnungshof [[BRH1:y]
 criticised awarding the funding by lottery rather than on criteria, warning that
 firms would postpone investment while waiting for a favourable draw, and called
 for the procedure to be discontinued. A lottery makes the grant a prize worth
-waiting for, and waiting is the opposite of the behaviour the scheme exists to
-produce.
+waiting for, and waiting is the opposite of what the scheme exists to produce.
 
 **Weaknesses and implementation challenges.** Denmark's advantage is narrower
 than it appears. Matching addresses selection on what the registers record,
@@ -50,5 +47,4 @@ cut-off, whether a firm is funded turns on assessor variation rather than on the
 firm, which makes applicants just above and just below comparable on exactly the
 unobservables that defeat matching. Retaining the scores and publishing the
 cut-off would allow a regression discontinuity estimate at administrative cost
-only. [[AP:policy_spec]] specifies the
-design.
+only ([[AP:policy_spec]]).

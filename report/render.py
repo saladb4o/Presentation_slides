@@ -82,6 +82,7 @@ FIGURE_FILES = {
     "F7": "fig5_ai_firmsize.png", "F4": "fig6_exclusion.png",
     "F10": "fig7_skills.png",
     "F2": "figA_e2_payments.png", "F11": "fig9_ewaste.png",
+    "F12": "fig10_reach.png",
 }
 SECTIONS = ["Q1_industries", "Q2_policy_comparison", "Q3_sdg",
             "Q4_inclusion", "Q5_guest_speaker"]
@@ -98,6 +99,11 @@ CAPTIONS = {
     "F10": "Basic digital skills by age band, Denmark and EU-27, 2025. European Commission; workbook F10.",
     "F2":  "Instrument shares of physical-retail payments, 2017-2025. Danmarks Nationalbank; workbook F2_PAYMENTS.",
     "F11": "ICT waste recycled or prepared for reuse, 2023. European Commission; workbook F11_EWASTE.",
+    "F12": ("E-government reach against the measures it cannot see, Denmark. "
+            "Left panel, Eurostat isoc_ciegi_ac, individuals aged 16 to 74, 2024; "
+            "right panel, European Commission and Digitaliseringsstyrelsen, 2026, "
+            "each measure on its own base. The panels are not comparable and are "
+            "never differenced; workbook F12_REACH."),
 }
 
 # Table 1 is trimmed to the instruments the argument actually turns on; the full
@@ -221,6 +227,17 @@ def build():
             reference_only_cited.append(sid)
         if sid not in used:
             used.append(sid)
+
+    # Table 1 cites its own sources in a Source column, so those sources are
+    # cited by the report even when no prose token names them. Without this
+    # they would fall out of the reference list and the table's dates would
+    # stand unattributed.
+    events = {e[0]: e for e in POLICY_EVENTS}
+    for date in TABLE1_ROWS:
+        sid = events[date][4]
+        if sid not in used:
+            used.append(sid)
+
     cite, references = build_citations(used)
 
     def resolve(text, own_letter=None):
@@ -310,12 +327,15 @@ def build():
                                b[1] for b in blocks
                                if b[0] in ("para", "subheading")).split())})
 
-    events = {e[0]: e for e in POLICY_EVENTS}
     table1 = {
         "caption": ("Table 1. The instruments this report turns on. "
                     "Full timeline in workbook sheet 09_POLICY."),
-        "header": ["Date", "Instrument", "What it did"],
-        "rows": [[events[d][0], events[d][3], events[d][2]] for d in TABLE1_ROWS],
+        # The source column is not decoration. Every date in this table is a
+        # factual claim, and Question 1 now cites the table rather than
+        # restating the dates in prose, so the attribution has to live here.
+        "header": ["Date", "Instrument", "What it did", "Source"],
+        "rows": [[events[d][0], events[d][3], events[d][2],
+                  resolve(f"[[{events[d][4]}:b]]")] for d in TABLE1_ROWS],
     }
 
     counted = sum(len(" ".join(s["paragraphs"]).split()) + len(s["heading"].split())

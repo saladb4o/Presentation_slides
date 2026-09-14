@@ -3,19 +3,19 @@
 Sustainable Development Goal 12, on responsible consumption and production, is
 the goal Danish digitalisation has most clearly moved, and it has moved it in
 both directions. Digital infrastructure substitutes information for materials at
-the point of use and creates a new material stream at disposal. Denmark
-is unusually far along the first and unusually far behind on the second.
+the point of use and creates a new material stream at disposal. Denmark is
+unusually far along the first and far behind on the second.
 
 **Positive contribution.** The mandate's audited benefit is a dematerialisation
 benefit. Rigsrevisionen [[RR1:y]] could verify roughly DKK 450 million a year of
 the projected saving from compulsory Digital Post, and the verified component is
-precisely postage, paper and envelopes. That is a financial figure rather than a tonnage, so it prices the paper avoided
-rather than weighing it, but the substitution is real and covers correspondence
-with every adult in the country. The payment system shows the same substitution privately: cash fell from 23% to
-9% of physical retail payments between 2017 and 2025 [[NB1]]. That is a share
-rather than a volume, so it establishes the direction of substitution away from
-the printing, transport and destruction physical currency requires, and not the
-quantity of it avoided.
+precisely postage, paper and envelopes. That is a financial figure rather than a
+tonnage, so it prices the paper avoided rather than weighing it, but the
+substitution covers correspondence with every adult in the country. Payments
+show the same substitution privately: cash fell from 23% to 9% of physical
+retail payments between 2017 and 2025 [[NB1]]. That is a share rather than a
+volume, so it establishes the direction of the substitution and not its
+quantity.
 
 **The remaining challenge.** Denmark performs the disposal side badly. The
 European Commission [[EC1:y]] reports that Denmark recycled or prepared for
