@@ -4,7 +4,7 @@ users who purchased online [[ES7]] and e-sales as a share of enterprise turnover
 [[ES6]]. All computation is reproducible from `02_MASTER`; the workbook computes
 the same statistics as live formulas on sheet `F6_ADOPT_BENEFIT`.
 
-### C.1 The estimate
+### [[AP]].1 The estimate
 
 | Statistic | Value |
 |---|---|
@@ -21,7 +21,7 @@ the lower bound a percentage point of adoption is worth 0.38pp of turnover; at
 the upper bound, 0.82. The point estimate alone would overstate the precision by
 a factor of roughly two.
 
-### C.2 Residuals
+### [[AP]].2 Residuals
 
 [[AF_RESID]]
 
@@ -36,7 +36,7 @@ an ordinary position on the fitted relationship, not evidence that Denmark
 converts adoption into commercial activity unusually well. Section 2 says only
 that Denmark sits above the line and within one standard error of it.
 
-### C.3 Leave-one-out stability
+### [[AP]].3 Leave-one-out stability
 
 [[AF_JACK]]
 
@@ -47,7 +47,7 @@ Ireland is the most influential single observation: dropping it moves the slope
 by −0.086, about 14%. That is unsurprising, since Ireland is the extreme point on
 both axes, and it is the reason Section 2 quotes an interval rather than a point.
 
-### C.4 Selection on the tails, measured
+### [[AP]].4 Selection on the tails, measured
 
 [[AF_TAIL]]
 
@@ -75,7 +75,7 @@ what the earlier figure actually showed. Recomputing the same six countries from
 the databrowser's unrounded values gives a slope of 0.658 and R² of 0.854: the
 same conclusion, marginally different digits.
 
-### C.5 Is the missing third of the EU missing for a reason?
+### [[AP]].5 Is the missing third of the EU missing for a reason?
 
 Nine member states report adoption but not turnover: EE, EL, FI, LT, LV, NL, PT,
 RO and SK. If they were absent because of something correlated with the outcome,
@@ -104,7 +104,7 @@ honest statement is that the nine are missing for administrative and disclosure
 reasons rather than for anything this section could observe, which is weaker than
 missing at random and stronger than selected on the outcome.
 
-### C.6 What this design still cannot do
+### [[AP]].6 What this design still cannot do
 
 Adoption is measured on consumers and turnover on enterprises, including
 business-to-business ordering no consumer ever touches, so the two axes are not

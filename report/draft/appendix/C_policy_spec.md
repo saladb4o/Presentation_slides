@@ -3,7 +3,7 @@ SMV:Digital's allocation so that the scheme can measure its own effect, is a
 research design as much as a policy, and a design is only as good as its specification. This appendix
 states it at the level of detail an administering agency would need to act on it.
 
-### F.1 What the present scheme can and cannot establish
+### [[AP]].1 What the present scheme can and cannot establish
 
 SMV:Digital is better evaluated than most such schemes. Digitaliseringsstyrelsen
 links recipients to Danmarks Statistik registers and compares them with matched
@@ -24,7 +24,7 @@ that is independent of the firm, and matching cannot manufacture that.
 
 [[AF_SMV]]
 
-### F.2 The instrument
+### [[AP]].2 The instrument
 
 | Element | Specification |
 |---|---|
@@ -73,7 +73,7 @@ applicants and needs no new appropriation. And the control arm already exists, s
 those firms are being turned away today; the scheme simply stops discarding the
 information that it turned them away at a known distance from a known threshold.
 
-### F.3 The alternative, and why it is rejected
+### [[AP]].3 The alternative, and why it is rejected
 
 The cleaner design is randomised allocation among eligible applicants, and an
 oversubscribed pool would supply it at no budgetary cost. Germany tried it. Under
@@ -85,7 +85,7 @@ the opposite of the behaviour the scheme exists to produce. A scoring threshold
 carries no such incentive, because applying at the highest quality one can manage
 remains the dominant strategy whichever side of the cut-off one lands on.
 
-### F.4 What the design can and cannot deliver
+### [[AP]].4 What the design can and cannot deliver
 
 The estimate is local to the threshold. It identifies the effect of the grant on
 marginal applicants, meaning firms the assessors found neither clearly strong nor
@@ -97,7 +97,7 @@ It also cannot detect effects on firms deterred from applying at all, which
 Section 3 identifies as the larger population. A discontinuity measures the
 scheme; it does not measure the gap the scheme was built to close.
 
-### F.5 Timeline
+### [[AP]].5 Timeline
 
 [[AF_GANTT]]
 

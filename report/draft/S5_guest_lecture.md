@@ -14,7 +14,7 @@ external body, the Science Based Targets initiative or an equivalent, has
 validated it, because an unvalidated commitment is one the claimant grades
 itself. The same objection applies to SMV:Digital, whose reported gains rest on
 participants surveyed by the body funding the scheme [[DG3]], and it is why
-Appendix F proposes an evaluation independent of the administering agency.
+[[AP:policy_spec]] proposes an evaluation independent of the administering agency.
 
 Asked about smaller firms, Tran put the cost of that validation at USD 10,000 to
 25,000, which in practice restricts it to large corporations, with free adapted

@@ -39,12 +39,21 @@ APPENDIX_DIR = DRAFT / "appendix"
 FIGURES_DIR = ROOT / "report" / "figures"
 
 # Appendices, in order. Letter, source file stem, title.
+# Letters are assigned here and nowhere else. Every reference to an appendix,
+# every subheading number and every appendix figure number derives from this
+# list, because the letters were once typed into the prose and stayed at C, D,
+# F and G after four appendices were cut from an A-to-H set.
 APPENDICES = [
-    ("C", "C_regression", "Regression Diagnostics"),
-    ("D", "D_exclusion", "Reconciling the Exclusion Estimates"),
-    ("F", "F_policy_spec", "Policy Specification and Implementation Timeline"),
-    ("G", "G_comparative_law", "Comparative Law on Mandatory Digital Administration"),
+    ("A", "A_regression", "Regression Diagnostics"),
+    ("B", "B_exclusion", "Reconciling the Exclusion Estimates"),
+    ("C", "C_policy_spec", "Policy Specification and Implementation Timeline"),
+    ("D", "D_comparative_law", "Comparative Law on Mandatory Digital Administration"),
 ]
+
+# stem without its letter prefix -> letter, so prose can name an appendix by
+# what it is about rather than by a letter that moves.
+APPENDIX_BY_TOPIC = {stem.split("_", 1)[1]: letter
+                     for letter, stem, _t in APPENDICES}
 
 # Appendix figures are numbered WITHIN their appendix (Figure C1, C2, ...), so
 # adding one never renumbers a body figure. Body figures stay 1-8 whatever the
@@ -192,8 +201,8 @@ def build():
             appfig[key] = (f"{letter}{n}", letter)
 
     used = []
-    for sid in re.findall(r"\[\[([A-Z]+\d*)(?::[yb])?\]\]", blob):
-        if sid.startswith("AF_"):
+    for sid in re.findall(r"\[\[([A-Z]+\d*)(?::[a-z_]+)?\]\]", blob):
+        if sid.startswith("AF_") or sid == "AP":
             continue
         if sid.startswith("F") and sid[1:].isdigit():
             continue
@@ -209,20 +218,33 @@ def build():
             used.append(sid)
     cite, references = build_citations(used)
 
-    def resolve(text):
+    def resolve(text, own_letter=None):
         def sub(m):
             tok, form = m.group(1), m.group(2)
             if tok in appfig:
                 return f"Figure {appfig[tok][0]}"
             if tok in fignum:
                 return f"Figure {fignum[tok]}"
+            # [[AP]] is the letter of the appendix being rendered, for its own
+            # subheading numbers. [[AP:topic]] names another appendix by what it
+            # covers. Neither letter is ever written down outside APPENDICES.
+            if tok == "AP":
+                if form:
+                    topic = form[1:]
+                    if topic not in APPENDIX_BY_TOPIC:
+                        raise SystemExit(f"no appendix covers topic: {topic}")
+                    return f"Appendix {APPENDIX_BY_TOPIC[topic]}"
+                if own_letter is None:
+                    raise SystemExit("[[AP]] used outside an appendix")
+                return own_letter
             author, year = cite[tok]
             if form == ":y":
                 return f"({year})"
             if form == ":b":
                 return f"{author} {year}"
             return f"({author} {year})"
-        return re.sub(r"\[\[(AF_[A-Z]+|[A-Za-z]+\d*)(:[yb])?\]\]", sub, text)
+        return re.sub(r"\[\[(AF_[A-Z]+|AP|[A-Za-z]+\d*)(:[yb]|:[a-z_]+)?\]\]",
+                      sub, text)
 
     sections = []
     for name in SECTIONS:
@@ -246,7 +268,7 @@ def build():
     for letter, stem, title in APPENDICES:
         if letter not in app_bodies:
             continue
-        resolved = resolve(app_bodies[letter])
+        resolved = resolve(app_bodies[letter], own_letter=letter)
         chunks = [c.strip() for c in resolved.split("\n\n") if c.strip()]
         blocks = []
         for chunk in chunks:

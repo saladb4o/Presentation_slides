@@ -103,6 +103,12 @@ def main():
     draft = pathlib.Path(__file__).resolve().parent / "draft"
     for f in sorted(draft.rglob("*.md")):
         for n, line in enumerate(f.read_text().splitlines(), 1):
+            check(not re.search(r"Appendix [A-H]\b", line),
+                  f"{f.name}:{n} writes an appendix letter into the prose; "
+                  f"use [[AP:topic]] so the letter follows APPENDICES")
+
+    for f in sorted(draft.rglob("*.md")):
+        for n, line in enumerate(f.read_text().splitlines(), 1):
             check("]]" not in line or ":b]]" not in line or line.startswith("|"),
                   f"{f.name}:{n} uses a bare citation outside a table row, "
                   f"which renders an author and year loose in the prose")

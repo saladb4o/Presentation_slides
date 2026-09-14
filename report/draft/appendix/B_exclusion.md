@@ -2,7 +2,7 @@ Section 4 reports five estimates of Danish digital exclusion ranging from 4.7% t
 25%. They are not five measurements of one quantity, and this appendix sets out
 why, because the spread is the finding rather than an embarrassment.
 
-### D.1 The estimates differ in three ways at once
+### [[AP]].1 The estimates differ in three ways at once
 
 | Estimate | Value | Year | Stated base | Source |
 |---|---|---|---|---|
@@ -18,7 +18,7 @@ denominator. Any one of the three would make them non-comparable; all three
 together mean the ladder cannot be read as a series and the differences between
 its rungs cannot be taken.
 
-### D.2 What that rules out
+### [[AP]].2 What that rules out
 
 An earlier draft of Section 4 subtracted 4.7% from 16.5% and multiplied the
 11.8-percentage-point gap by the 15+ base to obtain "roughly 600,000 citizens."
@@ -27,7 +27,7 @@ denominators, so their difference is not a quantity; and applying the 15+ base t
 a percentage defined on the total population understates the count. The corrected
 figures appear in Section 4 as two separate counts rather than a difference.
 
-### D.3 The ladder in people
+### [[AP]].3 The ladder in people
 
 [[AF_LADDER]]
 
@@ -39,9 +39,9 @@ Two of the five sources say "adult population" without defining it, and Denmark
 has no verified adult-population figure in this dataset. Those two are therefore
 shown as a range between the two defensible bases: the 15+ base of about 5.07
 million implied by the Digital Post statistics, and the total population of
-6,025,603 [[DST2]]. Choosing one silently is the error D.2 describes.
+6,025,603 [[DST2]]. Choosing one silently is the error [[AP]].2 describes.
 
-### D.4 What survives
+### [[AP]].4 What survives
 
 Exemption reaches 238,479 people. The narrowest estimate of need that measures
 difficulty rather than legal status is 16.5%, or roughly 994,000 on the stated

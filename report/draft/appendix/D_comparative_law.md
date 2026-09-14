@@ -5,7 +5,7 @@ Denmark's mandate does not meet, and one comparable state reached the same place
 without litigation at all. This appendix sets out each, and what follows for a
 Danish reform.
 
-### G.1 France: mandatory digital service is lawful only on conditions
+### [[AP]].1 France: mandatory digital service is lawful only on conditions
 
 In Decision No. 452798 of 3 June 2022, the Conseil d'État partially annulled the
 decree requiring residence-permit applications to be made through the ANEF portal
@@ -22,7 +22,7 @@ it, and a non-digital substitute route where the digital one fails. The reasonin
 is the one this report has been making empirically: a mandate is justified by the
 capability of the population it binds, not by the capability of the median user.
 
-### G.2 Belgium: the alternatives are cumulative, and cost is not a defence
+### [[AP]].2 Belgium: the alternatives are cumulative, and cost is not a defence
 
 In *Arrêt* No. 126/2025 of 25 September 2025, the Cour constitutionnelle ruled on
 the Brussels Digital ordinance of 2024 in an action brought by twenty-four
@@ -38,7 +38,7 @@ Belgian court's position is that the saving is not a reason the obligation cease
 to apply, which, applied to a Danish debate conducted almost entirely in
 administrative-cost terms, reverses the burden of argument.
 
-### G.3 Norway: the digital default binds the administration, not the citizen
+### [[AP]].3 Norway: the digital default binds the administration, not the citizen
 
 The sharper contrast is not litigated at all. Norway made electronic communication
 the administrative default, *digitalt førstevalg*, but under the eGovernment
@@ -56,11 +56,11 @@ kind Section 4 measures. And it is exercisable by telephone or on paper, which
 matters because an opt-out reachable only through the digital channel would be
 self-defeating. No rate is offered against Denmark's 4.7%: the Norwegian figure is
 a count of registrations and the base it should be taken on is not established by
-the source, which is the error Appendix D exists to name. The comparison worth
+the source, which is the error [[AP:exclusion]] exists to name. The comparison worth
 making is the route rather than the rate: whether reaching a position outside the
 digital channel requires the state's permission or only the citizen's decision.
 
-### G.4 What this does and does not establish
+### [[AP]].4 What this does and does not establish
 
 Neither ruling binds Denmark, and Norway's arrangement is a policy choice rather
 than a legal requirement on anyone else. The Conseil d'État decision concerns

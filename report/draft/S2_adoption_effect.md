@@ -27,7 +27,7 @@ European Union in 2024, the turnover measure from a separate extract [[ES6]]. Ac
 percentage points of turnover per percentage point of adoption, with a standard
 error of 0.105 and an R² of 0.674.
 
-Appendix C reports the diagnostics, including a comparison with an earlier
+[[AP:regression]] reports the diagnostics, including a comparison with an earlier
 version drawn from a Eurostat news release [[ES4]] that named only the ends of
 the distribution and produced a slope 8% different, which measures selection bias
 rather than asserting it.

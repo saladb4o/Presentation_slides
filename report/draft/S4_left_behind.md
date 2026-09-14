@@ -14,7 +14,7 @@ the affected population is small, not because exclusion is rare where it occurs.
 
 Exemption is also the narrowest available measure. [[F4]] sets it against four
 wider estimates, not comparable because measure, year and denominator all differ;
-Appendix D reconciles them. The European Commission [[EC1:y]] reports that
+[[AP:exclusion]] reconciles them. The European Commission [[EC1:y]] reports that
 6.5% of Danes do not use digital public services and 16.5% report difficulty using
 them, while Digitaliseringsstyrelsen [[DG2:y]] and Justitia [[JU1:y]] put the
 widest estimates at about a quarter of adults. The counts are clearer than the
