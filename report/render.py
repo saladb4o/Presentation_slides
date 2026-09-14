@@ -104,7 +104,9 @@ CAPTIONS = {
 # timeline stays in workbook sheet 09_POLICY.
 # Rigsrevisionen's 2016 audit is deliberately NOT here: it is a finding, not an
 # instrument, and sections 1 and 6 both cite it in prose.
-TABLE1_ROWS = ["2012-06-11", "2014-11-01", "2022-07-01", "2023-10-31"]
+# The cash-rule amendment was dropped when Question 1 stopped discussing it,
+# so the table no longer lists an instrument the report does not turn on.
+TABLE1_ROWS = ["2012-06-11", "2014-11-01", "2023-10-31"]
 
 
 def author_year(harvard):

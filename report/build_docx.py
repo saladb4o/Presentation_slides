@@ -38,6 +38,9 @@ def style_base(doc):
     pf.line_spacing_rule = WD_LINE_SPACING.ONE_POINT_FIVE
     pf.space_after = Pt(6)
     for section in doc.sections:
+        # python-docx defaults to US Letter. An Australian university submission
+        # is A4, and the difference shows on every page of a printed report.
+        section.page_width, section.page_height = Cm(21.0), Cm(29.7)
         for attr in ("top_margin", "bottom_margin", "left_margin", "right_margin"):
             setattr(section, attr, Cm(2.54))
 
@@ -156,7 +159,7 @@ def main():
             pic.alignment = WD_ALIGN_PARAGRAPH.CENTER
             pic.paragraph_format.space_before = Pt(8)
             pic.paragraph_format.space_after = Pt(2)
-            pic.add_run().add_picture(str(path), width=Cm(16))
+            pic.add_run().add_picture(str(path), width=Cm(15.5))
             cap = para(doc, fig["caption"], size=10, italic=True,
                        align=WD_ALIGN_PARAGRAPH.CENTER, space_after=10)
             cap.paragraph_format.line_spacing_rule = WD_LINE_SPACING.SINGLE
@@ -207,7 +210,7 @@ def main():
             pic.alignment = WD_ALIGN_PARAGRAPH.CENTER
             pic.paragraph_format.space_before = Pt(8)
             pic.paragraph_format.space_after = Pt(2)
-            pic.add_run().add_picture(str(path), width=Cm(16))
+            pic.add_run().add_picture(str(path), width=Cm(15.5))
             cap = para(doc, fig["caption"], size=10, italic=True,
                        align=WD_ALIGN_PARAGRAPH.CENTER, space_after=10)
             cap.paragraph_format.line_spacing_rule = WD_LINE_SPACING.SINGLE

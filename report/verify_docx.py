@@ -59,12 +59,18 @@ def main():
     sizes = {n: z.getinfo(n).file_size for n in embedded}
     check(all(s > 20000 for s in sizes.values()),
           f"an embedded image looks truncated: {sizes}")
-    # 16cm == 5760000 EMU; allow rounding
+    # 15.5cm == 5580000 EMU; allow rounding. Must stay inside the A4
+    # text width of 15.92cm, or figures overhang the margin.
     widths = [int(w) for w in re.findall(r'<wp:extent cx="(\d+)"', doc)]
     check(len(widths) == total_figs,
           f"{len(widths)} sized images, expected {total_figs}")
-    check(all(abs(w - 5760000) < 20000 for w in widths),
-          f"a figure is not 16cm wide: {widths}")
+    check(all(abs(w - 5580000) < 20000 for w in widths),
+          f"a figure is not 15.5cm wide: {widths}")
+
+    # A4, not the US Letter python-docx defaults to.
+    pg = re.search(r'<w:pgSz w:w="(\d+)" w:h="(\d+)"', doc)
+    check(pg and (int(pg.group(1)), int(pg.group(2))) == (11906, 16838),
+          f"page size is not A4: {pg.groups() if pg else 'absent'}")
 
     # --- structure --------------------------------------------------------
     text = re.sub(r"<[^>]+>", "", doc)

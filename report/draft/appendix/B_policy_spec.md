@@ -77,8 +77,9 @@ information that it turned them away at a known distance from a known threshold.
 
 The cleaner design is randomised allocation among eligible applicants, and an
 oversubscribed pool would supply it at no budgetary cost. Germany tried it. Under
-*Digital Jetzt*, the Bundesrechnungshof found that lottery allocation led firms to
-**postpone** investment while waiting for a favourable draw, and called for the
+*Digital Jetzt*, the Bundesrechnungshof criticised allocation by lottery rather
+than on criteria, warning that firms would **postpone** investment while waiting
+for a favourable draw, and called for the
 procedure to be discontinued [[BRH1]]. The objection is not a technicality about
 budget law: a lottery makes the grant a prize worth waiting for, and waiting is
 the opposite of the behaviour the scheme exists to produce. A scoring threshold
