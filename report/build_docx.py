@@ -139,18 +139,6 @@ def main():
                        align=WD_ALIGN_PARAGRAPH.CENTER, space_after=10)
             cap.paragraph_format.line_spacing_rule = WD_LINE_SPACING.SINGLE
 
-        if section["key"] == "S4_left_behind":
-            p = r["placeholder"]
-            para(doc, p["heading"], size=13, bold=True,
-                 align=WD_ALIGN_PARAGRAPH.LEFT, space_before=12, space_after=6)
-            # Loud on purpose. A finished-looking file must not be submitted
-            # with a hole where 8 of 50 marks live.
-            para(doc, "*** DO NOT SUBMIT WITH THIS SECTION IN PLACE ***",
-                 size=12, bold=True, color="C00000",
-                 align=WD_ALIGN_PARAGRAPH.CENTER, space_after=4)
-            para(doc, p["text"], size=12, italic=True, color="C00000",
-                 align=WD_ALIGN_PARAGRAPH.CENTER, space_after=12)
-
     doc.add_page_break()
     para(doc, "References", size=13, bold=True,
          align=WD_ALIGN_PARAGRAPH.LEFT, space_after=8)

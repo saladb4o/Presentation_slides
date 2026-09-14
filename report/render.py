@@ -37,7 +37,6 @@ from dataset import POLICY_EVENTS                    # noqa: E402
 DRAFT = ROOT / "report" / "draft"
 APPENDIX_DIR = DRAFT / "appendix"
 FIGURES_DIR = ROOT / "report" / "figures"
-RESERVED_S5 = 280        # words held for the blocked guest-lecture section
 
 # Appendices, in order. Letter, source file stem, title.
 APPENDICES = [
@@ -311,18 +310,13 @@ def build():
             "instrument that delivered the universal part - legal compulsion - "
             "is why the rest is missing."
         ),
-        "placeholder": {
-            "heading": "5. [Guest lecture question]",
-            "text": ("NOT DRAFTED - blocked pending the guest lecture content. "
-                     "280 words are reserved in the word budget."),
-        },
         "sections": sections,
         "table1": table1,
         "references": references,
         "counts": {"sections": counted, "captions": caps,
-                   "reserved_s5": RESERVED_S5, "table1": table_words,
-                   "total": counted + caps + RESERVED_S5,
-                   "total_with_table": counted + caps + RESERVED_S5 + table_words},
+                   "table1": table_words,
+                   "total": counted + caps,
+                   "total_with_table": counted + caps + table_words},
         "appendices": appendices,
         "appendix_words": sum(a["words"] for a in appendices),
         "reference_only_cited": sorted(set(reference_only_cited)),

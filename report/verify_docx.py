@@ -83,8 +83,14 @@ def main():
     footer = z.read("word/footer1.xml").decode("utf-8")
     check("PAGE" in footer, "footer carries no PAGE field")
 
-    # --- the placeholder must be impossible to miss -----------------------
-    check("DO NOT SUBMIT" in text, "section 5 placeholder is not marked")
+    # --- no trace of the section 5 stub may survive -----------------------
+    # While Section 5 was blocked, the renderer injected a loud placeholder AND
+    # added 280 reserved words to every count. Section 5 is written now. The
+    # placeholder outlived it by one build, printing a "NOT DRAFTED" heading
+    # directly above the real section, and the reserve outlived it silently,
+    # overstating the body by 280 words and provoking trims that were not needed.
+    for stale in ("DO NOT SUBMIT", "NOT DRAFTED", "[Guest lecture question]"):
+        check(stale not in text, f"section 5 stub text {stale!r} is still in the document")
 
     # --- Table 1 ----------------------------------------------------------
     app_tables = sum(1 for a in r["appendices"]

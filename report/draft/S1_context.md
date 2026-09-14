@@ -15,6 +15,12 @@ October 2021 and withdrawn on 31 October 2023. The combination is central to the
 design. A mandate alone changes only how letters are sent, whereas a mandate plus
 a universal credential establishes shared authentication infrastructure that every
 citizen must hold and any firm may build upon without financing its adoption.
+This lowers the fixed cost of services developed on it.
+
+Compulsion is also why the adoption statistics below require careful
+interpretation: after 1 November 2014, enrolment measures compliance with a legal
+obligation rather than revealed demand, and that distinction governs the analysis
+throughout.
 
 The programme was justified on a projected saving. According to Rigsrevisionen
 [[RR1:y]], the Ministry of Finance business case anticipated approximately DKK

@@ -13,8 +13,8 @@ turnover in 2014 to 33.31% in 2024, against an EU-27 average moving from 16.43% 
 19.49% ([[F3]]). Both began at a similar level, after which Denmark roughly doubled and the EU
 gained three percentage points.
 
-The same pattern identifies which firms were positioned to build on the
-infrastructure. The European Commission [[EC1:y]] reports that in 2025, 42.03% of
+The same pattern governs the newest technology and identifies which firms were
+positioned to build on the infrastructure. The European Commission [[EC1:y]] reports that in 2025, 42.03% of
 Danish enterprises used artificial intelligence,
 comprising 74.52% of large firms against 40.99% of SMEs, a gap of 33.53 percentage
 points ([[F7]]). This is not a
@@ -26,4 +26,5 @@ converts access into application, and that capital is distributed by firm size.
 Denmark's binding constraint is therefore diffusion rather than adoption, which
 bears on Sustainable Development Goal 8, Target 8.2, on productivity growth
 through technological upgrading. The gain accrues to the firms already best placed
-to capture it.
+to capture it, and the policy question is how to move it down the size
+distribution.

@@ -35,9 +35,6 @@ def main():
             out += [f"![{fig['caption']}](figures/{fig['file']})", "",
                     f"*{fig['caption']}*", ""]
         out += ["---", ""]
-        if section["key"] == "S4_left_behind":
-            p = r["placeholder"]
-            out += [f"## {p['heading']}", "", f"> **{p['text']}**", "", "---", ""]
 
     out += ["## References", ""]
     out += ["\n\n".join(r["references"]), ""]
@@ -66,7 +63,7 @@ def main():
     c = r["counts"]
     print(f"wrote {path.relative_to(ROOT)}")
     print(f"  sections {c['sections']} + captions {c['captions']} "
-          f"+ reserved section 5 {c['reserved_s5']} = {c['total']}")
+          f"= {c['total']}")
     print(f"  Table 1 {c['table1']} words -> {c['total_with_table']} "
           f"if tables count")
     print(f"  {r['source_count']} sources cited, {len(r['references'])} "

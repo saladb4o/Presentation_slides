@@ -3,12 +3,14 @@
 The mandate's effects are most pronounced among the oldest citizens.
 Digitaliseringsstyrelsen [[DG1:y]] reports that 20% of Danish citizens aged 75 to
 84 hold a formal exemption from Digital Post, rising to 33% among those 85 and
-over, so one in three of the oldest cohort sits outside a compulsory system.
+over. One in three of the oldest cohort therefore sits outside a compulsory
+system.
 These are 2022 figures and the headline rate below is from 2026, so the two are
 complementary measures of the same exclusion rather than points on a trend.
 
 Against that, the aggregate appears small: in the first quarter of 2026, 4.7% of
-citizens aged 15 and over, or 238,479 people, were exempt.
+citizens aged 15 and over, or 238,479 people, were exempt. It is small because
+the affected population is small, not because exclusion is rare where it occurs.
 
 Exemption is also the narrowest available measure. [[F4]] sets it against four
 wider estimates, not comparable because measure, year and denominator all differ;
