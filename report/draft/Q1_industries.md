@@ -4,22 +4,21 @@ Denmark did not persuade its citizens to adopt digital public services; it
 required them to do so. *Lov om Offentlig Digital Post* [[RI1]] made a state-run
 digital mailbox the default legal channel for public correspondence, binding
 businesses from 2013 and every citizen aged 15 and over from 1 November 2014.
-Digitaliseringsstyrelsen [[DG4:y]] records that the accompanying identity
-credential, NemID, was replaced by MitID from October 2021 and withdrawn on 31
-October 2023. The combination is what distinguishes the Danish case. A mandate alone changes
+Digitaliseringsstyrelsen [[DG4:y]] records that the accompanying credential,
+NemID, was replaced by MitID from October 2021 and withdrawn on 31 October
+2023. The combination is what distinguishes the Danish case. A mandate alone changes
 how letters are sent; a mandate plus a universal credential creates shared
 authentication infrastructure every citizen must hold and any firm may build on
-without financing its adoption, lowering the fixed cost of services developed on
+without financing its adoption, lowering the fixed cost of services built on
 it. Because compulsion accounts for citizens' use, the economic interest lies in
 what others built there.
 
 **Retail banking.** Finans Danmark [[FD1:y]] reports that Danish retail bank
 branches fell from 2,025 in 2004 to 665 in 2024, a decline of 67.2% ([[F1]]).
 Taken alone that suggests digitalisation eliminated banking employment, but the
-longer series qualifies it: between 1991 and 2024 financial institutions fell by
-76.7%, from 219 to 51, while bank employment fell by only 29.4%, from roughly
-51,000 to 36,000 ([[F9]]). Staff per surviving institution
-therefore rose from 233 to 706, an increase of 203%. The technologies doing this are online and mobile banking authenticated by
+longer series qualifies it: between 1991 and 2024 financial institutions fell
+76.7%, from 219 to 51, while bank employment fell only 29.4%, from roughly
+51,000 to 36,000 ([[F9]]). Staff per surviving institution rose from 233 to 706. The technologies doing this are online and mobile banking authenticated by
 MitID: with identity verification and correspondence on shared national
 infrastructure, branches ceased to be the distribution channel, output per
 institution rose and the sector consolidated rather than shed labour. The three series

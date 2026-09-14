@@ -451,6 +451,13 @@ def sheet_definitions(wb):
     ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=3)
     ws.row_dimensions[2].height = 30
     defs = [
+        ("DK.DGX.EGOV.USE",
+         "Share of individuals who used the website or app of a public "
+         "authority for private purposes in the last 12 months.",
+         "Base is ALL individuals aged 16-74, not internet users, so it is "
+         "not comparable with the DK.ECM.IND.BUY series. Records whether a "
+         "person interacted at all, once, in a year: it measures reach, not "
+         "frequency, competence or independent use."),
         ("DK.PAY.CASH.POS",
          "Cash as a share of the NUMBER of payments made at physical points of sale.",
          "Not a share of value. Excludes e-commerce entirely."),

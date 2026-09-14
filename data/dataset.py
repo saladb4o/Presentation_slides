@@ -19,6 +19,20 @@ inferred from a neighbouring year. Gaps are real gaps and are left as gaps.
 
 OBS = [
     # ------------------------------------------------------------------
+    # E-government adoption - Eurostat isoc_ciegi_ac
+    # The locating indicator: it measures what individuals did, not what the
+    # state provided, and Denmark and the EU-27 are published on the same base
+    # (all individuals aged 16-74, not internet users), so the two are
+    # directly comparable without adjustment.
+    # ------------------------------------------------------------------
+    ("DK.DGX.EGOV.USE", "Individuals interacting with public authorities online",
+     "DK", 2024, 98.5, "%", "individuals aged 16 to 74", "", "ES9",
+     "Website or app of a public authority, last 12 months. Highest in EU-27."),
+    ("EU.DGX.EGOV.USE", "Individuals interacting with public authorities online",
+     "EU27", 2024, 70.0, "%", "individuals aged 16 to 74", "", "ES9",
+     "EU-27 aggregate, same base and reference period as the Danish value."),
+
+    # ------------------------------------------------------------------
     # Payments - Danmarks Nationalbank, Danskernes betalingsvaner
     # Denominator for the three share-of-payments series is uniform, which is
     # what makes them safe to plot on one axis (see F2).

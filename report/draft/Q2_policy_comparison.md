@@ -1,10 +1,12 @@
 ## Question 2. Policy comparison: SME digitalisation support in Denmark and Germany
 
 **The problem both policies address.** Denmark leads Europe on citizen adoption,
-not on firm capability. Eurostat [[ES7:y]] records that 90.86% of Danish
-internet users bought online in 2024, third of the twenty-seven member states,
-while only 38.78% of Danish enterprises make any e-sales, second in the Union
-behind Lithuania at 43.03% and still under two firms in five [[ES5]]. Intensity rose where breadth did not: e-sales grew from 17.05% of enterprise
+not on firm capability. Eurostat [[ES9:y]] records that 98.5% of Danish
+individuals aged 16 to 74 used the website or app of a public authority in 2024,
+the highest share in the Union against an EU-27 average of 70.0%. Firm-side
+adoption is not comparable: only 38.78% of Danish
+enterprises make any e-sales, second in the Union behind Lithuania at 43.03% and
+still under two firms in five [[ES5]]. Intensity rose where breadth did not: e-sales grew from 17.05% of enterprise
 turnover in 2014 to 33.31% in 2024, against an EU-27 average moving from 16.43%
 to 19.49% ([[F3]]). The same split governs the newest technology. The European Commission
 [[EC1:y]] reports that 42.03% of Danish enterprises used artificial intelligence

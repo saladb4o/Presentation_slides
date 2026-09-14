@@ -297,6 +297,23 @@ SOURCES = {
             "table?lang=en>."
         ),
     ),
+    "ES9": dict(
+        authority="Eurostat",
+        title=(
+            "E-government activities of individuals via websites - individuals "
+            "using the internet for interaction with public authorities, "
+            "last 12 months"
+        ),
+        dataset_code="isoc_ciegi_ac",
+        url="https://ec.europa.eu/eurostat/databrowser/view/isoc_ciegi_ac/default/table?lang=en",
+        accessed="14 September 2026",
+        harvard=(
+            "Eurostat 2025, E-government activities of individuals via websites, "
+            "dataset isoc_ciegi_ac, Eurostat, Luxembourg, accessed 14 September "
+            "2026, <https://ec.europa.eu/eurostat/databrowser/view/"
+            "isoc_ciegi_ac/default/table?lang=en>."
+        ),
+    ),
     "LOV1": dict(
         authority="Folketinget",
         title=(
