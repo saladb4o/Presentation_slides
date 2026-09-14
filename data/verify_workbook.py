@@ -6,6 +6,7 @@ Checks the structural guarantees the workbook claims on its README sheet. Exits
 non-zero if any guarantee is broken.
 """
 
+import re
 import os
 import sys
 
@@ -89,6 +90,11 @@ for r in wb["03_SOURCES"].iter_rows(min_row=2, values_only=True):
     # already declares and check 18 already enforces from the other side.
     if r[0] in REFERENCE_ONLY and not r[4] and not r[5]:
         continue
+    # 03_SOURCES prints access dates in one column, so they must share one
+    # format. Two sources were carrying "13 September 2026" while the rest
+    # carried ISO, which sorts and reads as a different kind of value.
+    check(bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(r[5]))),
+          f"{r[0]}: access date {r[5]!r} is not ISO YYYY-MM-DD")
     check(bool(r[4]) and str(r[4]).startswith("http"), f"source {r[0]}: bad URL {r[4]!r}")
     check(bool(r[5]), f"source {r[0]}: missing accessed date")
     check(bool(r[6]), f"source {r[0]}: missing Harvard reference")

@@ -288,7 +288,7 @@ SOURCES = {
         ),
         dataset_code="tesem160",
         url="https://ec.europa.eu/eurostat/databrowser/view/tesem160/default/table?lang=en",
-        accessed="13 September 2026",
+        accessed="2026-09-13",
         harvard=(
             "Eurostat 2026, Labour productivity per person employed and hour "
             "worked (EU27_2020=100), dataset tesem160, last updated 9 September "
@@ -306,12 +306,30 @@ SOURCES = {
         ),
         dataset_code="isoc_ciegi_ac",
         url="https://ec.europa.eu/eurostat/databrowser/view/isoc_ciegi_ac/default/table?lang=en",
-        accessed="14 September 2026",
+        accessed="2026-09-14",
         harvard=(
-            "Eurostat 2025, E-government activities of individuals via websites, "
-            "dataset isoc_ciegi_ac, Eurostat, Luxembourg, accessed 14 September "
-            "2026, <https://ec.europa.eu/eurostat/databrowser/view/"
+            "Eurostat 2026, E-government activities of individuals via websites, "
+            "dataset isoc_ciegi_ac, Statistical Office of the European Union, "
+            "Luxembourg, accessed 14 September 2026, "
+            "<https://ec.europa.eu/eurostat/databrowser/view/"
             "isoc_ciegi_ac/default/table?lang=en>."
+        ),
+    ),
+    # D: the eID timeline rows used to cite DG4, a Digital Post LEGISLATION
+    # page. Table 1 now prints its sources, so that mismatch became a visible
+    # citation. MitID is run by the same agency and is the authority on its
+    # own phase-out dates.
+    "DG5": dict(
+        authority="Digitaliseringsstyrelsen (Danish Agency for Digital Government)",
+        title="NemID is about to be closed",
+        dataset_code="",
+        url="https://www.mitid.dk/en-gb/about-mitid/news/nemid-is-about-to-be-closed/",
+        accessed="2026-09-14",
+        harvard=(
+            "Digitaliseringsstyrelsen 2023, NemID is about to be closed, MitID, "
+            "Agency for Digital Government, Copenhagen, accessed 14 September "
+            "2026, <https://www.mitid.dk/en-gb/about-mitid/news/"
+            "nemid-is-about-to-be-closed/>."
         ),
     ),
     "LOV1": dict(
@@ -322,7 +340,7 @@ SOURCES = {
         ),
         dataset_code="LOV nr 603 af 31/05/2023",
         url="https://www.retsinformation.dk/eli/lta/2023/603",
-        accessed="13 September 2026",
+        accessed="2026-09-13",
         harvard=(
             "Folketinget 2023, Lov om fravigelse fra obligatorisk digital "
             "selvbetjening, LOV nr 603 af 31. maj 2023, in force 1 June 2023, "
@@ -341,7 +359,7 @@ SOURCES = {
             "https://www.bundesrechnungshof.de/SharedDocs/Pressemitteilungen/"
             "DE/2022/bemerkungen2022-hauptband.html"
         ),
-        accessed="13 September 2026",
+        accessed="2026-09-13",
         harvard=(
             "Bundesrechnungshof 2022, Bemerkungen 2022 zur Haushalts- und "
             "Wirtschaftsführung des Bundes, German Federal Court of Auditors, "
@@ -358,7 +376,7 @@ SOURCES = {
         ),
         dataset_code="No. 452798",
         url="https://www.conseil-etat.fr/fr/arianeweb/CE/decision/2022-06-03/452798",
-        accessed="13 September 2026",
+        accessed="2026-09-13",
         harvard=(
             "Conseil d'État 2022, Decision No. 452798, 3 June 2022, Conseil "
             "d'État, Paris, accessed 13 September 2026, "
@@ -374,7 +392,7 @@ SOURCES = {
         ),
         dataset_code="ECLI:BE:GHCC:2025:ARR.126",
         url="https://fr.const-court.be/public/f/2025/2025-126f.pdf",
-        accessed="13 September 2026",
+        accessed="2026-09-13",
         harvard=(
             "Cour constitutionnelle 2025, Arrêt no. 126/2025, 25 September "
             "2025, ECLI:BE:GHCC:2025:ARR.126, Cour constitutionnelle, "
@@ -390,7 +408,7 @@ SOURCES = {
         ),
         dataset_code="KRR",
         url="https://www.digdir.no/digitale-felleslosninger/kontakt-og-reservasjonsregisteret-krr/865",
-        accessed="13 September 2026",
+        accessed="2026-09-13",
         harvard=(
             "Digitaliseringsdirektoratet 2025, Kontakt- og "
             "reservasjonsregisteret, Norwegian Digitalisation Agency, accessed "
@@ -421,7 +439,7 @@ SOURCES = {
         title="Financing Innovation: Evidence from R&D Grants",
         dataset_code="American Economic Review 107(4)",
         url="https://www.aeaweb.org/articles?id=10.1257%2Faer.20150808",
-        accessed="13 September 2026",
+        accessed="2026-09-13",
         harvard=(
             "Howell, ST 2017, 'Financing innovation: evidence from R&D grants', "
             "American Economic Review, vol. 107, no. 4, pp. 1136-1164."
@@ -436,7 +454,7 @@ SOURCES = {
         ),
         dataset_code="Working paper",
         url="https://pietrosantoleri.github.io/files/Santoleri_et_al_The_effects_of_R_D_grants.pdf",
-        accessed="13 September 2026",
+        accessed="2026-09-13",
         harvard=(
             "Santoleri, P, Barrows, G, Caravella, S, Crespi, F and Pellegrino, "
             "G 2022, The causal effects of R&D grants: evidence from a "

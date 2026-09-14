@@ -478,7 +478,7 @@ POLICY_EVENTS = [
      "DK.SME.SMVD.PROJ"),
 
     ("2021-10-01", "month", "MitID rollout begins",
-     "National electronic ID replacement programme", "DG4",
+     "National electronic ID replacement programme", "DG5",
      "Begins the migration of the whole population off NemID.",
      "DK.TRU.DPS"),
 
@@ -490,12 +490,12 @@ POLICY_EVENTS = [
      "DK.PAY.CASH.POS"),
 
     ("2022-09-22", "day", "MitID required for public digital services",
-     "National electronic ID replacement programme", "DG4",
+     "National electronic ID replacement programme", "DG5",
      "From this date citizens need MitID for borger.dk, skat.dk and sundhed.dk.",
      "DK.TRU.DPS"),
 
     ("2023-10-31", "day", "NemID fully phased out",
-     "National electronic ID replacement programme", "DG4",
+     "National electronic ID replacement programme", "DG5",
      "The predecessor credential can no longer be obtained or used.",
      "DK.TRU.DPS"),
 
