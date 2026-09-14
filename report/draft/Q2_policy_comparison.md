@@ -1,10 +1,10 @@
 ## Question 2. Policy comparison: SME digitalisation support in Denmark and Germany
 
 **The problem both policies address.** Denmark leads Europe on citizen adoption
-but not on firm capability. Against the first place it holds on e-government
-use, only 38.78% of Danish
-enterprises make any e-sales, second in the Union behind Lithuania at 43.03% and
-still under two firms in five [[ES5]]. Intensity rose where breadth did not: e-sales grew from 17.05% of enterprise
+but not on firm capability. Its citizens rank first in the Union on e-government
+use; its firms rank second on e-sales and still only 38.78% of them make any,
+behind Lithuania at 43.03% and under two firms in five [[ES5]]. A high rank on a
+low level is the problem, not the achievement. Intensity rose where breadth did not: e-sales grew from 17.05% of enterprise
 turnover in 2014 to 33.31% in 2024, against an EU-27 average moving from 16.43%
 to 19.49% ([[F3]]). The same split governs the newest technology. The European Commission
 [[EC1:y]] reports that 42.03% of Danish enterprises used artificial intelligence

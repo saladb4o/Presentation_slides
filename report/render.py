@@ -91,7 +91,7 @@ SECTIONS = ["Q1_industries", "Q2_policy_comparison", "Q3_sdg",
 # appearance, so it never appears in this table.
 CAPTIONS = {
     "F1":  "Danish retail bank branches, 2004-2024. Finans Danmark; workbook F1_BRANCHES.",
-    "F9":  "Danish banking consolidation: institutions, branches, employment; differing base years. Finans Danmark; workbook F9.",
+    "F9":  "Danish banking consolidation: institutions, branches, employment. The three series begin in different years and must never be differenced. Finans Danmark; workbook F9.",
     "F6":  "Consumer adoption and enterprise e-commerce turnover, EU 2024. Eurostat; workbook F6.",
     "F3":  "E-sales share of enterprise turnover, Denmark and EU-27, 2014 and 2024. Eurostat; workbook F3.",
     "F7":  "AI adoption by firm size, Denmark 2025. European Commission; workbook F7.",

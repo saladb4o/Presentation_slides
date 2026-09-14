@@ -8,10 +8,10 @@ and over. Those are 2022 figures against a 2026 rate below, so the two are
 complementary rather than points on a trend.
 
 **Effectiveness, and what the headline conceals.** The measure on which Denmark
-ranks first is the one least able to detect this problem. The Eurostat survey
-behind the 98.5% asks only whether a person interacted online at all, once, in
-twelve months: it records reach, and is silent on whether the attempt succeeded
-or was made independently ([[F12]]). In the first quarter of 2026, 4.7% of citizens aged 15
+ranks first is the one least able to detect this problem. Eurostat [[ES9:y]]
+puts Danish e-government use at 98.5%, but the survey asks only whether a person
+interacted online at all, once, in twelve months: it records reach, and is
+silent on whether the attempt succeeded or was made independently ([[F12]]). In the first quarter of 2026, 4.7% of citizens aged 15
 and over, or 238,479 people, were exempt, the narrowest available measure of the
 problem; [[F4]] sets it against four wider estimates that are not comparable
 because measure, year and denominator all differ, and [[AP:exclusion]]
