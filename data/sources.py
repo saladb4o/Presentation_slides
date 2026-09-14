@@ -397,6 +397,23 @@ SOURCES = {
             "kontakt-og-reservasjonsregisteret-krr/865>."
         ),
     ),
+    "GS1": dict(
+        intext="Tran",
+        authority="Tran, T.T.",
+        title=("Guest speaker session: corporate sustainability and the "
+               "adoption of artificial intelligence"),
+        dataset_code="ECON1596/ECON1597 guest lecture",
+        # A lecture has no retrievable address. The workbook never reads this
+        # source, so the url and accessed fields that the workbook verifier
+        # requires of a data source do not apply; it is REFERENCE_ONLY.
+        url="",
+        accessed="",
+        harvard=("Tran, TT 2026, 'Guest speaker session: corporate sustainability "
+                 "and the adoption of artificial intelligence', guest lecture, "
+                 "ECON1596 Business Challenges in the Digital Economy, "
+                 "RMIT University Vietnam, Ho Chi Minh City, "
+                 "[LECTURE DATE: to be completed by the author]."),
+    ),
     "HOW1": dict(
         intext="Howell",
         authority="Howell, S.T.",
@@ -436,6 +453,8 @@ SOURCES = {
 # A source may sit here ONLY if nothing in the workbook depends on it; anything
 # a figure actually draws on must be cited in that figure's source note.
 REFERENCE_ONLY = frozenset({
+    "GS1",   # The guest lecture. Section 5 engages its claims; it
+             # supplies no observation to the workbook.
     "LOV1",  # Act 603/2023 - a legal instrument, not a data source. It settles
              # what Section 6 may recommend; it supplies no observation.
     "DG5",   # SMV:Digital effect measurement. Its figures are reported in

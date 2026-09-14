@@ -75,7 +75,7 @@ FIGURE_FILES = {
     "F10": "fig7_skills.png",
 }
 SECTIONS = ["S1_context", "S2_adoption_effect", "S3_eu_diffusion",
-            "S4_left_behind", "S6_recommendation"]
+            "S4_left_behind", "S5_guest_lecture", "S6_recommendation"]
 
 # Workbook sheet -> caption. The report figure NUMBER is assigned by first
 # appearance, so it never appears in this table.

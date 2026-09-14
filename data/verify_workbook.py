@@ -11,6 +11,9 @@ import sys
 
 from openpyxl import load_workbook
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from sources import REFERENCE_ONLY  # noqa: E402
+
 PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     "..",
@@ -78,6 +81,13 @@ for r in rows:
 # 3. SOURCES completeness
 for r in wb["03_SOURCES"].iter_rows(min_row=2, values_only=True):
     if not r[0]:
+        continue
+    # A retrievable address and an access date are what let a marker check a
+    # value against its issuer, so every source the workbook draws on must
+    # carry both. A spoken guest lecture has neither and cannot be made to:
+    # it is exempt only if it supplies no observation, which REFERENCE_ONLY
+    # already declares and check 18 already enforces from the other side.
+    if r[0] in REFERENCE_ONLY and not r[4] and not r[5]:
         continue
     check(bool(r[4]) and str(r[4]).startswith("http"), f"source {r[0]}: bad URL {r[4]!r}")
     check(bool(r[5]), f"source {r[0]}: missing accessed date")

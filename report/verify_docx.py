@@ -123,6 +123,14 @@ def main():
     check(body_words < 9000,
           f"document body has {body_words} words, unexpectedly long")
 
+    # The assessment limit is 2,000 words plus 10%. Tables count toward it, so
+    # the ceiling is enforced on the inclusive figure. This had been checked by
+    # hand each build, which is exactly how a limit drifts: adding Section 5
+    # pushed the body 252 words over and nothing said so.
+    with_table = r["counts"]["total_with_table"]
+    check(with_table <= 2200,
+          f"body is {with_table} words including Table 1, over the 2,200 ceiling")
+
     # REFERENCE_ONLY declares a source as supporting ARGUMENT in the report
     # rather than supplying a workbook value. The workbook verifier cannot test
     # that claim, because the report is not the workbook - so an entry could sit
