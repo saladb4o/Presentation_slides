@@ -185,6 +185,32 @@ def main():
                   f"{where} has no y-axis title")
             check(len(ch.series) > 0, f"{where} has no data series")
 
+            # A scatter series must not join its points. XlsxWriter keeps any
+            # truthy subtype string it is handed and only suppresses the
+            # connecting line for the exact subtype "marker_only", so a typo
+            # there had Excel drawing a zigzag through the 18 countries in row
+            # order. The workbook has no scatter where joining points is
+            # meaningful, so the rule is absolute.
+            if type(ch).__name__ == "ScatterChart":
+                for i, ser in enumerate(ch.series):
+                    gp = ser.graphicalProperties
+                    joined = not (gp is not None and gp.line is not None
+                                  and gp.line.noFill)
+                    check(not joined,
+                          f"{where} series {i} joins its points with a line; "
+                          f"a scatter of independent countries must not")
+
+            # Value axes state their own range. Excel's autoscale put a 57-96%
+            # series on a 0-120% axis, wasting half the plot.
+            for name, ax in (("x", ch.x_axis), ("y", ch.y_axis)):
+                if ax.delete or getattr(ax, "scaling", None) is None:
+                    continue
+                if type(ax).__name__ != "NumericAxis":
+                    continue
+                check(ax.scaling.min is not None and ax.scaling.max is not None,
+                      f"{where} {name}-axis has no explicit min/max, so Excel "
+                      f"will autoscale it")
+
             # -- 8. no chart sits on top of a populated cell ------------------
             r0, c0, r1, c1 = cell_extent(ch.anchor)
             collisions = []

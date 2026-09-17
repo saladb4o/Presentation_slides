@@ -507,7 +507,13 @@ def base_chart(wb, kind, title, subtitle=None):
     return ch
 
 
-def axis(name, *, num_format=None, grid=False, cat=False):
+def axis(name, *, num_format=None, grid=False, cat=False, lo=None, hi=None):
+    """An axis with its bounds stated rather than left to Excel.
+
+    Excel's autoscale chose 0 to 120% for a value axis whose data spans 57 to
+    96%, which wastes half the plot and flattens the spread. Every value axis
+    here sets its own range.
+    """
     a = {
         "name": name,
         "name_font": {"name": style.FONT, "size": 10, "color": style.AXIS_INK},
@@ -523,6 +529,10 @@ def axis(name, *, num_format=None, grid=False, cat=False):
                             if grid else {"visible": False})
     if cat:
         a["label_position"] = "low"
+    if lo is not None:
+        a["min"] = lo
+    if hi is not None:
+        a["max"] = hi
     return a
 
 
@@ -596,7 +606,7 @@ def sheet_payments(wb, fmt):
         })
     ch.set_x_axis(axis("Year", cat=True))
     ch.set_y_axis(axis("% of the number of payments", num_format='0"%"',
-                       grid=True))
+                       grid=True, lo=0, hi=80))
     ch.set_legend(legend_bottom())
     ws.insert_chart(CHART_ROW, CHART_COL, ch)
 
@@ -675,7 +685,7 @@ def sheet_exclusion(wb, fmt):
                                  "color": style.AXIS_INK}},
     })
     ch.set_x_axis(axis("% of the stated population base", num_format='0"%"',
-                       grid=True))
+                       grid=True, lo=0, hi=28))
     ch.set_y_axis(axis("Measure", cat=True))
     ch.set_legend({"none": True})
     ws.insert_chart(CHART_ROW, CHART_COL, ch)
@@ -747,7 +757,8 @@ def sheet_eu27(wb, fmt):
     ch.combine(line)
 
     ch.set_x_axis(axis("Member state", cat=True))
-    ch.set_y_axis(axis("% of internet users", num_format='0"%"', grid=True))
+    ch.set_y_axis(axis("% of internet users", num_format='0"%"', grid=True,
+                       lo=0, hi=100))
     ch.set_legend(legend_bottom())
     ws.insert_chart(CHART_ROW, CHART_COL, ch)
 
@@ -828,13 +839,19 @@ def sheet_adopt_benefit(wb, fmt):
                 "Eurostat isoc_ec_ib20 and isoc_ec_evaln2. The pairing is "
                 "recomputed at build time from 02_MASTER.")
 
-    ch = base_chart(wb, {"type": "scatter", "subtype": "markers"},
+    # subtype MUST be "marker_only". XlsxWriter keeps any truthy subtype string
+    # it is given, and only suppresses the connecting line when the subtype is
+    # exactly that; an earlier "markers" left Excel joining the 18 points in row
+    # order, which drew a zigzag across the plot. The explicit line:none below
+    # makes the intent independent of the subtype name.
+    ch = base_chart(wb, {"type": "scatter", "subtype": "marker_only"},
                     "Adoption explains part of the outcome, not all of it",
                     f"EU, 2024. n = {n}, slope {slope:+.3f}, R-squared {r2:.3f}")
     ch.add_series({
         "name": "Member state",
         "categories": ["F6_ADOPT_BENEFIT", 4, 2, 3 + n, 2],
         "values": ["F6_ADOPT_BENEFIT", 4, 3, 3 + n, 3],
+        "line": {"none": True},
         "marker": {"type": "circle", "size": 8,
                    "fill": {"color": style.CONTEXT},
                    "border": {"color": "#FFFFFF", "width": 1.25}},
@@ -847,9 +864,9 @@ def sheet_adopt_benefit(wb, fmt):
                                "dash_type": "dash"}},
     })
     ch.set_x_axis(axis("Individuals who bought online (% of internet users)",
-                       num_format='0"%"', grid=True))
+                       num_format='0"%"', grid=True, lo=50, hi=100))
     ch.set_y_axis(axis("E-sales (% of enterprise turnover)", num_format='0"%"',
-                       grid=True))
+                       grid=True, lo=0, hi=40))
     ch.set_legend({"none": True})
     ws.insert_chart(CHART_ROW, CHART_COL, ch)
 

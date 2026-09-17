@@ -16,6 +16,23 @@ axis ranges and the same labels as the chart specs in build_workbook.py, so the
 geometry and the colour decisions can be checked. They are NOT the Excel charts:
 Excel will differ in fonts, in spacing and in exact tick placement. Anything
 that depends on those has to be checked by opening the workbook.
+
+WHAT THESE PREVIEWS CANNOT CATCH - demonstrated, not hypothetical
+-----------------------------------------------------------------
+A preview drawn by a different library cannot catch a defect that lives in how
+the workbook drives XlsxWriter, because matplotlib is not asked the same
+question. Two got through to Excel and were found by opening it:
+
+  - the scatter was given subtype "markers" instead of "marker_only", so Excel
+    joined all 18 countries with straight lines in row order. matplotlib's
+    scatter() draws no lines, so the preview looked right.
+  - every value axis was left to Excel's autoscale, which put a 57-96% series on
+    a 0-120% axis. matplotlib autoscales tightly, so again the preview looked
+    right.
+
+Both are now asserted in verify_workbook.py, which reads the .xlsx rather than
+redrawing it - that is the check that generalises. These previews are for
+judging composition and colour, not for confirming the file is correct.
 """
 
 import os
@@ -90,7 +107,7 @@ def c1_payments(path):
     ax.set_xticklabels([str(y) for y in PAY_YEARS])
     ax.set_xlabel("Year")
     ax.set_ylabel("% of the number of payments")
-    ax.set_ylim(0, 85)
+    ax.set_ylim(0, 80)
     ax.yaxis.set_major_formatter(PCT)
     frame(ax)
     title(ax, "Cash gave up 14 points of retail payments in eight years",
@@ -188,6 +205,9 @@ def c4_adopt_benefit(path):
     lo, hi = min(xs) - 2, max(xs) + 2
     ax.plot([lo, hi], [intercept + slope * lo, intercept + slope * hi],
             color=style.NAVY, linewidth=1.25, linestyle="--", zorder=2)
+    # Same bounds the Excel chart sets, so the two correspond.
+    ax.set_xlim(50, 100)
+    ax.set_ylim(0, 40)
 
     ax.set_xlabel("Individuals who bought online (% of internet users)")
     ax.set_ylabel("E-sales (% of enterprise turnover)")
