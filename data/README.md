@@ -9,85 +9,123 @@ attachment to the Digital Policy and Innovation Report.
 |---|---|
 | `dataset.py` | Every observation, one row each. The only place values are entered. |
 | `sources.py` | Source register: authority, URL, access date, Harvard reference. |
+| `content.py` | Prose for the limitations and AI-use sheets. Writing, not code. |
+| `style.py` | The palette, the cell formats, and the furniture every sheet gets. |
 | `build_workbook.py` | Generates the workbook. Run this; never hand-edit the .xlsx. |
-| `verify_workbook.py` | Post-build structural checks. Exits non-zero on failure. |
+| `verify_workbook.py` | Post-build checks on the generated file. Exits non-zero on failure. |
+| `preview_charts.py` | Renders the four charts as PNGs so they can be looked at. |
 
 ## Usage
 
 ```bash
-pip install openpyxl
+pip install xlsxwriter openpyxl matplotlib
 python3 build_workbook.py
 python3 verify_workbook.py
+python3 preview_charts.py      # optional; writes previews/
 ```
+
+## Version 2.0 — why this was rebuilt
+
+Version 1.0 was generated with openpyxl and was not usable as submitted. Its
+charts had been, in the project's own words, *"verified structurally and audited
+in the raw XML, never seen rendered."* Opening it showed what that predicts. The
+measured defects, each of which is now a check in `verify_workbook.py`:
+
+| Defect in v1.0 | What now prevents it |
+|---|---|
+| All 13 charts untitled — titles lived in worksheet cells, so they did not move, resize, copy or print with the chart | Every chart must carry a title and both axis titles on the chart object |
+| Every chart anchored on top of its own caption or source note | No chart may cover a populated cell |
+| 201 formula cells, zero cached values — blank cells and empty charts in any viewer without a calculation engine | Every formula must carry a cached value, and that value must equal the dataset's |
+| No print setup on any of 22 sheets | Every sheet must have an orientation and fit-to-page |
+| Cover contents omitted a sheet and misordered another | The contents list must equal the real tab list, in order |
+| A mistyped series code rendered as a silent blank | A lookup to an observation that does not exist raises at build time |
+
+The data layer was not rebuilt. `dataset.py` and `sources.py` carry 136
+observations verified individually against their issuing authorities, and the
+statistical portals are unreachable from the build environment; re-entering them
+would mean re-verifying, which is how the fabricated-data incident recorded in
+`07_LIMITATIONS` was caught in the first place.
 
 ## Rules this codebase enforces
 
 1. **A value exists only if it was verified against its issuing authority.**
    Nothing is interpolated, smoothed, or inferred from a neighbouring year.
-   Gaps are left as gaps.
-2. **`02_MASTER` is the single source of truth.** Figure sheets contain no typed
-   numbers — every cell is a `COUNTIFS`/`SUMIFS` lookup against it.
+   Gaps are left as gaps. `F2_PAYMENTS` is the visible case: the mobile wallet
+   has one observation, so it is drawn as one column, and the missing 2017
+   column is footnoted as a gap rather than plotted as a zero.
+2. **`02_MASTER` is the single source of truth.** Every figure sheet and every
+   derived quantity is a `SUMIFS` lookup against it, written together with the
+   value Python computed for the same lookup.
 3. **Denominators are recorded per observation** and series with different
    denominators are never plotted on one axis.
-4. **A policy event is evidence and is held to the same standard.** Every row in
-   `POLICY_EVENTS` carries a real date, an honest `precision` (`day`/`month`/
-   `year` — never dated more finely than its source allows), a legal citation, a
-   `source_id`, and the series it bears on.
+4. **A policy event is evidence** and carries a real date, an honest `precision`
+   (`day`/`month`/`year` — never dated more finely than its source allows), a
+   legal citation and a `source_id`.
+5. **Corrections are recorded, not erased.** The withdrawn SMV:Digital defunding
+   claim stays in `07_LIMITATIONS` and `09_POLICY`, and `verify_workbook.py`
+   fails the build if that record disappears. A correction that leaves no trace
+   is indistinguishable from never having made the error, which is exactly what
+   the AI Use and Validation Appendix has to be able to show.
 
-`verify_workbook.py` checks all three mechanically, including that every lookup
-a formula performs resolves to a real observation — a mistyped series code would
-otherwise render as a silent blank cell.
+## Sheets
+
+Fourteen, down from twenty-two. The eight chart sheets that were dropped
+duplicated report figures that are already rendered at publication quality; their
+observations remain in `02_MASTER` and their derived numbers in `05_CALC`.
+
+`F1_BRANCHES`, `F11_EWASTE` and `F12_REACH` carry no chart. They exist because
+`report/render.py` cites them by name, and the report was deliberately left
+untouched by this rebuild. `verify_workbook.py` fails if any of the seven sheet
+names the report cites stops existing.
 
 ## Presentation conventions
 
-Chart styling follows the conventions used in professional financial-analysis
-workbooks, and `verify_workbook.py` enforces them so a later edit cannot undo
-the pass silently:
+**Colour.** Four cell fills, legended on `00_COVER`: no fill for a retrieved
+value, pale blue for a derived one, pale amber for a flagged one, pale red for a
+documented gap. Nothing else is coloured.
 
-- **Chart titles live in cells**, not on chart objects — they align to the sheet
-  grid, stay editable, and avoid openpyxl's inconsistent title rendering.
-- **Colour routes attention rather than distinguishing categories.** A four-step
-  ramp (`E8E8E8` / `A3A3A3` / `2E6DB4` accent / `1F3A5F` navy). Denmark takes the
-  accent; comparators recede into grey. Every chart must use the accent
-  somewhere — a chart with no subject fails verification.
-- **No chart chrome**: no style presets, no gridlines, axis lines hidden, legends
-  at the bottom, `gapWidth=80`.
-- **Four-part number formats**: positive; negative; zero; text. Because
-  `lookup()` returns `""` for an absent observation, the text section makes a
-  gap render as an en-dash rather than an empty cell — a gap should look like a
-  gap, not like an oversight.
+Charts use two schemes, because they answer different questions. `F2_PAYMENTS`
+needs three instruments told apart, so it takes slots 1–3 of the validated
+categorical palette (blue `#2a78d6`, orange `#eb6834`, aqua `#1baf7a`) — all
+gates pass, and because aqua sits below 3:1 contrast on white, every column is
+directly labelled. `F5_EU27` and `F6_ADOPT_BENEFIT` are highlight charts, where
+accent blue marks Denmark and grey means "not the subject"; that pair
+deliberately fails a *categorical* chroma check, since grey reading as grey is
+the intent. Provenance and the validator output are recorded at the top of
+`style.py`.
 
-  *Caveat:* a genuine zero also renders as an en-dash. No series in this dataset
-  has a meaningful zero, so this is safe here; it would not be in a workbook
-  that did.
+**Chart chrome.** v1.0 stripped all of it — no gridlines, hidden axis lines, no
+number formats — which made a scatter impossible to read off. v2.0 keeps light
+horizontal gridlines, axis titles with units, recessive axis lines, and a bottom
+legend where there is more than one series.
+
+**Number formats** are four-part: positive; negative; zero; text. The text
+section renders an absent value as an en-dash, so a gap looks like a gap rather
+than an oversight. The cost is that a genuine zero renders the same way; no
+series here has a meaningful zero, and the caveat is stated on `04_DEFINITIONS`
+where a reader meets it rather than only in this file.
+
+## The chart previews
+
+`preview_charts.py` redraws the four charts in matplotlib from the same
+observations, colours, ordering and labels. This exists because LibreOffice's
+Calc filter is broken in the build environment — it fails to load even a two-cell
+probe file — so the .xlsx cannot be rendered here, which is precisely how v1.0's
+charts went unseen.
+
+The previews are a proxy, not the article. Excel will differ in fonts, spacing
+and tick placement. **Open the workbook before submitting.**
 
 ## Adding data
 
 Append rows to `OBS` in `dataset.py` using the existing 10-column shape, add any
-new source to `SOURCES` in `sources.py`, then rebuild and verify. To extend the
-EU cross-section on `F5_EU27`, add rows under series codes matching
-`XX.ECM.IND.BUY`; the sheet and its chart expand automatically.
-
-The adoption measure (`XX.ECM.IND.BUY`, 2024) is now complete for all 27 member
-states from the `isoc_ec_ib20` databrowser extract (`ES7`), so `F5_EU27` is a
-full EU ranking and Figure 6 no longer carries a tail-selection bias. What
-remains incomplete is the outcome measure: nine member states hold adoption but
-not `XX.ECM.ENT.TRN`, and `F6_ADOPT_BENEFIT` names each one with its exact
-series code. `cross_section()` in `dataset.py` recomputes the pairing at build
-time, so adding those rows moves countries into the plotted table, raises `n`,
-and updates the OLS statistics without touching the build script.
+new source to `SOURCES` in `sources.py`, then rebuild and verify. `F5_EU27` and
+`F6_ADOPT_BENEFIT` recompute their cross-section at build time, so adding the
+nine missing `XX.ECM.ENT.TRN` observations moves those countries into the scatter
+and updates n, the slope and R² without touching the build script.
 
 Prefer a databrowser extract to a press release. A press release names the
 countries that make a story — the top, the bottom, a couple of movers — which is
-a sample drawn from the tails. `F6_ADOPT_BENEFIT` keeps the measured cost of
+a sample drawn from the tails. `07_LIMITATIONS` keeps the measured cost of
 having done that once: the tail-only sample reported R² 0.853 against 0.674 on
 the complete cross-section, while the slope moved only from +0.655 to +0.602.
-
-## Corrections are recorded, not erased
-
-Where a claim has been withdrawn, the withdrawal stays in the workbook: the
-SMV:Digital defunding claim is recorded in `09_POLICY`, `07_LIMITATIONS` and
-`08_AI_LOG`, and `verify_workbook.py` fails the build if that record disappears.
-A correction that leaves no trace is indistinguishable from never having made
-the error, which is precisely what the AI Use and Validation Appendix must be
-able to show.

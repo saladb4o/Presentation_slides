@@ -1,2441 +1,1080 @@
 """Build the ECON1596 Assessment 2 data workbook.
 
-Run:  python3 build_workbook.py
+Run:  python3 build_workbook.py && python3 verify_workbook.py
 
 The workbook is generated, never hand-edited. To correct a value, edit dataset.py
-and re-run; every downstream sheet and chart updates because they are formula views
-of 02_MASTER rather than pasted copies.
+and rebuild.
+
+TWO RULES THIS BUILD ENFORCES BY CONSTRUCTION
+---------------------------------------------
+1. Every derived cell is written as a live formula over 02_MASTER *and* carries
+   the value Python computed for it. XlsxWriter's write_formula() takes both. The
+   formula keeps the workbook auditable in Excel; the cached value means the file
+   also displays correctly in a previewer that has no calculation engine, which
+   the previous build did not - it shipped 201 formulas and zero cached values,
+   so anything without a calc engine showed blank cells and empty charts.
+
+2. A lookup to an observation that does not exist raises at build time. The
+   previous build wrapped every lookup in IF(COUNTIFS(...)=0,"",...) so a mistyped
+   series code rendered as a silent blank. Failing the build is better than
+   rendering a gap that nobody notices.
 """
 
 import os
+import sys
 from datetime import date
 
-from openpyxl import Workbook
-from openpyxl.chart import BarChart, Reference, ScatterChart, Series
-from openpyxl.chart.marker import Marker
-from openpyxl.chart.series import DataPoint
-from openpyxl.chart.shapes import GraphicalProperties
-from openpyxl.chart.trendline import Trendline
-from openpyxl.drawing.line import LineProperties
-from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
-from openpyxl.utils import get_column_letter
+import xlsxwriter
 
-from dataset import (COUNTRIES, OBS, POLICY_EVENTS, cross_section,
-                     policy_events_for, validate)
-from sources import ACCESSED, REFERENCE_ONLY, SOURCES
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-OUT = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)),
-    "..",
-    "ECON1596_A2_Denmark_DataWorkbook_s4040040.xlsx",
-)
+from dataset import COUNTRIES, OBS, POLICY_EVENTS, cross_section, validate
+from sources import ACCESSED, SOURCES
+import style
+from style import finish
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+OUT = os.path.join(HERE, "..", "ECON1596_A2_Denmark_DataWorkbook_s4040040.xlsx")
 
 STUDENT_ID = "s4040040"
 COURSE = "ECON1596/ECON1597 Digital Economy and Policy"
-VERSION = "1.0"
+VERSION = "2.0"
 BUILT = date.today().isoformat()
 
-# ---------------------------------------------------------------- styling ---
-NAVY = "FF1F3A5F"
-INK = "FF1A1A1A"
+MASTER = "02_MASTER"
 
-F_HEAD = PatternFill("solid", fgColor=NAVY)
-F_RAW = PatternFill("solid", fgColor="FFF2F2F2")       # retrieved values
-F_CALC = PatternFill("solid", fgColor="FFE8F0F6")      # formula-derived
-F_FLAG = PatternFill("solid", fgColor="FFFDF2E0")      # flagged / uncertain
-F_GAP = PatternFill("solid", fgColor="FFF7E4E4")       # documented gap
+# 02_MASTER column layout, 0-indexed. The header row is row 0, so observation i
+# sits on row i+1 and Excel sees it on row i+2.
+M_ID, M_CODE, M_IND, M_GEO, M_YEAR, M_VAL, M_UNIT, M_DENOM, M_FLAG, M_SRC, \
+    M_REF, M_NOTE = range(12)
 
-T_HEAD = Font(name="Calibri", size=10, bold=True, color="FFFFFFFF")
-T_TITLE = Font(name="Calibri", size=16, bold=True, color=NAVY)
-T_SUB = Font(name="Calibri", size=11, bold=True, color=NAVY)
-T_BODY = Font(name="Calibri", size=10, color=INK)
-T_SMALL = Font(name="Calibri", size=9, color="FF5A5A5A")
-T_MONO = Font(name="Consolas", size=9, color=INK)
+MASTER_HEADERS = [
+    "obs_id", "series_code", "indicator", "geo", "year", "value", "unit",
+    "denominator", "flag", "source_id", "report_ref", "notes",
+]
 
-# --- chart palette --------------------------------------------------------
-# Four steps, ordered as a value ramp rather than a categorical set. Grey
-# carries the series the reader is not meant to look at; the accent carries the
-# one they are. Nothing is coloured for variety - colour routes attention.
-#
-# Chart colours are bare RGB (no leading alpha byte), unlike the cell fills
-# above, because DrawingML and the styles API disagree about the format.
-C_PALE = "E8E8E8"     # context, furthest back
-# Darkened from A3A3A3 after running the palette validator: against a near-white
-# surface the old grey scored 2.46:1, below the 3:1 floor, so comparator bars read
-# as faint in print. 8F8F8F clears the floor while keeping normal-vision
-# separation from the accent at dE 17.6 and CVD separation at 14.4 (tritan).
-# Darkening further fixes contrast but collapses separation against the blue.
-C_GREY = "8F8F8F"     # context / comparator series
-C_ACCENT = "2E6DB4"   # focus - Denmark, or the single series in view
-C_DARK = "1F3A5F"     # emphasis - matches NAVY
+FIRST = 2                    # first Excel data row on 02_MASTER
+LAST = 1 + len(OBS)          # last Excel data row
 
-# Number formats, four-part: positive; negative; zero; text.
-#
-# The fourth section is the one that earns its place. lookup() returns "" for an
-# observation that does not exist, which lands in the text section - so a gap
-# renders as an en-dash instead of an empty cell. A gap should look like a gap,
-# not like an oversight.
-#
-# CAVEAT, recorded on 01_README: a genuine zero also renders as an en-dash.
-# No series in this dataset has a meaningful zero, so this is safe here; it
-# would not be safe in a workbook that did.
-N_DEC = '_(#,##0.00_);\\(#,##0.00\\);_("–"_);_("–"_)'
-N_INT = '_(#,##0_);\\(#,##0\\);_("–"_);_("–"_)'
-N_ONE = '_(#,##0.0_);\\(#,##0.0\\);_("–"_);_("–"_)'
-N_THREE = '_(#,##0.000_);\\(#,##0.000\\);_("–"_);_("–"_)'
-N_SIGNED = '_(+#,##0.00_);_(-#,##0.00_);_("–"_);_("–"_)'
-N_PCT = '_(0.0%_);\\(0.0%\\);_("–"_);_("–"_)'
-
-THIN = Side(style="thin", color="FFBFBFBF")
-BOX = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
-
-WRAP = Alignment(wrap_text=True, vertical="top")
-TOP = Alignment(vertical="top")
+# Which report figure each series feeds. Read off report/build_figures.py, which
+# is the only place the report decides what a figure plots. This is the column
+# that lets a marker go from a number in the report to its row here in one step.
+FIGURE_SERIES = {
+    "Fig 1": ["DK.FIN.BRCH"],
+    "Fig 2": ["DK.FIN.INST", "DK.FIN.BRCH", "DK.FIN.EMP"],
+    "Fig 4": ["DK.ECM.ENT.TRN", "EU.ECM.ENT.TRN"],
+    "Fig 5": ["DK.ENT.AI", "DK.ENT.AI.LRG", "DK.ENT.AI.SME"],
+    "Fig 6": ["DK.DGP.EXMP", "DK.DGX.NOUSE", "DK.DGX.DIFF", "DK.DGX.DISADV.LO",
+              "DK.DGX.DISADV.HI", "DK.DGX.JUST"],
+    "Fig 7": ["DK.SKL.1624", "EU.SKL.1624", "DK.SKL.2554", "EU.SKL.2554",
+              "DK.SKL.5574", "EU.SKL.5574"],
+    "Fig 8": ["DK.SME.SMVD.INV", "DK.SME.SMVD.NOINV", "DK.SME.SMVD.PROJ"],
+    "Fig 9": ["DK.ENV.WEEE", "EU.ENV.WEEE"],
+    "Fig 10": ["DK.DGX.EGOV.USE", "EU.DGX.EGOV.USE", "DK.DGX.DIFF",
+               "DK.DGX.NOUSE", "DK.DGP.EXMP", "DK.FIN.INST", "DK.FIN.BRCH",
+               "DK.FIN.EMP", "DK.ENT.AI.LRG", "DK.ENT.AI.SME"],
+    "App. A": ["DK.PRD.LP.PER"],
+    "App. D": ["DK.POP.TOT", "DK.DGP.EXMP.N"],
+    "App. E": ["DK.PAY.CASH.POS", "DK.PAY.CRD.PHYS", "DK.PAY.WLT.SHR",
+               "EU.ECM.IND.BUY"],
+}
 
 
-def header_row(ws, row, labels, widths=None):
-    for i, label in enumerate(labels, start=1):
-        c = ws.cell(row=row, column=i, value=label)
-        c.fill, c.font, c.border = F_HEAD, T_HEAD, BOX
-        c.alignment = Alignment(wrap_text=True, vertical="center")
-    if widths:
-        for i, w in enumerate(widths, start=1):
-            ws.column_dimensions[get_column_letter(i)].width = w
-    ws.row_dimensions[row].height = 28
+def _report_refs():
+    """series_code -> the figures it feeds, as 'Fig 1; Fig 2'."""
+    out = {}
+    for fig, codes in FIGURE_SERIES.items():
+        for code in codes:
+            out.setdefault(code, []).append(fig)
+    return {c: "; ".join(f) for c, f in out.items()}
 
 
-def title_block(ws, title, subtitle=None):
-    ws["A1"] = title
-    ws["A1"].font = T_TITLE
-    if subtitle:
-        ws["A2"] = subtitle
-        ws["A2"].font = T_SMALL
-    ws.row_dimensions[1].height = 22
+REPORT_REF = _report_refs()
+
+# Observation index. Series codes carry their own geography (DK.*, EU.*, AT.*),
+# so code and year identify an observation uniquely - asserted below.
+INDEX = {}
+for _row in OBS:
+    _key = (_row[0], _row[3])
+    assert _key not in INDEX, f"duplicate observation: {_key}"
+    INDEX[_key] = _row
 
 
-def lookup(series, year):
-    """Formula returning the MASTER value for (series, year), or "" if absent."""
-    m = "'02_MASTER'"
-    cond = f'{m}!$B:$B,"{series}",{m}!$E:$E,{year}'
-    return f'=IF(COUNTIFS({cond})=0,"",SUMIFS({m}!$F:$F,{cond}))'
+def val(code, year):
+    """The published value, or raise. Raising is the point - see module docstring."""
+    try:
+        return INDEX[(code, year)][4]
+    except KeyError:
+        raise KeyError(
+            f"no observation {code} {year}. Add it to dataset.py, or stop "
+            f"referring to it - do not interpolate one."
+        ) from None
 
 
-def L(series, year):
-    """`lookup` with the leading '=' stripped, for embedding inside a formula."""
-    return lookup(series, year)[1:]
+def ref(code, year):
+    """A live SUMIFS over 02_MASTER returning that observation's value.
 
-
-def style_chart(ch, legend="b"):
-    """Strip Excel's default chart chrome.
-
-    openpyxl's `style` presets produce the look everyone recognises as a default
-    Excel chart. Removing the preset, the gridlines and the axis lines leaves the
-    data as the only thing drawn, which is the point: every pixel that is not a
-    value is competing with one that is.
-
-    The axis LINES are hidden while the axes themselves are kept - tick labels
-    still render, so the chart loses its frame without losing its scale.
-
-    Pass legend=None for a single-series chart, where a legend restates the
-    title and earns nothing.
+    Bounded to the real data rows rather than whole columns: 200-odd formulas
+    each scanning $B:$B over a million rows is slow for no gain.
     """
-    ch.style = None
-    for ax in (ch.x_axis, ch.y_axis):
-        if ax is None:
-            continue
-        ax.majorGridlines = None
-        ax.spPr = GraphicalProperties(ln=LineProperties(noFill=True))
-
-    if legend is None:
-        ch.legend = None
-    elif ch.legend is not None:
-        # Bottom, never right: a right-hand legend eats horizontal plot width,
-        # which is the axis carrying the comparison in every chart here.
-        ch.legend.position = legend
-        ch.legend.overlay = False
-
-    if isinstance(ch, BarChart):
-        # Excel defaults to gapWidth 150, which leaves bars thinner than the
-        # space between them and makes the whitespace the dominant shape.
-        ch.gapWidth = 80
-        if ch.grouping == "stacked":
-            ch.overlap = 100
-        elif ch.grouping == "clustered" and len(ch.series) > 1:
-            ch.overlap = -27
-    return ch
+    val(code, year)          # fail here, not silently in Excel
+    return (f"SUMIFS('{MASTER}'!$F${FIRST}:$F${LAST},"
+            f"'{MASTER}'!$B${FIRST}:$B${LAST},\"{code}\","
+            f"'{MASTER}'!$E${FIRST}:$E${LAST},{year})")
 
 
-def paint(series, rgb, line=False):
-    """Solid-fill a series in one palette colour."""
-    series.graphicalProperties = GraphicalProperties(solidFill=rgb)
-    if not line:
-        series.graphicalProperties.ln = LineProperties(noFill=True)
-    return series
+def unit_of(code, year):
+    return INDEX[(code, year)][5]
 
 
-def highlight_points(series, n_points, focus, base=C_GREY, accent=C_ACCENT):
-    """Grey every bar except the ones named in `focus`.
-
-    `focus` maps a zero-based point index to a colour. This is what turns a
-    ranked bar chart from eight identically coloured bars into a chart with a
-    subject: Denmark in the accent, the EU average in navy, everyone else
-    receding into grey.
-    """
-    paint(series, base)
-    series.data_points = [
-        DataPoint(idx=i,
-                  spPr=GraphicalProperties(
-                      solidFill=focus.get(i, base),
-                      ln=LineProperties(noFill=True)))
-        for i in range(n_points)
-    ]
-    return series
+def flag_of(code, year):
+    return INDEX[(code, year)][7]
 
 
-def chart_title(ws, cell, text, note=None):
-    """Write a chart's title into a cell instead of onto the chart.
-
-    openpyxl renders chart titles inconsistently and they cannot be aligned to
-    the sheet grid. A title in a cell aligns with everything else, stays
-    editable by the reader, and can carry a units caption beneath it.
-    """
-    c = ws[cell]
-    c.value = text
-    c.font = Font(name="Calibri", size=11, bold=True, color=NAVY)
-    c.fill = PatternFill("solid", fgColor="FFE7F2FF")
-    c.alignment = Alignment(vertical="center")
-    if note:
-        below = ws.cell(row=c.row + 1, column=c.column, value=note)
-        below.font = T_SMALL
-    return c
+def src_of(code, year):
+    return INDEX[(code, year)][8]
 
 
-def source_note(ws, row, text):
-    c = ws.cell(row=row, column=1, value=text)
-    c.font = T_SMALL
-    c.alignment = WRAP
+# --------------------------------------------------------------- 00_COVER ---
+def sheet_cover(wb, fmt, contents):
+    ws = wb.add_worksheet("00_COVER")
+    ws.write(0, 0, "Denmark: digital adoption and policy outcomes", fmt["title"])
+    ws.write(1, 0, "Statistical annex to Assessment 2 - Digital Policy and "
+                   "Innovation Report", fmt["subtitle"])
 
-
-# ------------------------------------------------------------------ sheets ---
-def sheet_cover(wb):
-    ws = wb.create_sheet("00_COVER")
-    ws.column_dimensions["A"].width = 26
-    ws.column_dimensions["B"].width = 78
-
-    ws["A1"] = "Denmark: Digital Adoption and Policy Outcomes"
-    ws["A1"].font = Font(name="Calibri", size=18, bold=True, color=NAVY)
-    ws["A2"] = "Statistical annex to Assessment 2 - Digital Policy and Innovation Report"
-    ws["A2"].font = Font(name="Calibri", size=11, color="FF5A5A5A")
-
-    rows = [
+    meta = [
         ("Student ID", STUDENT_ID),
         ("Course", COURSE),
-        ("Assessment", "Assessment 2 - Digital Policy and Innovation Report"),
         ("Country", "Denmark (assigned by final digit of student ID: 0)"),
         ("Workbook version", VERSION),
         ("Built", BUILT),
-        ("Observations", str(len(OBS))),
+        ("Observations", len(OBS)),
+        ("Sources", len(SOURCES)),
         ("Coverage", "1991-2026, unbalanced; see 07_LIMITATIONS"),
-        ("", ""),
-        ("Suggested citation",
-         f"Denmark: Digital Adoption and Policy Outcomes [data workbook], "
-         f"v{VERSION}, {BUILT}. Compiled from the sources listed in 03_SOURCES."),
-        ("", ""),
-        ("Provenance rule",
-         "Every value in this workbook was verified against the issuing authority "
-         "named in its source_id. No value is interpolated, smoothed, or inferred "
-         "from a neighbouring year. Gaps are left as gaps."),
-        ("Structure rule",
-         "02_MASTER is the single source of truth. Every figure sheet and every "
-         "derived quantity is a formula view of it, not a pasted copy."),
     ]
-    r = 4
-    for k, v in rows:
-        ws.cell(row=r, column=1, value=k).font = T_SUB
-        c = ws.cell(row=r, column=2, value=v)
-        c.font, c.alignment = T_BODY, WRAP
-        if len(v) > 90:
-            ws.row_dimensions[r].height = 42
+    r = 3
+    for k, v in meta:
+        ws.write(r, 0, k, fmt["label"])
+        ws.write(r, 1, v, fmt["text_n"] if not isinstance(v, int) else fmt["int"])
         r += 1
 
     r += 1
-    ws.cell(row=r, column=1, value="CONTENTS").font = T_SUB
+    ws.write(r, 0, "How to trace any number in the report", fmt["section"])
     r += 1
-    contents = [
-        ("01_README", "Conventions, flag legend, how to trace any value"),
-        ("02_MASTER", "Every observation, one row each"),
-        ("03_SOURCES", "Source register with URLs, access dates, Harvard references"),
-        ("04_DEFINITIONS", "What each indicator measures, and what it excludes"),
-        ("05_CALC", "Derived quantities, as live formulas"),
-        ("F1_BRANCHES", "Figure 1 - bank branch network, 2004-2024"),
-        ("F2_PAYMENTS", "Figure 2 - payment instrument shares, 2017-2025"),
-        ("F3_ESALES", "Figure 3 - e-sales share of turnover, DK vs EU"),
-        ("F4_EXCLUSION", "Figure 4 - measures of digital exclusion"),
-        ("F5_EU27", "Figure 5 - online purchasing, all 27 member states, 2024"),
-        ("F6_ADOPT_BENEFIT", "Figure 6 - adoption vs economic effect, EU 2024"),
-        ("F7_QUALITY", "Figure 7 - DK vs EU: leads on adoption, trails on "
-                       "service quality"),
-        ("F8_SMVDIGITAL", "Figure 8 - SMV:Digital, the one policy with a "
-                          "control group"),
-        ("F9_CONSOLIDATION", "Figure 9 - banking consolidation on three "
-                             "measures, and the asymmetry between them"),
-        ("F10_SKILLS", "Figure 10 - digital skills by age band, DK vs EU-27"),
-        ("F11_EWASTE", "Figure 11 - ICT waste recovery, DK vs EU-27"),
-        ("09_POLICY", "Policy events - dated instruments with legal citations"),
-        ("06_RETAIL_GAP", "Documented gap - retail volume index not retrieved"),
-        ("07_LIMITATIONS", "Data quality statement - read before citing"),
-        ("08_AI_LOG", "AI use and validation log"),
-    ]
+    for line in [
+        "1. The figure caption in the report names a workbook sheet.",
+        "2. That sheet shows the series_code beside each value.",
+        "3. Filter 02_MASTER by that series_code to reach the observation row.",
+        "4. The row carries its unit, its denominator and a source_id.",
+        "5. Look the source_id up in 03_SOURCES for the authority, the dataset "
+        "code, the URL and the date it was retrieved.",
+    ]:
+        ws.write(r, 0, line, fmt["prose"])
+        r += 1
+
+    r += 1
+    ws.write(r, 0, "Colour legend", fmt["section"])
+    r += 1
+    for swatch, text in [
+        ("swatch_plain", "Retrieved value, exactly as published by the source"),
+        ("swatch_derived", "Derived - calculated by formula from retrieved values"),
+        ("swatch_flagged", "Flagged - an estimate, a break in series, or provisional"),
+        ("swatch_gap", "Documented gap - the value was not retrieved"),
+    ]:
+        ws.write_blank(r, 0, None, fmt[swatch])
+        ws.write(r, 1, text, fmt["prose_n"])
+        r += 1
+
+    r += 1
+    ws.write(r, 0, "Contents", fmt["section"])
+    r += 1
+    contents_at = r
     for name, desc in contents:
-        ws.cell(row=r, column=1, value=name).font = T_MONO
-        ws.cell(row=r, column=2, value=desc).font = T_BODY
-        r += 1
-
-    ws.sheet_view.showGridLines = False
-    return ws
-
-
-def sheet_readme(wb):
-    ws = wb.create_sheet("01_README")
-    ws.column_dimensions["A"].width = 22
-    ws.column_dimensions["B"].width = 96
-    title_block(ws, "How to read this workbook")
-
-    r = 4
-    blocks = [
-        ("PURPOSE",
-         "This workbook is the raw-data attachment to a 2,000-word policy report on "
-         "Denmark's digital transformation. It is designed so that any number "
-         "appearing in the report can be traced to an issuing authority, a "
-         "denominator and an access date without consulting the author."),
-        ("TRACING A VALUE",
-         "1. Find the value on a figure sheet.  2. Read its series_code.  "
-         "3. Filter 02_MASTER by that series_code to find the observation row.  "
-         "4. Take its source_id to 03_SOURCES for the authority, URL and access "
-         "date.  5. Check 04_DEFINITIONS for what the indicator does and does not "
-         "cover."),
-        ("SINGLE SOURCE OF TRUTH",
-         "02_MASTER holds every observation. Figure sheets contain no typed numbers "
-         "- each cell is a COUNTIFS/SUMIFS lookup against 02_MASTER. Correcting a "
-         "value in 02_MASTER updates every sheet and chart that uses it."),
-        ("DENOMINATORS",
-         "The denominator column in 02_MASTER is load-bearing, not decorative. "
-         "Eurostat's Danish online-purchasing figures change base between 2019 "
-         "(% of individuals) and 2020 onward (% of internet users). Series with "
-         "different denominators are never plotted on one axis."),
-    ]
-    for k, v in blocks:
-        ws.cell(row=r, column=1, value=k).font = T_SUB
-        c = ws.cell(row=r, column=2, value=v)
-        c.font, c.alignment = T_BODY, WRAP
-        ws.row_dimensions[r].height = 58
+        ws.write(r, 0, name, fmt["code"])
+        ws.write(r, 1, desc, fmt["prose_n"])
         r += 1
 
     r += 1
-    ws.cell(row=r, column=1, value="FLAG LEGEND").font = T_SUB
+    ws.write(r, 0, "Provenance rule", fmt["label"])
+    ws.write(r, 1, "Every value here was verified against the issuing authority "
+                   "named in its source_id. Nothing is interpolated, smoothed or "
+                   "inferred from a neighbouring year. Gaps are left as gaps.",
+             fmt["prose"])
     r += 1
-    header_row(ws, r, ["Flag", "Meaning"], [22, 96])
+    ws.write(r, 0, "Suggested citation", fmt["label"])
+    ws.write(r, 1, f"Denmark: digital adoption and policy outcomes [data "
+                   f"workbook], v{VERSION}, {BUILT}. Compiled from the sources "
+                   f"listed in 03_SOURCES.", fmt["prose"])
+
+    finish(ws, [(0, 0, 26), (1, 1, 96)], hide_grid=True, landscape=False,
+           tab=style.TAB_REFERENCE)
+    ws.set_row(0, 22)
+    return contents_at
+
+
+# -------------------------------------------------------------- 02_MASTER ---
+def sheet_master(wb, fmt):
+    ws = wb.add_worksheet(MASTER)
+    for c, h in enumerate(MASTER_HEADERS):
+        ws.write(0, c, h, fmt["head"])
+
+    for i, (code, ind, geo, year, value, unit, denom, flag, src, note) \
+            in enumerate(OBS):
+        r = i + 1
+        numfmt = fmt["flagged"] if flag else (
+            fmt["int"] if unit == "count" else fmt["num"])
+        ws.write_number(r, M_ID, i + 1, fmt["int"])
+        ws.write_string(r, M_CODE, code, fmt["code"])
+        ws.write_string(r, M_IND, ind, fmt["text"])
+        ws.write_string(r, M_GEO, geo, fmt["text_n"])
+        ws.write_number(r, M_YEAR, year, fmt["year"])
+        ws.write_number(r, M_VAL, value, numfmt)
+        ws.write_string(r, M_UNIT, unit, fmt["text_n"])
+        ws.write_string(r, M_DENOM, denom, fmt["text"])
+        ws.write_string(r, M_FLAG, flag, fmt["text_n"])
+        ws.write_string(r, M_SRC, src, fmt["code"])
+        ws.write_string(r, M_REF, REPORT_REF.get(code, ""), fmt["text_n"])
+        ws.write_string(r, M_NOTE, note, fmt["text"])
+
+    ws.autofilter(0, 0, len(OBS), len(MASTER_HEADERS) - 1)
+    finish(ws, [(M_ID, M_ID, 7), (M_CODE, M_CODE, 21), (M_IND, M_IND, 44),
+                (M_GEO, M_GEO, 6), (M_YEAR, M_YEAR, 7), (M_VAL, M_VAL, 12),
+                (M_UNIT, M_UNIT, 9), (M_DENOM, M_DENOM, 34),
+                (M_FLAG, M_FLAG, 6), (M_SRC, M_SRC, 10), (M_REF, M_REF, 15),
+                (M_NOTE, M_NOTE, 56)],
+           freeze=(1, 2), hide_grid=False, repeat_header=True,
+           tab=style.TAB_REFERENCE)
+    ws.set_row(0, 30)
+
+
+# ------------------------------------------------------------- 03_SOURCES ---
+def sheet_sources(wb, fmt):
+    ws = wb.add_worksheet("03_SOURCES")
+    ws.write(0, 0, "Source register", fmt["title"])
+    ws.write(1, 0, "Every source_id used in 02_MASTER, with the authority that "
+                   "published it and the date it was retrieved.", fmt["subtitle"])
+
+    heads = ["source_id", "authority", "title", "dataset code", "accessed",
+             "URL", "Harvard reference"]
+    for c, h in enumerate(heads):
+        ws.write(3, c, h, fmt["head"])
+
+    used = {r[8] for r in OBS}
+    for i, sid in enumerate(sorted(SOURCES)):
+        s = SOURCES[sid]
+        r = i + 4
+        ws.write_string(r, 0, sid, fmt["code"])
+        ws.write_string(r, 1, s["authority"], fmt["text"])
+        ws.write_string(r, 2, s["title"], fmt["text"])
+        ws.write_string(r, 3, s.get("dataset_code", ""), fmt["code"])
+        ws.write_string(r, 4, s.get("accessed", ACCESSED), fmt["text_n"])
+        url = s.get("url", "")
+        if url:
+            ws.write_url(r, 5, url, fmt["link"], url)
+        else:
+            ws.write_string(r, 5, "", fmt["text"])
+        ws.write_string(r, 6, s["harvard"], fmt["text"])
+
+    ws.autofilter(3, 0, 3 + len(SOURCES), len(heads) - 1)
+    finish(ws, [(0, 0, 10), (1, 1, 30), (2, 2, 42), (3, 3, 16), (4, 4, 11),
+                (5, 5, 48), (6, 6, 80)],
+           freeze=(4, 1), hide_grid=False, tab=style.TAB_REFERENCE)
+    ws.set_row(3, 28)
+    return used
+
+
+# --------------------------------------------------------- 04_DEFINITIONS ---
+def sheet_definitions(wb, fmt):
+    ws = wb.add_worksheet("04_DEFINITIONS")
+    ws.write(0, 0, "What each series measures", fmt["title"])
+    ws.write(1, 0, "One row per series code. The denominator is the column that "
+                   "decides whether two values may be compared.", fmt["subtitle"])
+
+    heads = ["series_code", "indicator", "geo", "unit", "denominator",
+             "observations", "years", "feeds"]
+    for c, h in enumerate(heads):
+        ws.write(3, c, h, fmt["head"])
+
+    series = {}
+    for code, ind, geo, year, value, unit, denom, flag, src, note in OBS:
+        s = series.setdefault(code, {"ind": ind, "geo": geo, "unit": unit,
+                                     "denom": denom, "years": []})
+        s["years"].append(year)
+
+    for i, code in enumerate(sorted(series)):
+        s = series[code]
+        r = i + 4
+        yrs = sorted(s["years"])
+        span = str(yrs[0]) if len(yrs) == 1 else f"{yrs[0]}-{yrs[-1]}"
+        ws.write_string(r, 0, code, fmt["code"])
+        ws.write_string(r, 1, s["ind"], fmt["text"])
+        ws.write_string(r, 2, s["geo"], fmt["text_n"])
+        ws.write_string(r, 3, s["unit"], fmt["text_n"])
+        ws.write_string(r, 4, s["denom"], fmt["text"])
+        ws.write_number(r, 5, len(yrs), fmt["int"])
+        ws.write_string(r, 6, span, fmt["text_n"])
+        ws.write_string(r, 7, REPORT_REF.get(code, ""), fmt["text_n"])
+
+    r = 5 + len(series)
+    ws.write(r, 0, "Flag legend", fmt["section"])
     r += 1
-    for f, m in [
+    for k, v in [
         ("b", "Break in series - definition or denominator changed. Do not plot across."),
-        ("e", "Estimate - source gives an approximation or a verbal quantity."),
+        ("e", "Estimate - the source gives an approximation or a verbal quantity."),
         ("p", "Provisional."),
         ("d", "Definition differs from the rest of the series."),
         ("u", "Low reliability."),
-        ("(blank)", "Value as published, no qualification."),
+        ("(blank)", "Value as published, with no qualification."),
     ]:
-        ws.cell(row=r, column=1, value=f).font = T_MONO
-        ws.cell(row=r, column=2, value=m).font = T_BODY
+        ws.write_string(r, 0, k, fmt["code"])
+        ws.write_string(r, 1, v, fmt["prose_n"])
         r += 1
 
     r += 1
-    ws.cell(row=r, column=1, value="COLOUR LEGEND").font = T_SUB
+    ws.write(r, 0, "A caveat about blanks", fmt["section"])
     r += 1
-    for fill, label in [
-        (F_RAW, "Retrieved value - as published by the source"),
-        (F_CALC, "Derived - calculated by formula from retrieved values"),
-        (F_FLAG, "Flagged - estimate, break, or otherwise qualified"),
-        (F_GAP, "Documented gap - value not retrieved"),
-    ]:
-        c = ws.cell(row=r, column=1, value="")
-        c.fill, c.border = fill, BOX
-        ws.cell(row=r, column=2, value=label).font = T_BODY
+    ws.merge_range(r, 0, r + 2, 7,
+                   "Number formats in this workbook carry a fourth, text section "
+                   "so that a value which does not exist renders as an en-dash "
+                   "rather than as an empty cell: a gap should look like a gap "
+                   "and not like an oversight. The cost is that a genuine zero "
+                   "would render the same way. No series here has a meaningful "
+                   "zero, so the two cannot be confused in this workbook - but "
+                   "they could be in one that did.", fmt["prose"])
+
+    finish(ws, [(0, 0, 21), (1, 1, 46), (2, 2, 6), (3, 3, 9), (4, 4, 36),
+                (5, 5, 12), (6, 6, 11), (7, 7, 15)],
+           freeze=(4, 1), hide_grid=False, tab=style.TAB_REFERENCE)
+    ws.set_row(3, 28)
+    return len(series)
+
+
+# ---------------------------------------------------------------- 05_CALC ---
+def derived_quantities():
+    """The derived numbers the report cites.
+
+    Each entry is (label, words, unit, formula, python_value). The formula is
+    what Excel recalculates; the value is what every other viewer displays. They
+    are built from the same observations, so a disagreement between them is a
+    bug and verify_workbook.py checks for it.
+    """
+    q = []
+
+    def add(label, words, unit, formula, value):
+        q.append((label, words, unit, formula, value))
+
+    b04, b24 = val("DK.FIN.BRCH", 2004), val("DK.FIN.BRCH", 2024)
+    add("Bank branches, 2004", "As published.", "count",
+        ref("DK.FIN.BRCH", 2004), b04)
+    add("Bank branches, 2024", "As published.", "count",
+        ref("DK.FIN.BRCH", 2024), b24)
+    add("Branch network, change 2004-2024",
+        "2024 branches divided by 2004 branches, less one.", "%",
+        f"({ref('DK.FIN.BRCH', 2024)}/{ref('DK.FIN.BRCH', 2004)}-1)*100",
+        (b24 / b04 - 1) * 100)
+
+    c17, c25 = val("DK.PAY.CASH.POS", 2017), val("DK.PAY.CASH.POS", 2025)
+    add("Cash share of physical-retail payments, 2017", "As published.", "%",
+        ref("DK.PAY.CASH.POS", 2017), c17)
+    add("Cash share of physical-retail payments, 2025", "As published.", "%",
+        ref("DK.PAY.CASH.POS", 2025), c25)
+    add("Cash share, change 2017-2025",
+        "2025 share less 2017 share, in percentage points.", "pp",
+        f"{ref('DK.PAY.CASH.POS', 2025)}-{ref('DK.PAY.CASH.POS', 2017)}",
+        c25 - c17)
+    add("Cash share, proportional decline 2017-2025",
+        "The same change expressed against the 2017 level.", "%",
+        f"({ref('DK.PAY.CASH.POS', 2025)}/{ref('DK.PAY.CASH.POS', 2017)}-1)*100",
+        (c25 / c17 - 1) * 100)
+
+    d14, d24 = val("DK.ECM.ENT.TRN", 2014), val("DK.ECM.ENT.TRN", 2024)
+    e14, e24 = val("EU.ECM.ENT.TRN", 2014), val("EU.ECM.ENT.TRN", 2024)
+    add("DK e-sales share of turnover, change 2014-2024",
+        "Percentage points, Denmark.", "pp",
+        f"{ref('DK.ECM.ENT.TRN', 2024)}-{ref('DK.ECM.ENT.TRN', 2014)}", d24 - d14)
+    add("EU e-sales share of turnover, change 2014-2024",
+        "Percentage points, EU-27 aggregate.", "pp",
+        f"{ref('EU.ECM.ENT.TRN', 2024)}-{ref('EU.ECM.ENT.TRN', 2014)}", e24 - e14)
+    add("DK lead over EU on e-sales turnover, 2024",
+        "Denmark less the EU-27 aggregate, same year and base.", "pp",
+        f"{ref('DK.ECM.ENT.TRN', 2024)}-{ref('EU.ECM.ENT.TRN', 2024)}", d24 - e24)
+
+    exmp, diff = val("DK.DGP.EXMP", 2026), val("DK.DGX.DIFF", 2026)
+    add("Formally exempt from Digital Post, Q1 2026", "As published.", "%",
+        ref("DK.DGP.EXMP", 2026), exmp)
+    add("Face difficulty with digital public services", "As published.", "%",
+        ref("DK.DGX.DIFF", 2026), diff)
+    add("Difficulty as a multiple of formal exemption",
+        "The narrowest capability measure divided by the administrative one.",
+        "times", f"{ref('DK.DGX.DIFF', 2026)}/{ref('DK.DGP.EXMP', 2026)}",
+        diff / exmp)
+    add("Face difficulty but are not exempt",
+        "Difficulty less formal exemption, in percentage points.", "pp",
+        f"{ref('DK.DGX.DIFF', 2026)}-{ref('DK.DGP.EXMP', 2026)}", diff - exmp)
+
+    pop = val("DK.POP.TOT", 2026)
+    n26, n25 = val("DK.DGP.EXMP.N", 2026), val("DK.DGP.EXMP.N", 2025)
+    add("Resident population, 1 January 2026", "As published.", "count",
+        ref("DK.POP.TOT", 2026), pop)
+    add("Citizens formally exempt, Q1 2026", "As published.", "count",
+        ref("DK.DGP.EXMP.N", 2026), n26)
+    add("Change in exempt headcount, 2025 to 2026",
+        "2026 headcount less 2025 headcount. The 2025 figure is an estimate.",
+        "count", f"{ref('DK.DGP.EXMP.N', 2026)}-{ref('DK.DGP.EXMP.N', 2025)}",
+        n26 - n25)
+
+    s16, s55 = val("DK.SKL.1624", 2025), val("DK.SKL.5574", 2025)
+    add("Digital skills gap, 16-24 against 55-74",
+        "Younger band less older band, percentage points.", "pp",
+        f"{ref('DK.SKL.1624', 2025)}-{ref('DK.SKL.5574', 2025)}", s16 - s55)
+
+    lrg, sme = val("DK.ENT.AI.LRG", 2025), val("DK.ENT.AI.SME", 2025)
+    add("AI adoption gap, large firms against SMEs",
+        "Large-firm adoption less SME adoption, percentage points.", "pp",
+        f"{ref('DK.ENT.AI.LRG', 2025)}-{ref('DK.ENT.AI.SME', 2025)}", lrg - sme)
+
+    dkw, euw = val("DK.ENV.WEEE", 2023), val("EU.ENV.WEEE", 2023)
+    add("ICT waste recovery, DK against EU-27",
+        "Denmark less the EU-27 aggregate, percentage points.", "pp",
+        f"{ref('DK.ENV.WEEE', 2023)}-{ref('EU.ENV.WEEE', 2023)}", dkw - euw)
+
+    dke, eue = val("DK.DGX.EGOV.USE", 2024), val("EU.DGX.EGOV.USE", 2024)
+    add("E-government use, DK against EU-27",
+        "Denmark less the EU-27 aggregate, same base and reference period.", "pp",
+        f"{ref('DK.DGX.EGOV.USE', 2024)}-{ref('EU.DGX.EGOV.USE', 2024)}",
+        dke - eue)
+
+    return q
+
+
+def sheet_calc(wb, fmt):
+    ws = wb.add_worksheet("05_CALC")
+    ws.write(0, 0, "Derived quantities", fmt["title"])
+    ws.write(1, 0, "Every value in the result column is a live formula over "
+                   "02_MASTER. None is typed.", fmt["subtitle"])
+
+    heads = ["quantity", "result", "unit", "how it is built"]
+    for c, h in enumerate(heads):
+        ws.write(3, c, h, fmt["head"])
+
+    q = derived_quantities()
+    for i, (label, words, unit, formula, value) in enumerate(q):
+        r = i + 4
+        ws.write_string(r, 0, label, fmt["text"])
+        cell_fmt = fmt["derived_int"] if unit == "count" else fmt["derived"]
+        ws.write_formula(r, 1, "=" + formula, cell_fmt, value)
+        ws.write_string(r, 2, unit, fmt["text_n"])
+        ws.write_string(r, 3, words, fmt["text"])
+
+    finish(ws, [(0, 0, 46), (1, 1, 14), (2, 2, 8), (3, 3, 62)],
+           freeze=(4, 1), hide_grid=False, tab=style.TAB_CHART)
+    ws.set_row(3, 22)
+    return len(q)
+
+
+# ------------------------------------------------- figure sheet scaffolding ---
+CHART_COL = 6            # charts start at column G; all text stays in A..E
+CHART_ROW = 3            # and at row 4, below the title block
+
+
+def figure_header(ws, fmt, title, blurb):
+    ws.write(0, 0, title, fmt["title"])
+    ws.write(1, 0, blurb, fmt["subtitle"])
+
+
+def source_note(ws, fmt, row, text):
+    ws.write(row, 0, "Source: " + text, fmt["small"])
+
+
+def base_chart(wb, kind, title, subtitle=None):
+    """A chart with the chrome the previous workbook stripped out.
+
+    Every chart gets a real title on the chart object. The previous build put
+    titles in worksheet cells instead, so in Excel each chart was an untitled
+    floating graphic whose title neither moved, resized, copied nor printed
+    with it.
+    """
+    ch = wb.add_chart(kind)
+    name = title if not subtitle else f"{title}\n{subtitle}"
+    ch.set_title({
+        "name": name,
+        "name_font": {"name": style.FONT, "size": 12, "bold": True,
+                      "color": style.NAVY},
+    })
+    ch.set_chartarea({"border": {"none": True}, "fill": {"color": "#FFFFFF"}})
+    ch.set_plotarea({"border": {"none": True}, "fill": {"none": True}})
+    ch.set_size({"width": 760, "height": 460})
+    return ch
+
+
+def axis(name, *, num_format=None, grid=False, cat=False):
+    a = {
+        "name": name,
+        "name_font": {"name": style.FONT, "size": 10, "color": style.AXIS_INK},
+        "num_font": {"name": style.FONT, "size": 9, "color": style.AXIS_INK},
+        "line": {"color": style.GRID},
+        "major_tick_mark": "none",
+        "minor_tick_mark": "none",
+    }
+    if num_format:
+        a["num_format"] = num_format
+    a["major_gridlines"] = ({"visible": True,
+                             "line": {"color": style.GRID, "width": 0.75}}
+                            if grid else {"visible": False})
+    if cat:
+        a["label_position"] = "low"
+    return a
+
+
+def legend_bottom():
+    return {"position": "bottom",
+            "font": {"name": style.FONT, "size": 9, "color": style.AXIS_INK},
+            "border": {"none": True}}
+
+
+# ------------------------------------------------- F2_PAYMENTS  (chart C1) ---
+# The plan for this sheet was a three-series time line. The data does not carry
+# one: cash has three observations, the physical card two, the mobile wallet one.
+# Drawing three lines would mean inventing a 2017 wallet share of zero, which the
+# source does not report - the wallet was not separately measured that year.
+# A grouped column on the two years both instruments share says the same thing
+# and invents nothing.
+PAY_YEARS = [2017, 2025]
+PAY_SERIES = [
+    ("DK.PAY.CASH.POS", "Cash", style.CAT_1),
+    ("DK.PAY.CRD.PHYS", "Physical payment card", style.CAT_2),
+    ("DK.PAY.WLT.SHR", "Mobile wallet", style.CAT_3),
+]
+
+
+def sheet_payments(wb, fmt):
+    ws = wb.add_worksheet("F2_PAYMENTS")
+    figure_header(ws, fmt, "Instrument shares of physical-retail payments",
+                  "Denmark, 2017 and 2025. Shares of the number of payments in "
+                  "physical retail, so the three are directly comparable.")
+
+    ws.write(3, 0, "instrument", fmt["head"])
+    for j, y in enumerate(PAY_YEARS):
+        ws.write(3, 1 + j, str(y), fmt["head"])
+    ws.write(3, 3, "series_code", fmt["head"])
+
+    for i, (code, label, _colour) in enumerate(PAY_SERIES):
+        r = 4 + i
+        ws.write_string(r, 0, label, fmt["text_n"])
+        for j, y in enumerate(PAY_YEARS):
+            if (code, y) in INDEX:
+                ws.write_formula(r, 1 + j, "=" + ref(code, y), fmt["derived"],
+                                 val(code, y))
+            else:
+                ws.write_blank(r, 1 + j, None, fmt["gap"])
+        ws.write_string(r, 3, code, fmt["code"])
+
+    note_row = 4 + len(PAY_SERIES) + 1
+    ws.write(note_row, 0, "The mobile wallet was not separately reported in "
+                          "2017; the blank is a gap, not a zero.", fmt["small"])
+    source_note(ws, fmt, note_row + 1,
+                "Danmarks Nationalbank, Danskernes betalingsvaner. Series "
+                "DK.PAY.CASH.POS, DK.PAY.CRD.PHYS, DK.PAY.WLT.SHR in 02_MASTER.")
+
+    ch = base_chart(wb, {"type": "column"},
+                    "Cash gave up 14 points of retail payments in eight years",
+                    "Share of the number of physical-retail payments, Denmark")
+    for i, (code, label, colour) in enumerate(PAY_SERIES):
+        ch.add_series({
+            "name": label,
+            "categories": ["F2_PAYMENTS", 3, 1, 3, 2],
+            "values": ["F2_PAYMENTS", 4 + i, 1, 4 + i, 2],
+            "fill": {"color": colour},
+            "border": {"none": True},
+            "gap": 60,
+            # Direct labels on every column. Three series is inside the limit
+            # where direct labelling is expected, and the aqua slot sits below
+            # 3:1 contrast on a white surface, so the relief rule requires them.
+            "data_labels": {"value": True, "num_format": '0"%"',
+                            "font": {"name": style.FONT, "size": 9,
+                                     "color": style.AXIS_INK}},
+        })
+    ch.set_x_axis(axis("Year", cat=True))
+    ch.set_y_axis(axis("% of the number of payments", num_format='0"%"',
+                       grid=True))
+    ch.set_legend(legend_bottom())
+    ws.insert_chart(CHART_ROW, CHART_COL, ch)
+
+    finish(ws, [(0, 0, 26), (1, 2, 11), (3, 3, 21), (4, 5, 3)],
+           hide_grid=True, tab=style.TAB_CHART)
+
+
+# ------------------------------------------------ F4_EXCLUSION  (chart C2) ---
+# Five definitions of one phenomenon, ordered narrowest to widest so the ladder
+# reads down the page. The two bounds of the "digitally disadvantaged" range are
+# shown as separate bars rather than as one bar with an error whisker, because a
+# range whose ends come from the same estimate should not be drawn as though one
+# end were the measurement and the other a deviation.
+EXCLUSION = [
+    ("DK.DGP.EXMP", 2026, "Formally exempt from Digital Post",
+     "administrative status"),
+    ("DK.DGX.NOUSE", 2026, "Do not use digital public services",
+     "self-reported non-use"),
+    ("DK.DGX.DIFF", 2026, "Face difficulty using digital public services",
+     "capability"),
+    ("DK.DGX.DISADV.LO", 2025, "'Digitally disadvantaged', lower bound",
+     "capability estimate"),
+    ("DK.DGX.DISADV.HI", 2025, "'Digitally disadvantaged', upper bound",
+     "capability estimate"),
+    ("DK.DGX.JUST", 2022, "'Digitally disadvantaged', broadest definition",
+     "capability estimate"),
+]
+
+
+def sheet_exclusion(wb, fmt):
+    ws = wb.add_worksheet("F4_EXCLUSION")
+    figure_header(ws, fmt, "Six measures of digital exclusion in Denmark",
+                  "The same phenomenon under six definitions. The spread between "
+                  "them is the finding, not a discrepancy to be resolved.")
+
+    for c, h in enumerate(["measure", "%", "basis", "year", "source",
+                           "series_code"]):
+        ws.write(3, c, h, fmt["head"])
+
+    rows = sorted(EXCLUSION, key=lambda e: val(e[0], e[1]))
+    for i, (code, year, label, basis) in enumerate(rows):
+        r = 4 + i
+        ws.write_string(r, 0, label, fmt["text_n"])
+        is_est = flag_of(code, year) == "e"
+        ws.write_formula(r, 1, "=" + ref(code, year),
+                         fmt["flagged"] if is_est else fmt["derived"],
+                         val(code, year))
+        ws.write_string(r, 2, basis, fmt["text_n"])
+        ws.write_number(r, 3, year, fmt["year"])
+        ws.write_string(r, 4, src_of(code, year), fmt["code"])
+        ws.write_string(r, 5, code, fmt["code"])
+
+    note_row = 4 + len(rows) + 1
+    ws.write(note_row, 0, "Amber rows are estimates rather than published "
+                          "counts, and are drawn in the lighter tint.",
+             fmt["small"])
+    source_note(ws, fmt, note_row + 1,
+                "Digitaliseringsstyrelsen, Eurostat and Justitia, as recorded "
+                "per row in 03_SOURCES.")
+
+    ch = base_chart(wb, {"type": "bar"},
+                    "Exclusion is four to five times wider than exemption",
+                    "Denmark, % of the stated population base")
+    ch.add_series({
+        "name": "Share of population",
+        "categories": ["F4_EXCLUSION", 4, 0, 3 + len(rows), 0],
+        "values": ["F4_EXCLUSION", 4, 1, 3 + len(rows), 1],
+        "fill": {"color": style.ACCENT},
+        "border": {"none": True},
+        "gap": 50,
+        "points": [{"fill": {"color": style.ACCENT_LIGHT
+                             if flag_of(c, y) == "e" else style.ACCENT}}
+                   for c, y, _l, _b in rows],
+        "data_labels": {"value": True, "num_format": '0.0"%"',
+                        "font": {"name": style.FONT, "size": 9,
+                                 "color": style.AXIS_INK}},
+    })
+    ch.set_x_axis(axis("% of the stated population base", num_format='0"%"',
+                       grid=True))
+    ch.set_y_axis(axis("Measure", cat=True))
+    ch.set_legend({"none": True})
+    ws.insert_chart(CHART_ROW, CHART_COL, ch)
+
+    finish(ws, [(0, 0, 44), (1, 1, 8), (2, 2, 20), (3, 3, 7), (4, 4, 9),
+                (5, 5, 20)], hide_grid=True, tab=style.TAB_CHART)
+
+
+# ----------------------------------------------------- F5_EU27  (chart C3) ---
+def sheet_eu27(wb, fmt):
+    ws = wb.add_worksheet("F5_EU27")
+    figure_header(ws, fmt, "Individuals who bought online, EU-27, 2024",
+                  "All 27 member states on one base. Denmark is the subject; "
+                  "the other 26 are context.")
+
+    for c, h in enumerate(["geo", "country", "%", "series_code",
+                           "EU-27 average"]):
+        ws.write(3, c, h, fmt["head"])
+
+    rows = sorted(
+        [(g, val(f"{g}.ECM.IND.BUY", 2024)) for g in COUNTRIES
+         if (f"{g}.ECM.IND.BUY", 2024) in INDEX],
+        key=lambda t: -t[1])
+
+    for i, (geo, v) in enumerate(rows):
+        r = 4 + i
+        ws.write_string(r, 0, geo, fmt["code"])
+        ws.write_string(r, 1, COUNTRIES[geo], fmt["text_n"])
+        ws.write_formula(r, 2, "=" + ref(f"{geo}.ECM.IND.BUY", 2024),
+                         fmt["derived"], v)
+        ws.write_string(r, 3, f"{geo}.ECM.IND.BUY", fmt["code"])
+        # The reference line needs a value on every category, so the aggregate
+        # is repeated down the column rather than typed once. It is the same
+        # live lookup each time, not 27 copies of a number.
+        ws.write_formula(r, 4, "=" + ref("EU.ECM.IND.BUY", 2024),
+                         fmt["derived"], val("EU.ECM.IND.BUY", 2024))
+
+    eu_row = 4 + len(rows) + 1
+    ws.write_string(eu_row, 1, "EU-27 aggregate", fmt["label"])
+    ws.write_formula(eu_row, 2, "=" + ref("EU.ECM.IND.BUY", 2024),
+                     fmt["derived"], val("EU.ECM.IND.BUY", 2024))
+    ws.write_string(eu_row, 3, "EU.ECM.IND.BUY", fmt["code"])
+    source_note(ws, fmt, eu_row + 2,
+                "Eurostat isoc_ec_ib20. The aggregate is listed below the "
+                "ranking rather than inside it, because it is not a country.")
+
+    ch = base_chart(wb, {"type": "column"},
+                    f"Denmark ranks {[g for g, _ in rows].index('DK') + 1} of "
+                    f"{len(rows)} on online purchasing",
+                    "% of internet users who bought online, 2024")
+    ch.add_series({
+        "name": "Bought online",
+        "categories": ["F5_EU27", 4, 0, 3 + len(rows), 0],
+        "values": ["F5_EU27", 4, 2, 3 + len(rows), 2],
+        "fill": {"color": style.CONTEXT},
+        "border": {"none": True},
+        "gap": 30,
+        "points": [{"fill": {"color": style.ACCENT if g == "DK"
+                             else style.CONTEXT}} for g, _ in rows],
+    })
+    line = wb.add_chart({"type": "line"})
+    line.add_series({
+        "name": "EU-27 average",
+        "categories": ["F5_EU27", 4, 0, 3 + len(rows), 0],
+        "values": ["F5_EU27", 4, 4, 3 + len(rows), 4],
+        "line": {"color": style.NAVY, "width": 1.25, "dash_type": "dash"},
+        "marker": {"type": "none"},
+    })
+    ch.combine(line)
+
+    ch.set_x_axis(axis("Member state", cat=True))
+    ch.set_y_axis(axis("% of internet users", num_format='0"%"', grid=True))
+    ch.set_legend(legend_bottom())
+    ws.insert_chart(CHART_ROW, CHART_COL, ch)
+
+    finish(ws, [(0, 0, 7), (1, 1, 22), (2, 2, 9), (3, 3, 20), (4, 4, 14)],
+           freeze=(4, 0), hide_grid=True, tab=style.TAB_CHART)
+    return [g for g, _ in rows].index("DK") + 1, len(rows)
+
+
+# --------------------------------------------- F6_ADOPT_BENEFIT (chart C4) ---
+def ols(xs, ys):
+    """Slope, intercept and R-squared. Plain OLS, no library."""
+    n = len(xs)
+    mx, my = sum(xs) / n, sum(ys) / n
+    sxy = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
+    sxx = sum((x - mx) ** 2 for x in xs)
+    slope = sxy / sxx
+    intercept = my - slope * mx
+    ss_res = sum((y - (intercept + slope * x)) ** 2 for x, y in zip(xs, ys))
+    ss_tot = sum((y - my) ** 2 for y in ys)
+    return slope, intercept, 1 - ss_res / ss_tot
+
+
+def sheet_adopt_benefit(wb, fmt):
+    ws = wb.add_worksheet("F6_ADOPT_BENEFIT")
+    figure_header(ws, fmt, "Adoption against economic effect, EU, 2024",
+                  "Citizen adoption on the horizontal axis, enterprise outcome "
+                  "on the vertical. Only countries holding both measures appear.")
+
+    paired, _awaiting_x, awaiting_y = cross_section(2024)
+    for c, h in enumerate(["geo", "country", "bought online (%)",
+                           "e-sales, % of turnover"]):
+        ws.write(3, c, h, fmt["head"])
+
+    xs, ys = [], []
+    for i, geo in enumerate(paired):
+        r = 4 + i
+        x = val(f"{geo}.ECM.IND.BUY", 2024)
+        y = val(f"{geo}.ECM.ENT.TRN", 2024)
+        xs.append(x)
+        ys.append(y)
+        ws.write_string(r, 0, geo, fmt["code"])
+        ws.write_string(r, 1, COUNTRIES[geo], fmt["text_n"])
+        ws.write_formula(r, 2, "=" + ref(f"{geo}.ECM.IND.BUY", 2024),
+                         fmt["derived"], x)
+        ws.write_formula(r, 3, "=" + ref(f"{geo}.ECM.ENT.TRN", 2024),
+                         fmt["derived"], y)
+
+    slope, intercept, r2 = ols(xs, ys)
+    n = len(paired)
+
+    # The live statistics Appendix A promises this sheet computes. Excel
+    # recalculates them from the cells above; the cached values are what a
+    # previewer displays.
+    stat_row = 4 + n + 1
+    xr = f"'F6_ADOPT_BENEFIT'!$C$5:$C${4 + n}"
+    yr = f"'F6_ADOPT_BENEFIT'!$D$5:$D${4 + n}"
+    ws.write(stat_row, 0, "OLS, computed live from the table above",
+             fmt["section"])
+    for j, (label, formula, value, unit) in enumerate([
+        ("n", f"COUNT({xr})", n, "countries"),
+        ("slope", f"SLOPE({yr},{xr})", slope, "pp per pp"),
+        ("intercept", f"INTERCEPT({yr},{xr})", intercept, "pp"),
+        ("R-squared", f"RSQ({yr},{xr})", r2, ""),
+    ]):
+        r = stat_row + 1 + j
+        ws.write_string(r, 0, label, fmt["label"])
+        ws.write_formula(r, 1, "=" + formula,
+                         fmt["derived_int"] if label == "n" else fmt["derived"],
+                         value)
+        ws.write_string(r, 2, unit, fmt["text_n"])
+
+    gap_row = stat_row + 6
+    ws.write(gap_row, 0, f"Holding adoption but not the outcome measure, so "
+                         f"absent from this table: "
+                         f"{', '.join(awaiting_y) if awaiting_y else 'none'}.",
+             fmt["small"])
+    source_note(ws, fmt, gap_row + 1,
+                "Eurostat isoc_ec_ib20 and isoc_ec_evaln2. The pairing is "
+                "recomputed at build time from 02_MASTER.")
+
+    ch = base_chart(wb, {"type": "scatter", "subtype": "markers"},
+                    "Adoption explains part of the outcome, not all of it",
+                    f"EU, 2024. n = {n}, slope {slope:+.3f}, R-squared {r2:.3f}")
+    ch.add_series({
+        "name": "Member state",
+        "categories": ["F6_ADOPT_BENEFIT", 4, 2, 3 + n, 2],
+        "values": ["F6_ADOPT_BENEFIT", 4, 3, 3 + n, 3],
+        "marker": {"type": "circle", "size": 8,
+                   "fill": {"color": style.CONTEXT},
+                   "border": {"color": "#FFFFFF", "width": 1.25}},
+        "points": [{"fill": {"color": style.ACCENT if g == "DK"
+                             else style.CONTEXT},
+                    "border": {"color": "#FFFFFF", "width": 1.25}}
+                   for g in paired],
+        "trendline": {"type": "linear",
+                      "line": {"color": style.NAVY, "width": 1.25,
+                               "dash_type": "dash"}},
+    })
+    ch.set_x_axis(axis("Individuals who bought online (% of internet users)",
+                       num_format='0"%"', grid=True))
+    ch.set_y_axis(axis("E-sales (% of enterprise turnover)", num_format='0"%"',
+                       grid=True))
+    ch.set_legend({"none": True})
+    ws.insert_chart(CHART_ROW, CHART_COL, ch)
+
+    finish(ws, [(0, 0, 38), (1, 1, 22), (2, 2, 17), (3, 3, 20)],
+           hide_grid=True, tab=style.TAB_CHART)
+    return n, slope, r2, xs, ys, paired
+
+
+# -------------------------------------------------- series-extract sheets ---
+# F1_BRANCHES, F11_EWASTE and F12_REACH carry no chart. They exist because the
+# report cites them by name - "workbook F1_BRANCHES" names a series, not a
+# figure - and the report is not being touched in this rebuild. Each is the
+# observations behind one report figure, which is all the citation promises.
+EXTRACTS = [
+    ("F1_BRANCHES", "Danish retail bank branches",
+     "The series behind Figure 1 of the report. Years are uneven because the "
+     "authority publishes irregularly; they are not interpolated.",
+     ["DK.FIN.BRCH"],
+     "Finans Danmark, Institutter, filialer og ansatte."),
+    ("F11_EWASTE", "ICT waste recycled or prepared for reuse",
+     "The series behind Figure 9 of the report. Denmark against the EU-27 "
+     "aggregate, same year and same base.",
+     ["DK.ENV.WEEE", "EU.ENV.WEEE"],
+     "European Commission, WEEE recovery statistics."),
+    ("F12_REACH", "How far the digital state reaches, and who it misses",
+     "The series behind Figure 10 of the report. Levels rather than "
+     "differences: these measures do not share a denominator and are never "
+     "differenced.",
+     ["DK.DGX.EGOV.USE", "EU.DGX.EGOV.USE", "DK.DGX.DIFF", "DK.DGX.NOUSE",
+      "DK.DGP.EXMP", "DK.FIN.INST", "DK.FIN.BRCH", "DK.FIN.EMP",
+      "DK.ENT.AI.LRG", "DK.ENT.AI.SME"],
+     "As recorded per row in 03_SOURCES."),
+]
+
+
+def sheet_extract(wb, fmt, name, title, blurb, codes, source):
+    ws = wb.add_worksheet(name)
+    figure_header(ws, fmt, title, blurb)
+
+    for c, h in enumerate(["series_code", "indicator", "geo", "year", "value",
+                           "unit", "denominator", "flag", "source"]):
+        ws.write(3, c, h, fmt["head"])
+
+    rows = sorted([r for r in OBS if r[0] in codes],
+                  key=lambda r: (codes.index(r[0]), r[3]))
+    for i, (code, ind, geo, year, value, unit, denom, flag, src, _note) \
+            in enumerate(rows):
+        r = 4 + i
+        ws.write_string(r, 0, code, fmt["code"])
+        ws.write_string(r, 1, ind, fmt["text"])
+        ws.write_string(r, 2, geo, fmt["text_n"])
+        ws.write_number(r, 3, year, fmt["year"])
+        cell = fmt["flagged"] if flag else (
+            fmt["derived_int"] if unit == "count" else fmt["derived"])
+        ws.write_formula(r, 4, "=" + ref(code, year), cell, value)
+        ws.write_string(r, 5, unit, fmt["text_n"])
+        ws.write_string(r, 6, denom, fmt["text"])
+        ws.write_string(r, 7, flag, fmt["text_n"])
+        ws.write_string(r, 8, src, fmt["code"])
+
+    source_note(ws, fmt, 4 + len(rows) + 1, source)
+    finish(ws, [(0, 0, 21), (1, 1, 44), (2, 2, 6), (3, 3, 7), (4, 4, 12),
+                (5, 5, 9), (6, 6, 34), (7, 7, 6), (8, 8, 9)],
+           freeze=(4, 1), hide_grid=False, tab=style.TAB_SUPPORT)
+    ws.set_row(3, 22)
+    return len(rows)
+
+
+# -------------------------------------------------------------- 09_POLICY ---
+def sheet_policy(wb, fmt):
+    ws = wb.add_worksheet("09_POLICY")
+    ws.write(0, 0, "Policy events", fmt["title"])
+    ws.write(1, 0, "Dated instruments with their legal citations. A policy event "
+                   "is evidence and is held to the same standard as a number: no "
+                   "event is dated more finely than its source allows.",
+             fmt["subtitle"])
+
+    for c, h in enumerate(["date", "precision", "event", "legal citation",
+                           "source", "bears on", "what it does"]):
+        ws.write(3, c, h, fmt["head"])
+
+    for i, (when, precision, event, citation, src, what, series) in \
+            enumerate(sorted(POLICY_EVENTS)):
+        r = 4 + i
+        ws.write_string(r, 0, when, fmt["text_n"])
+        ws.write_string(r, 1, precision, fmt["text_n"])
+        ws.write_string(r, 2, event, fmt["text"])
+        ws.write_string(r, 3, citation, fmt["text"])
+        ws.write_string(r, 4, src, fmt["code"])
+        ws.write_string(r, 5, series, fmt["code"])
+        ws.write_string(r, 6, what, fmt["text"])
+
+    finish(ws, [(0, 0, 12), (1, 1, 10), (2, 2, 40), (3, 3, 28), (4, 4, 9),
+                (5, 5, 20), (6, 6, 70)],
+           freeze=(4, 1), hide_grid=False, tab=style.TAB_SUPPORT)
+    ws.set_row(3, 22)
+    return len(POLICY_EVENTS)
+
+
+# --------------------------------------------------------- 07_LIMITATIONS ---
+def sheet_limitations(wb, fmt):
+    from content import AI_LOG, AI_LOG_FOOTER, LIMITATIONS, RETAIL_GAP
+
+    ws = wb.add_worksheet("07_LIMITATIONS")
+    ws.write(0, 0, "Limitations, gaps, and the AI use log", fmt["title"])
+    ws.write(1, 0, "Read before citing any value.", fmt["subtitle"])
+
+    r = 3
+    ws.write(r, 0, "What this data cannot support", fmt["section"])
+    r += 2
+    ws.write(r, 0, "limitation", fmt["head"])
+    ws.write(r, 1, "detail", fmt["head"])
+    r += 1
+    for head, body in LIMITATIONS:
+        ws.write_string(r, 0, head, fmt["label"])
+        ws.write_string(r, 1, body, fmt["prose"])
+        ws.set_row(r, max(14, 11 * (len(body) // 95 + 1)))
         r += 1
 
     r += 2
-    ws.cell(row=r, column=1, value="BEFORE CITING").font = T_SUB
-    c = ws.cell(row=r, column=2,
-                value="Read 07_LIMITATIONS. Several series have very few "
-                      "observations and none supports inferential statistics.")
-    c.font, c.alignment = T_BODY, WRAP
-
-    ws.sheet_view.showGridLines = False
-    return ws
-
-
-def sheet_master(wb):
-    ws = wb.create_sheet("02_MASTER")
-    cols = ["obs_id", "series_code", "indicator", "geo", "year", "value", "unit",
-            "denominator", "flag", "source_id", "compiled_date", "notes"]
-    header_row(ws, 1, cols, [8, 22, 46, 7, 7, 11, 12, 40, 6, 10, 14, 54])
-    # NOT an extraction date. This is one build-time constant written to every
-    # row, so it records when the workbook was compiled, not when each value was
-    # retrieved from its authority - those retrievals happened across several
-    # working sessions. The column was called extraction_date until an audit
-    # pointed out that the name asserted per-observation provenance the data
-    # does not carry. Retrieval dates per value would need an eleventh field in
-    # dataset.py, recorded at the time of retrieval; see 07_LIMITATIONS.
-
-    for i, row in enumerate(OBS, start=1):
-        code, ind, geo, year, val, unit, denom, flag, src, note = row
-        r = i + 1
-        vals = [i, code, ind, geo, year, val, unit, denom, flag, src, ACCESSED, note]
-        for j, v in enumerate(vals, start=1):
-            c = ws.cell(row=r, column=j, value=v)
-            c.font = T_MONO if j in (2, 10) else T_BODY
-            c.border, c.alignment = BOX, TOP
-            c.fill = F_FLAG if flag else F_RAW
-        ws.cell(row=r, column=6).number_format = (
-            "#,##0" if unit == "count" else "0.00"
-        )
-        ws.cell(row=r, column=3).alignment = WRAP
-        ws.cell(row=r, column=8).alignment = WRAP
-        ws.cell(row=r, column=12).alignment = WRAP
-
-    ws.freeze_panes = "C2"
-    ws.auto_filter.ref = f"A1:L{len(OBS) + 1}"
-    return ws
-
-
-def sheet_sources(wb):
-    ws = wb.create_sheet("03_SOURCES")
-    header_row(ws, 1,
-               ["source_id", "authority", "publication", "dataset code", "URL",
-                "accessed", "RMIT Harvard reference"],
-               [10, 30, 44, 24, 56, 12, 76])
-    r = 2
-    for sid, s in SOURCES.items():
-        # Mark bibliography-only sources on the face of the sheet. An entry that
-        # no observation uses otherwise reads as an oversight; saying so is the
-        # difference between a documented scope and a loose end.
-        title = s["title"]
-        if sid in REFERENCE_ONLY:
-            title = ("[REFERENCE ONLY - supports argument in the report; no "
-                     "workbook value depends on it] ") + title
-        vals = [sid, s["authority"], title, s["dataset_code"], s["url"],
-                s["accessed"], s["harvard"]]
-        for j, v in enumerate(vals, start=1):
-            c = ws.cell(row=r, column=j, value=v)
-            c.font = T_MONO if j == 1 else T_BODY
-            c.border, c.alignment, c.fill = BOX, WRAP, F_RAW
-        ws.row_dimensions[r].height = 46
-        r += 1
-    ws.freeze_panes = "B2"
-    return ws
-
-
-def sheet_definitions(wb):
-    ws = wb.create_sheet("04_DEFINITIONS")
-    header_row(ws, 1,
-               ["series_code", "what it measures", "what it excludes / watch for"],
-               [24, 62, 72])
-    note = ws.cell(row=2, column=1,
-                   value="PREFIXES: definitions below are written against the "
-                         "DK.* codes. The same definition applies to the "
-                         "identical indicator for any other geography - "
-                         "EU.*, and the member-state codes AT.* through SE.* "
-                         "used in F5_EU27 and F6_ADOPT_BENEFIT. Only the "
-                         "geography changes; the measure and its denominator "
-                         "do not.")
-    note.font, note.alignment, note.fill = T_SMALL, WRAP, F_GAP
-    ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=3)
-    ws.row_dimensions[2].height = 30
-    defs = [
-        ("DK.DGX.EGOV.USE",
-         "Share of individuals who used the website or app of a public "
-         "authority for private purposes in the last 12 months.",
-         "Base is ALL individuals aged 16-74, not internet users, so it is "
-         "not comparable with the DK.ECM.IND.BUY series. Records whether a "
-         "person interacted at all, once, in a year: it measures reach, not "
-         "frequency, competence or independent use."),
-        ("DK.PAY.CASH.POS",
-         "Cash as a share of the NUMBER of payments made at physical points of sale.",
-         "Not a share of value. Excludes e-commerce entirely."),
-        ("DK.PAY.CRD.PHYS",
-         "Physical payment cards as a share of the number of in-store payments.",
-         "Falls partly because wallets replace the physical card, not because "
-         "card payment declines."),
-        ("DK.PAY.WLT.SHR",
-         "Card-based mobile wallets as a share of the number of in-store payments.",
-         "Wallet payments are card payments. Do not add to the card share."),
-        ("DK.PAY.WLT.OWN",
-         "Share of CITIZENS with a wallet solution on their phone.",
-         "Different denominator from the payment-share series. Memo only - "
-         "deliberately excluded from Figure 2."),
-        ("DK.PRD.LP.PER",
-         "Nominal labour productivity per person employed, indexed so that the "
-         "EU27 (2020 composition) equals 100 in each year.",
-         "RELATIVE measure. A rise means Denmark gained ON THE EU AVERAGE; it is "
-         "not a Danish growth rate and must never be read as one. Per PERSON, so "
-         "it is sensitive to part-time work - the per-HOUR variant is the "
-         "cleaner productivity measure. Current prices in PPS, so nominal."),
-        ("DK.FIN.BRCH",
-         "Number of retail bank branches operated by Danish credit institutions.",
-         "Consolidation and digitalisation both reduce this. The series alone "
-         "cannot separate the two causes."),
-        ("DK.ECM.IND.BUY",
-         "Individuals who purchased goods or services online in the last 12 months.",
-         "DENOMINATOR BREAK at 2020: % of individuals before, % of internet users "
-         "after. Never plot 2019 with later years."),
-        ("DK.ECM.ENT.TRN",
-         "E-commerce sales as a share of total enterprise turnover.",
-         "Measures INTENSITY of online selling, not how many firms sell online. "
-         "Pair with DK.ECM.ENT.SHR."),
-        ("DK.ECM.ENT.SHR",
-         "Share of enterprises making any e-sales.",
-         "Measures BREADTH of adoption. Flat breadth with rising intensity means "
-         "incumbents deepening, not new entrants."),
-        ("DK.DGP.EXMP",
-         "Citizens formally exempt from mandatory Digital Post under the statutory "
-         "exemption regime.",
-         "An administrative status, not a measure of capability. A citizen may "
-         "struggle without being exempt."),
-        ("DK.DGX.DIFF",
-         "Population estimated to face difficulties using digital public services.",
-         "A capability estimate, not an administrative count. Much larger than the "
-         "exemption rate - that gap is the analytical point."),
-        ("DK.DGX.JUST",
-         "Justitia's estimate of the digitally disadvantaged adult population.",
-         "Think-tank estimate, broadest definition of the five. Cite as an upper "
-         "bound, not as an official statistic."),
-        ("DK.GOV.DPS.CIT",
-         "eGovernment Benchmark composite score for citizen-facing digital public "
-         "services.",
-         "A composite index, not a usage rate. Denmark scores BELOW the EU average "
-         "despite near-universal mandated use."),
-        ("DK.ENV.WEEE",
-         "Share of collected ICT-related electrical waste recycled or prepared for "
-         "reuse.",
-         "Covers two WEEE categories only. Denominator is waste COLLECTED, not "
-         "waste generated."),
-        ("DK.PAY.DIG.POS.NUM, DK.PAY.DIG.POS.VAL",
-         "Digital share of physical-retail payments, by NUMBER and by VALUE "
-         "respectively.",
-         "Two different denominators. The value share exceeds the number share "
-         "because cash survives in small transactions. Never quote one as the "
-         "other, and never average them."),
-        ("DK.FIN.INST",
-         "Number of financial institutions (credit institutions) operating in "
-         "Denmark.",
-         "Base year 1991. Do NOT difference against DK.FIN.BRCH, which starts in "
-         "2004 - see F9_CONSOLIDATION."),
-        ("DK.FIN.EMP",
-         "Number of persons employed by Danish banks.",
-         "Base year 1991, so comparable with DK.FIN.INST but NOT with the branch "
-         "series. Falls far less than institutions - that asymmetry is the finding "
-         "in F9_CONSOLIDATION, not a data error."),
-        ("DK.SKL.1624, DK.SKL.2554, DK.SKL.5574\n(EU.SKL.1624, EU.SKL.2554, EU.SKL.5574)",
-         "Individuals with at least basic overall digital skills, by age band. "
-         "EU.SKL.* are the matching EU-27 comparators.",
-         "Age bands, not a time series - all three are the same reference year. "
-         "The DIGCOMP methodology was revised in 2021; do not join to pre-2021 "
-         "skills figures."),
-        ("DK.DGP.EXMP.N",
-         "Citizens formally exempt from Digital Post, as a HEADCOUNT.",
-         "A count, not a rate. Converting between this and DK.DGP.EXMP requires "
-         "DK.POP.TOT and an assumption about the 15+ denominator - see "
-         "07_LIMITATIONS."),
-        ("DK.DGP.EXMP.7584, DK.DGP.EXMP.85P",
-         "Digital Post exemption rate within the 75-84 and 85+ age bands.",
-         "Denominator is the age group, not the population. These are far above "
-         "the headline 4.7% and must not be compared with it directly."),
-        ("DK.DGX.NOUSE",
-         "Individuals who do not use digital public services at all.",
-         "Non-use, not inability. Includes those with no need to transact as well "
-         "as those unable to."),
-        ("DK.DGX.DISADV.LO, DK.DGX.DISADV.HI",
-         "Lower and upper bound of the 'digitally disadvantaged' adult population.",
-         "A RANGE published as a range. Quote both bounds; citing either alone "
-         "misrepresents the source's own uncertainty."),
-        ("DK.POP.TOT",
-         "Resident population of Denmark.",
-         "Used only as a denominator for converting headcounts to rates. Total "
-         "residents, not the 15+ base the exemption rate actually uses."),
-        ("DK.TRU.DPS",
-         "Share of the population expressing trust in digital public solutions.",
-         "Self-reported attitude, not behaviour. High trust coexists with the "
-         "exclusion measures in F4 - the two are not in contradiction."),
-        ("DK.TRU.DGP.SEC",
-         "Share of the population perceiving Digital Post as secure.",
-         "Narrower than DK.TRU.DPS: one service, not the whole system. Do not "
-         "treat the two as one series."),
-        ("DK.ENT.DII",
-         "SMEs reaching at least basic digital intensity (DII).",
-         "A composite threshold count of adopted technologies, not an intensity of "
-         "use. A firm clears it by adopting breadth cheaply."),
-        ("DK.ENT.AI, DK.ENT.AI.LRG, DK.ENT.AI.SME",
-         "Enterprises adopting AI: all, large (250+) and SMEs (10-249).",
-         "The headline rate is close to the SME rate because SMEs dominate by "
-         "count. The large-firm gap is the real dispersion - report the split, not "
-         "just the average."),
-        ("DK.GOV.DPS.XB",
-         "eGovernment Benchmark score for CROSS-BORDER citizen services.",
-         "Scored against a different service basket from DK.GOV.DPS.CIT. Lower is "
-         "not evidence of decline; it is a different test."),
-        ("DK.GOV.DGP.SAVE.PLAN, DK.GOV.DGP.SAVE.VERIF",
-         "Digital Post annual public saving: as projected, and as verifiable by "
-         "audit.",
-         "The pair exists to be compared - the verified figure is well under half "
-         "the projection. Never cite the projection alone as a realised saving."),
-        ("DK.SME.SMVD.PROJ, DK.SME.SMVD.INV, DK.SME.SMVD.NOINV",
-         "SMV:Digital programme: projects supported, and participants who did or "
-         "did not invest further.",
-         "Self-reported by participants, with no control group. Cannot support a "
-         "causal claim about the programme - see the withdrawn claim in "
-         "07_LIMITATIONS and 08_AI_LOG."),
-    ]
-    r = 3
-    for code, what, watch in defs:
-        ws.cell(row=r, column=1, value=code).font = T_MONO
-        for j, v in [(2, what), (3, watch)]:
-            c = ws.cell(row=r, column=j, value=v)
-            c.font, c.alignment = T_BODY, WRAP
-        for j in range(1, 4):
-            ws.cell(row=r, column=j).border = BOX
-            ws.cell(row=r, column=j).fill = F_RAW
-        ws.row_dimensions[r].height = 44
-        r += 1
-    ws.freeze_panes = "A2"
-    return ws
-
-
-def sheet_calc(wb):
-    ws = wb.create_sheet("05_CALC")
-    title_block(ws, "Derived quantities",
-                "Every cell below is a live formula over 02_MASTER. No pasted numbers.")
-    header_row(ws, 4, ["quantity", "formula result", "unit", "how it is built"],
-               [46, 16, 14, 74])
-
-    def L(series, year):
-        return lookup(series, year)[1:]  # strip leading '=' for embedding
-
-    items = [
-        ("Bank branches, 2004", lookup("DK.FIN.BRCH", 2004), "count",
-         "Direct lookup from 02_MASTER."),
-        ("Bank branches, 2024", lookup("DK.FIN.BRCH", 2024), "count",
-         "Direct lookup from 02_MASTER."),
-        ("Branch network change, 2004-2024",
-         f"=({L('DK.FIN.BRCH', 2024)}/{L('DK.FIN.BRCH', 2004)})-1", "%",
-         "Headline structural change for Figure 1."),
-        ("Cash share change, 2017-2025",
-         f"={L('DK.PAY.CASH.POS', 2025)}-{L('DK.PAY.CASH.POS', 2017)}", "pp",
-         "Percentage-point change, not a growth rate - both terms are shares."),
-        ("Cash share, proportional decline 2017-2025",
-         f"=({L('DK.PAY.CASH.POS', 2025)}/{L('DK.PAY.CASH.POS', 2017)})-1", "%",
-         "Cash fell to roughly a third of its 2017 share."),
-        ("DK e-sales turnover share, change 2014-2024",
-         f"=({L('DK.ECM.ENT.TRN', 2024)}/{L('DK.ECM.ENT.TRN', 2014)})-1", "%",
-         "Tests the 'enterprise plateau' claim. Intensity nearly doubled."),
-        ("EU e-sales turnover share, change 2014-2024",
-         f"=({L('EU.ECM.ENT.TRN', 2024)}/{L('EU.ECM.ENT.TRN', 2014)})-1", "%",
-         "Comparator for the line above."),
-        ("DK lead over EU on e-sales turnover, 2024",
-         f"={L('DK.ECM.ENT.TRN', 2024)}-{L('EU.ECM.ENT.TRN', 2024)}", "pp",
-         "Denmark's margin over the EU average."),
-        ("Exclusion ratio: difficulty vs formal exemption",
-         f"={L('DK.DGX.DIFF', 2026)}/{L('DK.DGP.EXMP', 2026)}", "ratio",
-         "How many times larger the capability measure is than the "
-         "administrative one. The core Q4 statistic."),
-        ("Citizens struggling but NOT exempt",
-         f"={L('DK.DGX.DIFF', 2026)}-{L('DK.DGP.EXMP', 2026)}", "pp",
-         "Population facing difficulty without statutory relief."),
-        ("Digital skills gap, 16-24 vs 55-74",
-         f"={L('DK.SKL.1624', 2025)}-{L('DK.SKL.5574', 2025)}", "pp",
-         "Generational gradient in basic digital skills."),
-        ("AI adoption gap, large firms vs SMEs",
-         f"={L('DK.ENT.AI.LRG', 2025)}-{L('DK.ENT.AI.SME', 2025)}", "pp",
-         "Depth-of-adoption gap behind the 'breadth without depth' finding."),
-        ("DK shortfall vs EU, citizen digital public services",
-         f"={L('DK.GOV.DPS.CIT', 2025)}-{L('EU.GOV.DPS.CIT', 2025)}", "points",
-         "Negative: Denmark scores below the EU average."),
-        ("DK shortfall vs EU, ICT waste recycling",
-         f"={L('DK.ENV.WEEE', 2023)}-{L('EU.ENV.WEEE', 2023)}", "pp",
-         "Negative and large - candidate SDG evidence."),
-        ("Trust in digital public solutions, change 2024-2025",
-         f"={L('DK.TRU.DPS', 2025)}-{L('DK.TRU.DPS', 2024)}", "pp",
-         "Trust rising while the mandate is in force."),
-        ("Perceived security of Digital Post, change 2017-2025",
-         f"={L('DK.TRU.DGP.SEC', 2025)}-{L('DK.TRU.DGP.SEC', 2017)}", "pp",
-         "Trust in the mandated system over the mandate period (CLO4)."),
-
-        # --- the fiscal case, and how much of it was ever verified ---------
-        ("Digital Post: projected annual saving",
-         lookup("DK.GOV.DGP.SAVE.PLAN", 2016), "mDKK/yr",
-         "Ministry of Finance business case for the mandate (RR1)."),
-        ("Digital Post: saving verifiable by audit",
-         lookup("DK.GOV.DGP.SAVE.VERIF", 2016), "mDKK/yr",
-         "Postage, paper and envelopes only (RR1)."),
-        ("Digital Post: unverified share of the business case",
-         f"=1-({L('DK.GOV.DGP.SAVE.VERIF', 2016)}"
-         f"/{L('DK.GOV.DGP.SAVE.PLAN', 2016)})", "%",
-         "Over half the projected saving - the wage and overhead component - was "
-         "never substantiated. The cross-government study intended to test it was "
-         "abandoned. The strongest cost-side finding in this workbook."),
-        ("Digital Post: cost per formally exempt citizen, if the shortfall is real",
-         f"=(({L('DK.GOV.DGP.SAVE.PLAN', 2016)}"
-         f"-{L('DK.GOV.DGP.SAVE.VERIF', 2016)})*1000000)"
-         f"/{L('DK.DGP.EXMP.N', 2026)}", "DKK",
-         "ILLUSTRATIVE ONLY, and not a real unit cost: it divides an unverified "
-         "saving shortfall by an unrelated headcount. Included because the "
-         "comparison of magnitudes is informative; it must not be quoted as a "
-         "cost per person."),
-
-        # --- magnitudes ----------------------------------------------------
-        ("Resident population, 1 January 2026",
-         lookup("DK.POP.TOT", 2026), "count",
-         "Direct lookup. The only population level in the workbook (DST2)."),
-        ("Citizens formally exempt from Digital Post, Q1 2026",
-         lookup("DK.DGP.EXMP.N", 2026), "count",
-         "Headcount behind the 4.7% rate (DG1)."),
-        ("Change in exempt headcount, 2025 to 2026",
-         f"={L('DK.DGP.EXMP.N', 2026)}-{L('DK.DGP.EXMP.N', 2025)}", "count",
-         "Falling. Note the 2025 figure is an 'approximately' value, so this "
-         "difference is not precise."),
-    ]
-    r = 5
-    for label, formula, unit, how in items:
-        ws.cell(row=r, column=1, value=label).font = T_BODY
-        c = ws.cell(row=r, column=2, value=formula)
-        c.font, c.fill = T_BODY, F_CALC
-        # Four-part formats throughout, as everywhere else in the workbook: a
-        # two-part format renders a missing input as an empty cell, which reads
-        # as zero. The en-dash says "no value" out loud.
-        c.number_format = N_PCT if unit == "%" else (
-            N_INT if unit == "count" else N_DEC)
-        ws.cell(row=r, column=3, value=unit).font = T_SMALL
-        h = ws.cell(row=r, column=4, value=how)
-        h.font, h.alignment = T_SMALL, WRAP
-        for j in range(1, 5):
-            ws.cell(row=r, column=j).border = BOX
-        ws.row_dimensions[r].height = 30
+    ws.write(r, 0, "Documented gap - retail trade volume index", fmt["section"])
+    r += 1
+    ws.write(r, 0, "Recorded rather than silently omitted.", fmt["subtitle"])
+    r += 1
+    for k, v in RETAIL_GAP:
+        ws.write_string(r, 0, k, fmt["label"])
+        ws.write_string(r, 1, v, fmt["gap"])
+        ws.set_row(r, max(14, 11 * (len(v) // 95 + 1)))
         r += 1
 
-    ws.sheet_view.showGridLines = False
-    return ws
-
-
-def policy_block(ws, row, series_code, heading="POLICY EVENTS ON THIS SERIES"):
-    """Write the dated instruments bearing on `series_code` beneath a figure.
-
-    openpyxl cannot draw a vertical rule on a chart plot area, so the events are
-    rendered as a dated table directly under the data the chart reads. A reader
-    can line the dates up against the series by eye, and - unlike an annotation
-    burned into a chart image - each row carries its own legal citation and
-    source_id, so the claim that an instrument took effect on a given date is
-    auditable on the same terms as every value in the workbook.
-
-    Returns the next free row.
-    """
-    events = policy_events_for(series_code)
-    if not events:
-        return row
-
-    ws.cell(row=row, column=1, value=heading).font = T_SUB
-    row += 1
-    header_row(ws, row, ["date", "precision", "instrument", "citation", "source"],
-               [14, 11, 46, 34, 10])
-    row += 1
-    for when, precision, name, citation, src, _desc, _rel in events:
-        vals = [when, precision, name, citation, src]
-        for j, v in enumerate(vals, start=1):
-            c = ws.cell(row=row, column=j, value=v)
-            c.font = T_MONO if j in (1, 5) else T_BODY
-            c.border, c.alignment, c.fill = BOX, WRAP, F_RAW
-        row += 1
-    return row + 1
-
-
-def _style_view(ws, first_row, last_row, ncols):
-    for r in range(first_row, last_row + 1):
-        for j in range(1, ncols + 1):
-            c = ws.cell(row=r, column=j)
-            c.border = BOX
-            if j > 1:
-                c.fill = F_CALC
-
-
-def sheet_f1(wb):
-    ws = wb.create_sheet("F1_BRANCHES")
-    title_block(ws, "Figure 1 - Denmark's bank branch network, 2004-2024",
-                "Series DK.FIN.BRCH. Values are formula lookups from 02_MASTER.")
-    header_row(ws, 4, ["year", "bank branches"], [12, 16])
-
-    years = [2004, 2006, 2010, 2016, 2021, 2024]
-    for i, y in enumerate(years):
-        r = 5 + i
-        ws.cell(row=r, column=1, value=y).font = T_BODY
-        c = ws.cell(row=r, column=2, value=lookup("DK.FIN.BRCH", y))
-        c.font, c.number_format = T_BODY, N_INT
-    _style_view(ws, 5, 4 + len(years), 2)
-
-    last = 4 + len(years)
-    ch = ScatterChart()
-    ch.x_axis.title = "Year"
-    ch.y_axis.title = "Number of branches"
-    ch.height, ch.width = 9, 17
-    xs = Reference(ws, min_col=1, min_row=5, max_row=last)
-    ys = Reference(ws, min_col=2, min_row=4, max_row=last)
-    s = Series(ys, xs, title_from_data=True)
-    s.marker = Marker(symbol="circle", size=7,
-                      spPr=GraphicalProperties(
-                          solidFill=C_ACCENT,
-                          ln=LineProperties(noFill=True)))
-    s.graphicalProperties.line = LineProperties(w=22000, solidFill=C_ACCENT)
-    ch.series.append(s)
-    ch.x_axis.scaling.min, ch.x_axis.scaling.max = 2002, 2026
-    ch.y_axis.scaling.min = 0
-    style_chart(ch, legend=None)
-    chart_title(ws, "D3", "Bank branches in Denmark, 2004-2024",
-                "Count of retail branches. Uneven year spacing, numeric X axis.")
-    ws.add_chart(ch, "D4")
-
-    source_note(ws, last + 2,
-                "Source: Finans Danmark, Institutter, filialer & ansatte (FD1). "
-                "Note: years are unevenly spaced, so the chart uses a numeric X axis - "
-                "a category axis would imply a constant rate of decline that the data "
-                "does not show.")
-    ws.sheet_view.showGridLines = False
-    return ws
-
-
-def sheet_f2(wb):
-    """Two exhibits rather than one.
-
-    A single three-series time chart was attempted first and rejected: the cash
-    series has three observations, the physical-card series two and the wallet
-    series one, so two-thirds of the chart would have been empty cells masquerading
-    as data. Panel A plots only the series that is actually a series; Panel B shows
-    the composition at the one year where all three instruments are observed.
-    """
-    ws = wb.create_sheet("F2_PAYMENTS")
-    title_block(ws, "Figure 2 - Cash displacement in Danish physical retail",
-                "Denominator throughout: share of the NUMBER of in-store payments.")
-
-    # --- Panel A: cash share over time -------------------------------------
-    ws["A4"] = "Panel A - Cash share of in-store payments"
-    ws["A4"].font = T_SUB
-    header_row(ws, 5, ["year", "cash (%)"], [14, 30])
-    years = [2017, 2023, 2025]
-    for i, y in enumerate(years):
-        r = 6 + i
-        ws.cell(row=r, column=1, value=y).font = T_BODY
-        c = ws.cell(row=r, column=2, value=lookup("DK.PAY.CASH.POS", y))
-        c.font, c.number_format = T_BODY, N_ONE
-    _style_view(ws, 6, 5 + len(years), 2)
-    lastA = 5 + len(years)
-
-    chA = ScatterChart()
-    chA.x_axis.title = "Year"
-    chA.y_axis.title = "% of number of payments"
-    chA.height, chA.width = 8, 15
-    xs = Reference(ws, min_col=1, min_row=6, max_row=lastA)
-    ys = Reference(ws, min_col=2, min_row=5, max_row=lastA)
-    s = Series(ys, xs, title_from_data=True)
-    s.marker = Marker(symbol="circle", size=7,
-                      spPr=GraphicalProperties(
-                          solidFill=C_ACCENT,
-                          ln=LineProperties(noFill=True)))
-    s.graphicalProperties.line = LineProperties(w=22000, solidFill=C_ACCENT)
-    chA.series.append(s)
-    chA.x_axis.scaling.min, chA.x_axis.scaling.max = 2016, 2026
-    chA.y_axis.scaling.min, chA.y_axis.scaling.max = 0, 25
-    style_chart(chA, legend=None)
-    chart_title(ws, "D4", "Cash share of in-store payments, 2017-2025",
-                "% of the number of payments made in physical retail.")
-    ws.add_chart(chA, "D5")
-
-    # --- Panel B: 2025 composition -----------------------------------------
-    r = lastA + 2
-    ws.cell(row=r, column=1, value="Panel B - Composition of in-store payments, 2025").font = T_SUB
+    r += 2
+    ws.write(r, 0, "AI use and validation log", fmt["section"])
     r += 1
-    headB = r
-    header_row(ws, headB, ["instrument", "share of payments (%)"], [30, 30])
-    comp = [("Physical payment card", "DK.PAY.CRD.PHYS"),
-            ("Mobile wallet (card-based)", "DK.PAY.WLT.SHR"),
-            ("Cash", "DK.PAY.CASH.POS")]
-    for i, (label, code) in enumerate(comp):
-        rr = headB + 1 + i
-        ws.cell(row=rr, column=1, value=label).font = T_BODY
-        c = ws.cell(row=rr, column=2, value=lookup(code, 2025))
-        c.font, c.fill, c.number_format = T_BODY, F_CALC, N_ONE
-        for j in (1, 2):
-            ws.cell(row=rr, column=j).border = BOX
-    lastB = headB + len(comp)
-
-    chB = BarChart()
-    chB.type, chB.grouping = "bar", "clustered"
-    chB.x_axis.title = "% of number of payments"
-    chB.height, chB.width = 7, 15
-    data = Reference(ws, min_col=2, min_row=headB, max_row=lastB)
-    cats = Reference(ws, min_col=1, min_row=headB + 1, max_row=lastB)
-    chB.add_data(data, titles_from_data=True)
-    chB.set_categories(cats)
-    # Cash is the subject of this figure, so cash is the only coloured bar.
-    highlight_points(chB.series[0], len(comp), {2: C_ACCENT})
-    style_chart(chB, legend=None)
-    chart_title(ws, f"D{headB - 1}", "Composition of in-store payments, 2025",
-                "Sums to 95%; the residual is other digital instruments.")
-    ws.add_chart(chB, f"D{headB}")
-
-    # --- Memo: different denominator ---------------------------------------
-    r = lastB + 2
-    ws.cell(row=r, column=1, value="MEMO - different denominator, not charted above").font = T_SUB
+    ws.write(r, 0, "Raw material for the AI Use and Validation Appendix, which "
+                   "is submitted separately.", fmt["subtitle"])
+    r += 2
+    for c, h in enumerate(["step", "AI assistance used", "how it was validated",
+                           "outcome"]):
+        ws.write(r, c, h, fmt["head"])
     r += 1
-    header_row(ws, r, ["year", "citizens holding a mobile wallet (%)"], [30, 30])
-    r += 1
-    for y in (2019, 2023, 2025):
-        ws.cell(row=r, column=1, value=y).font = T_BODY
-        c = ws.cell(row=r, column=2, value=lookup("DK.PAY.WLT.OWN", y))
-        c.font, c.fill, c.number_format = T_BODY, F_FLAG, N_ONE
-        for j in (1, 2):
-            ws.cell(row=r, column=j).border = BOX
-        r += 1
-
-    r = policy_block(ws, r + 2, "DK.PAY.CASH.POS")
-
-    source_note(ws, r,
-                "Source: Danmarks Nationalbank, Danskernes betalingsvaner (NB1). "
-                "Panel B sums to 95%, not 100%: the residual is other digital "
-                "instruments (chiefly account transfers and non-card mobile "
-                "payments). Wallet payments ARE card payments settled through a "
-                "phone, so the wallet and physical-card rows must not be added to "
-                "produce a 'card' total. The memo series is excluded from both "
-                "panels because its denominator is % of citizens, not % of payments. "
-                "Physical card and wallet shares are observed in 2025 only, so no "
-                "time series is drawn for them - a two-point line through an "
-                "unobserved middle would assert a path the data does not contain.")
-    ws.sheet_view.showGridLines = False
-    return ws
-
-
-def sheet_f3(wb):
-    ws = wb.create_sheet("F3_ESALES")
-    title_block(ws, "Figure 3 - E-sales as a share of enterprise turnover, DK vs EU",
-                "Tests the 'enterprise plateau' claim: intensity nearly doubled.")
-    header_row(ws, 4, ["year", "Denmark", "EU-27"], [12, 14, 14])
-    for i, y in enumerate([2014, 2024]):
-        r = 5 + i
-        ws.cell(row=r, column=1, value=y).font = T_BODY
-        ws.cell(row=r, column=2, value=lookup("DK.ECM.ENT.TRN", y)).number_format = N_DEC
-        ws.cell(row=r, column=3, value=lookup("EU.ECM.ENT.TRN", y)).number_format = N_DEC
-    _style_view(ws, 5, 6, 3)
-
-    ch = BarChart()
-    ch.type, ch.grouping = "col", "clustered"
-    ch.y_axis.title = "% of turnover"
-    ch.x_axis.title = "Year"
-    ch.height, ch.width = 9, 15
-    data = Reference(ws, min_col=2, max_col=3, min_row=4, max_row=6)
-    cats = Reference(ws, min_col=1, min_row=5, max_row=6)
-    ch.add_data(data, titles_from_data=True)
-    ch.set_categories(cats)
-    paint(ch.series[0], C_ACCENT)   # Denmark
-    paint(ch.series[1], C_GREY)     # EU-27, context
-    style_chart(ch)
-    chart_title(ws, "E3", "E-sales as % of enterprise turnover, DK vs EU-27",
-                "Denmark in blue; the EU average in grey.")
-    ws.add_chart(ch, "E4")
-
-    r = 9
-    ws.cell(row=r, column=1, value="CONTEXT - breadth vs intensity, 2024").font = T_SUB
-    r += 1
-    header_row(ws, r, ["measure", "Denmark", "EU / leader"], [40, 14, 26])
-    r += 1
-    ctx = [
-        ("Enterprises making e-sales (%)", lookup("DK.ECM.ENT.SHR", 2024),
-         "Lithuania 43.03 (highest)"),
-        ("E-sales share of turnover (%)", lookup("DK.ECM.ENT.TRN", 2024),
-         "Ireland 38.25 (highest)"),
-        ("EU average, e-sales share of turnover (%)", lookup("EU.ECM.ENT.TRN", 2024), ""),
-    ]
-    for label, formula, note in ctx:
-        ws.cell(row=r, column=1, value=label).font = T_BODY
-        c = ws.cell(row=r, column=2, value=formula)
-        c.font, c.fill, c.number_format = T_BODY, F_CALC, N_DEC
-        ws.cell(row=r, column=3, value=note).font = T_SMALL
-        for j in range(1, 4):
-            ws.cell(row=r, column=j).border = BOX
-        r += 1
-
-    r = policy_block(ws, r + 2, "DK.ECM.ENT.TRN")
-
-    source_note(ws, r,
-                "Source: Eurostat (ES5). Reading: Denmark's e-sales share of turnover "
-                "rose from 17.05% to 33.31% while the EU average moved from 16.43% to "
-                "19.49%. Breadth of adoption is flat at roughly 38% of enterprises; "
-                "intensity nearly doubled. The growth came from incumbents selling "
-                "more online, not from new firms entering.")
-    ws.sheet_view.showGridLines = False
-    return ws
-
-
-def sheet_f4(wb):
-    ws = wb.create_sheet("F4_EXCLUSION")
-    title_block(ws, "Figure 4 - Five measures of digital exclusion in Denmark",
-                "Same phenomenon, five definitions. The spread is the finding.")
-    header_row(ws, 4, ["measure", "%", "definition basis", "source"],
-               [46, 10, 34, 10])
-
-    rows = [
-        ("Formally exempt from Digital Post (Q1 2026)",
-         lookup("DK.DGP.EXMP", 2026), "administrative status", "DG1"),
-        ("Do not use digital public services at all",
-         lookup("DK.DGX.NOUSE", 2026), "self-reported non-use", "EC1"),
-        ("Face difficulties using digital public services",
-         lookup("DK.DGX.DIFF", 2026), "capability estimate", "EC1"),
-        ("'Digitally disadvantaged' - lower bound",
-         lookup("DK.DGX.DISADV.LO", 2025), "capability estimate (range)", "DG2"),
-        ("'Digitally disadvantaged' - upper bound",
-         lookup("DK.DGX.DISADV.HI", 2025), "capability estimate (range)", "DG2"),
-        ("'Digitally disadvantaged' - Justitia",
-         lookup("DK.DGX.JUST", 2022), "broadest definition", "JU1"),
-    ]
-    for i, (label, formula, basis, src) in enumerate(rows):
-        r = 5 + i
-        ws.cell(row=r, column=1, value=label).font = T_BODY
-        c = ws.cell(row=r, column=2, value=formula)
-        c.font, c.fill, c.number_format = T_BODY, F_CALC, N_ONE
-        ws.cell(row=r, column=3, value=basis).font = T_SMALL
-        ws.cell(row=r, column=4, value=src).font = T_MONO
-        for j in range(1, 5):
-            ws.cell(row=r, column=j).border = BOX
-    last = 4 + len(rows)
-
-    ch = BarChart()
-    ch.type, ch.grouping = "bar", "clustered"
-    ch.x_axis.title = "% of population"
-    ch.height, ch.width = 10, 18
-    data = Reference(ws, min_col=2, min_row=4, max_row=last)
-    cats = Reference(ws, min_col=1, min_row=5, max_row=last)
-    ch.add_data(data, titles_from_data=True)
-    ch.set_categories(cats)
-    paint(ch.series[0], C_ACCENT)
-    style_chart(ch, legend=None)
-    chart_title(ws, "F3", "Measures of digital exclusion, Denmark",
-                "Five definitions of the same phenomenon; they are nested, "
-                "not contradictory.")
-    ws.add_chart(ch, "F4")
-
-    r = last + 2
-    ws.cell(row=r, column=1, value="AGE GRADIENT IN FORMAL EXEMPTION (2022)").font = T_SUB
-    r += 1
-    header_row(ws, r, ["age group", "exempt (%)"], [46, 12])
-    r += 1
-    for label, code in [("Age 75-84", "DK.DGP.EXMP.7584"), ("Age 85+", "DK.DGP.EXMP.85P")]:
-        ws.cell(row=r, column=1, value=label).font = T_BODY
-        c = ws.cell(row=r, column=2, value=lookup(code, 2022))
-        c.font, c.fill, c.number_format = T_BODY, F_FLAG, N_ONE
-        for j in (1, 2):
-            ws.cell(row=r, column=j).border = BOX
+    for step, used, validated, outcome in AI_LOG:
+        ws.write_string(r, 0, step, fmt["label"])
+        ws.write_string(r, 1, used, fmt["prose"])
+        ws.write_string(r, 2, validated, fmt["prose"])
+        ws.write_string(r, 3, outcome, fmt["prose"])
+        longest = max(len(used), len(validated), len(outcome))
+        ws.set_row(r, max(14, 11 * (longest // 44 + 1)))
         r += 1
 
     r += 1
-    ws.cell(row=r, column=1, value="HEADCOUNTS, NOT SHARES").font = T_SUB
-    r += 1
-    header_row(ws, r, ["quantity", "persons", "basis"], [46, 14, 74])
-    r += 1
-    heads = [
-        ("Citizens formally exempt, Q1 2026", lookup("DK.DGP.EXMP.N", 2026),
-         "Reported directly by the Agency for Digital Government (DG1)."),
-        ("Citizens formally exempt, April 2025", lookup("DK.DGP.EXMP.N", 2025),
-         "Reported as approximately 256,000 (DG1)."),
-        ("Implied population aged 15+",
-         f"={L('DK.DGP.EXMP.N', 2026)}/({L('DK.DGP.EXMP', 2026)}/100)",
-         "DERIVED, not retrieved: the exempt headcount divided by the exemption "
-         "rate. Used only to convert the capability shares below into orders of "
-         "magnitude. A published 15+ population figure was not verifiable in this "
-         "session; see 06_RETAIL_GAP."),
-        ("Implied persons who do not use digital public services at all",
-         f"=({L('DK.DGX.NOUSE', 2026)}/100)*({L('DK.DGP.EXMP.N', 2026)}"
-         f"/({L('DK.DGP.EXMP', 2026)}/100))",
-         "ORDER OF MAGNITUDE ONLY. Applies a share measured on 'the population' "
-         "to a 15+ base; the denominators are not identical."),
-        ("Implied persons facing difficulty with digital public services",
-         f"=({L('DK.DGX.DIFF', 2026)}/100)*({L('DK.DGP.EXMP.N', 2026)}"
-         f"/({L('DK.DGP.EXMP', 2026)}/100))",
-         "ORDER OF MAGNITUDE ONLY, same caveat."),
-    ]
-    for label, formula, note in heads:
-        ws.cell(row=r, column=1, value=label).font = T_BODY
-        c = ws.cell(row=r, column=2, value=formula)
-        c.font, c.fill, c.number_format = T_BODY, F_CALC, N_INT
-        ws.cell(row=r, column=3, value=note).font = T_SMALL
-        ws.cell(row=r, column=3).alignment = WRAP
-        for j in range(1, 4):
-            ws.cell(row=r, column=j).border = BOX
-        ws.row_dimensions[r].height = 40
-        r += 1
-
-    r = policy_block(ws, r + 1, "DK.DGP.EXMP")
-
-    source_note(ws, r,
-                "Sources: DG1, DG2, EC1, JU1. Reading: the measures are nested rather "
-                "than contradictory. Formal exemption (4.7%) is an administrative "
-                "status; the capability measures are three to five times larger. The "
-                "statutory exemption regime therefore reaches only a minority of the "
-                "citizens the state's own agency counts as struggling. Which measure "
-                "is chosen determines the conclusion - so the choice must be argued, "
-                "not assumed.")
-    ws.sheet_view.showGridLines = False
-    return ws
-
-
-def sheet_f5(wb):
-    """Complete EU ranking on the consumer adoption measure.
-
-    The order is computed from OBS at build time rather than typed, so the
-    ranking cannot drift out of step with the data. The EU-27 aggregate is
-    ranked alongside the member states as a reference marker; it is not an
-    observation and is excluded from every calculation on F6.
-    """
-    ws = wb.create_sheet("F5_EU27")
-    title_block(ws, "Figure 5 - Individuals who bought online, 2024",
-                "All 27 member states and the EU-27 aggregate, ranked. "
-                "Denominator: % of internet users.")
-    header_row(ws, 4, ["country", "%", "series_code"], [22, 10, 24])
-
-    # Ranked descending on the observed value. Built from OBS, not typed.
-    rows = [(("EU-27 average" if geo == "EU27" else COUNTRIES[geo]),
-             f"{code.split('.')[0]}.ECM.IND.BUY", val)
-            for code, _ind, geo, yr, val, *_ in OBS
-            if yr == 2024 and code.endswith(".ECM.IND.BUY")]
-    order = [(n, c) for n, c, _v in sorted(rows, key=lambda t: -t[2])]
-
-    for i, (name, code) in enumerate(order):
-        r = 5 + i
-        ws.cell(row=r, column=1, value=name).font = T_BODY
-        c = ws.cell(row=r, column=2, value=lookup(code, 2024))
-        c.font, c.fill, c.number_format = T_BODY, F_CALC, N_DEC
-        ws.cell(row=r, column=3, value=code).font = T_MONO
-        for j in range(1, 4):
-            ws.cell(row=r, column=j).border = BOX
-    last = 4 + len(order)
-
-    ch = BarChart()
-    ch.type, ch.grouping = "bar", "clustered"
-    ch.x_axis.title = "% of internet users"
-    ch.height, ch.width = 18, 17          # 28 bars need the vertical room
-    data = Reference(ws, min_col=2, min_row=4, max_row=last)
-    cats = Reference(ws, min_col=1, min_row=5, max_row=last)
-    ch.add_data(data, titles_from_data=True)
-    ch.set_categories(cats)
-    # The subject of this chart is Denmark's position in the distribution, not
-    # 28 values. Denmark takes the accent, the EU aggregate takes navy as the
-    # reference marker, and every member state recedes to grey so the
-    # comparison reads at a glance.
-    focus = {i: (C_ACCENT if code.startswith("DK") else C_DARK)
-             for i, (_name, code) in enumerate(order)
-             if code.startswith(("DK", "EU"))}
-    highlight_points(ch.series[0], len(order), focus)
-    style_chart(ch, legend=None)
-    chart_title(ws, "E3", "Individuals who bought online, 2024",
-                "Denmark in blue, EU-27 aggregate in navy, member states in "
-                "grey. Ranked descending.")
-    ws.add_chart(ch, "E4")
-
-    source_note(ws, last + 2,
-                "Source: Eurostat isoc_ec_ib20, complete databrowser extract for "
-                "2024 (ES7), unrounded. This replaces an earlier 8-country version "
-                "built from rounded press-release figures; on those the Italian and "
-                "Romanian values both read 60% and appeared tied, while unrounded "
-                "Italy is second lowest at 59.60 and Romania is above it at 59.73. "
-                "Bulgaria remains the lowest of the 27 at 57.18. The ranking above "
-                "is computed from the data at build time, "
-                "so it cannot fall out of step with 02_MASTER. Denominator is % of "
-                "internet users, not % of individuals - see 04_DEFINITIONS.")
-    ws.sheet_view.showGridLines = False
-    return ws
-
-
-def sheet_f6(wb):
-    """The adoption-to-economic-effect exhibit.
-
-    This is the chart the assessment brief asks for: adoption on X, an economic
-    magnitude on Y, one point per country, with a fitted line. It has to be a
-    cross-section rather than a Danish time series because the Danish adoption
-    and outcome series share almost no observation years - the best time-series
-    pairing anywhere in the dataset is n=2.
-    """
-    ws = wb.create_sheet("F6_ADOPT_BENEFIT")
-    title_block(ws, "Figure 6 - Does more digital adoption mean more economic activity?",
-                "EU cross-section, 2024. X = consumer adoption. Y = share of "
-                "enterprise turnover from e-sales.")
-
-    paired, awaiting_x, awaiting_y = cross_section(2024)
-
-    header_row(ws, 4,
-               ["country", "code",
-                "X: individuals buying online (%)",
-                "Y: e-sales share of turnover (%)"],
-               [20, 8, 30, 30])
-    for i, geo in enumerate(paired):
-        r = 5 + i
-        ws.cell(row=r, column=1, value=COUNTRIES[geo]).font = T_BODY
-        ws.cell(row=r, column=2, value=geo).font = T_MONO
-        cx = ws.cell(row=r, column=3, value=lookup(f"{geo}.ECM.IND.BUY", 2024))
-        cy = ws.cell(row=r, column=4, value=lookup(f"{geo}.ECM.ENT.TRN", 2024))
-        for c in (cx, cy):
-            c.font, c.fill, c.number_format = T_BODY, F_CALC, N_DEC
-        for j in range(1, 5):
-            ws.cell(row=r, column=j).border = BOX
-    first, last = 5, 4 + len(paired)
-
-    ch = ScatterChart()
-    ch.x_axis.title = "Individuals who bought online (% of internet users)"
-    ch.y_axis.title = "E-sales as % of enterprise turnover"
-    ch.height, ch.width = 11, 18
-    xs = Reference(ws, min_col=3, min_row=first, max_row=last)
-    ys = Reference(ws, min_col=4, min_row=4, max_row=last)
-    s = Series(ys, xs, title_from_data=True)
-    s.marker = Marker(
-        symbol="circle", size=9,
-        spPr=GraphicalProperties(solidFill=C_ACCENT,
-                                 ln=LineProperties(noFill=True)))
-    s.graphicalProperties.line.noFill = True          # markers only, no join
-    # R-squared is now displayed. It was withheld while the X column was a
-    # tail-selected sample assembled from a press release; the column is now the
-    # complete isoc_ec_ib20 databrowser extract for all 27 member states, so the
-    # fit is estimated on every paired country rather than on the extremes, and
-    # the statistic has been earned. The SAMPLE block below records what the
-    # selected sample had reported, because the difference is itself a finding.
-    s.trendline = Trendline(trendlineType="linear", dispRSqr=True, dispEq=True)
-    ch.series.append(s)
-    # The fitted line is drawn in the dark emphasis colour rather than grey. It
-    # is still an interpretation laid over the observations, so it does not take
-    # the accent, but on a complete cross-section of 18 countries with a slope
-    # over five standard errors from zero it is no longer the weaker of the two.
-    s.trendline.spPr = GraphicalProperties(
-        ln=LineProperties(solidFill=C_DARK, w=16000))
-    ch.x_axis.scaling.min, ch.x_axis.scaling.max = 50, 100
-    ch.y_axis.scaling.min = 0
-    style_chart(ch, legend=None)
-    chart_title(ws, "F3", "Digital adoption and e-commerce turnover, EU 2024",
-                "One point per member state with both measures. Fitted by "
-                "ordinary least squares; see the statistics below.")
-    ws.add_chart(ch, "F4")
-
-    # --- fitted line statistics, as live formulas --------------------------
-    xr = f"$C${first}:$C${last}"
-    yr = f"$D${first}:$D${last}"
-    r = last + 2
-    ws.cell(row=r, column=1, value="FITTED LINE (ordinary least squares)").font = T_SUB
-    r += 1
-    header_row(ws, r, ["statistic", "value", "reading"], [26, 14, 74])
-    r += 1
-    stats = [
-        ("n (countries)", f"=COUNT({xr})", N_INT,
-         "Number of complete X-Y pairs. Expands automatically as data is added."),
-        ("Slope", f"=SLOPE({yr},{xr})", N_THREE,
-         "Percentage points of enterprise turnover per percentage point of "
-         "consumer adoption."),
-        ("Intercept", f"=INTERCEPT({yr},{xr})", N_DEC,
-         "Not interpretable - no country has zero adoption, so this is far "
-         "outside the observed range."),
-        ("Correlation (r)", f"=CORREL({xr},{yr})", N_THREE,
-         "Strength and direction of the linear association."),
-        ("R-squared", f"=RSQ({yr},{xr})", N_THREE,
-         "Share of cross-country variation in Y that moves with X. Estimated on "
-         "the complete set of paired member states, so it is quotable - see the "
-         "SAMPLE block below for what the earlier tail-selected sample claimed."),
-        ("Slope standard error",
-         f"=STEYX({yr},{xr})/SQRT(DEVSQ({xr}))", N_THREE,
-         "Precision of the slope estimate."),
-        ("Slope t-statistic",
-         f"=SLOPE({yr},{xr})/(STEYX({yr},{xr})/SQRT(DEVSQ({xr})))", N_DEC,
-         "Slope divided by its standard error, on n-2 degrees of freedom. "
-         "Above about 2.1 the slope is distinguishable from zero at the 5% "
-         "level on this sample size."),
-        ("Slope 95% confidence interval, lower",
-         f"=SLOPE({yr},{xr})-TINV(0.05,COUNT({xr})-2)"
-         f"*(STEYX({yr},{xr})/SQRT(DEVSQ({xr})))", N_THREE,
-         "Lower bound. The interval excludes zero, which is the claim the "
-         "t-statistic makes in interval form."),
-        ("Slope 95% confidence interval, upper",
-         f"=SLOPE({yr},{xr})+TINV(0.05,COUNT({xr})-2)"
-         f"*(STEYX({yr},{xr})/SQRT(DEVSQ({xr})))", N_THREE,
-         "Upper bound. Quote the interval, not just the point estimate - on "
-         "n=18 the point estimate alone overstates what is known."),
-        ("Residual standard error (RMSE)", f"=STEYX({yr},{xr})", N_DEC,
-         "Typical vertical distance of a country from the line. The yardstick "
-         "for judging whether any one country's residual is unusual."),
-        ("Denmark: actual Y", lookup("DK.ECM.ENT.TRN", 2024), N_DEC,
-         "Denmark's observed value."),
-        ("Denmark: fitted Y",
-         f"=INTERCEPT({yr},{xr})+SLOPE({yr},{xr})*{lookup('DK.ECM.IND.BUY', 2024)[1:]}",
-         N_DEC, "What the line predicts for Denmark's adoption level."),
-        ("Denmark: residual",
-         f"={lookup('DK.ECM.ENT.TRN', 2024)[1:]}-(INTERCEPT({yr},{xr})"
-         f"+SLOPE({yr},{xr})*{lookup('DK.ECM.IND.BUY', 2024)[1:]})",
-         N_SIGNED,
-         "Distance from the line, in percentage points. On its own this says "
-         "little - read the next row instead."),
-        ("Denmark: residual in standard errors",
-         f"=({lookup('DK.ECM.ENT.TRN', 2024)[1:]}-(INTERCEPT({yr},{xr})"
-         f"+SLOPE({yr},{xr})*{lookup('DK.ECM.IND.BUY', 2024)[1:]}))"
-         f"/STEYX({yr},{xr})", N_SIGNED,
-         "THE TEST THAT MATTERS. Denmark sits above the line, but by less than "
-         "one residual standard error, and three countries sit further above "
-         "it. Denmark is CONSISTENT WITH the EU pattern, not exceptional to "
-         "it. Do not claim Denmark converts adoption into commercial activity "
-         "better than the pattern predicts - this figure does not support it."),
-    ]
-    for label, formula, fmt, reading in stats:
-        ws.cell(row=r, column=1, value=label).font = T_BODY
-        c = ws.cell(row=r, column=2, value=formula)
-        c.font, c.fill, c.number_format = T_BODY, F_CALC, fmt
-        rd = ws.cell(row=r, column=3, value=reading)
-        rd.font, rd.alignment = T_SMALL, WRAP
-        for j in range(1, 4):
-            ws.cell(row=r, column=j).border = BOX
-        ws.row_dimensions[r].height = 26
-        r += 1
-
-    # --- sample provenance -------------------------------------------------
-    # This block used to be a SELECTION WARNING. The X column had been assembled
-    # from a Eurostat press release, which names the countries that make a story:
-    # the top of the ranking, the bottom, and a couple of large movers. That is a
-    # sample drawn from the tails, and truncating a distribution at both ends
-    # while discarding the middle raises the correlation coefficient largely
-    # independently of the underlying relationship.
-    #
-    # The column is now the complete isoc_ec_ib20 databrowser extract for 2024,
-    # all 27 member states, unrounded. The warning is therefore replaced - but
-    # the numbers it was warning about are kept, because the comparison measures
-    # the bias rather than merely asserting it: the slope barely moved while the
-    # fit fell by nearly two tenths. That is what tail selection does, shown
-    # rather than claimed.
-    r += 1
-    ws.cell(row=r, column=1,
-            value="SAMPLE - how these points were obtained").font = T_SUB
-    r += 1
-    for line in [
-        f"COMPLETE FOR 2024: the X column is the full Eurostat isoc_ec_ib20 "
-        f"extract for all 27 member states, unrounded, taken from the "
-        f"databrowser. Every member state holding both measures is plotted - "
-        f"{len(paired)} of them. No country with both values is excluded, so the "
-        "fit is no longer conditioned on where a country sits in the ranking.",
-        "WHAT THE EARLIER SAMPLE CLAIMED: an earlier version of this figure drew "
-        "X from a Eurostat press release, which named only the three highest "
-        "countries, the three lowest and two large movers. On those 6 tail "
-        "countries the fit was R-squared 0.853 with a slope of +0.655. On the "
-        "complete cross-section it is R-squared 0.674 with a slope of +0.602.",
-        "READING THAT COMPARISON: the slope moved by about 8% while R-squared "
-        "fell by 0.18. This is the signature of selection on the tails - it "
-        "widens the spread in X relative to the scatter around the line, which "
-        "flatters the fit while leaving the estimated relationship roughly "
-        "intact. The earlier R-squared was an upper bound, as the warning it "
-        "replaced said; this one is an estimate.",
-        "STILL NOT A COMPLETE CROSS-SECTION OF THE EU: nine member states hold "
-        "the adoption measure but not the enterprise turnover measure and are "
-        "listed below. The sample is complete with respect to X and incomplete "
-        "with respect to Y, so it is 18 countries rather than 27 - but the "
-        "countries dropped are dropped by data availability, not by their "
-        "position on either axis.",
-        "DIRECTION OF CAUSATION IS NOT ESTABLISHED AND CANNOT BE. X measures "
-        "consumers; Y measures enterprises, including business-to-business sales "
-        "that no consumer touches. Both plausibly rise with national income, "
-        "which is in neither axis. This figure shows that digital commerce runs "
-        "deep in the same economies where consumers buy online. It does not show "
-        "that the one produces the other.",
-    ]:
-        c = ws.cell(row=r, column=1, value=line)
-        c.font, c.alignment, c.fill = T_SMALL, WRAP, F_FLAG
-        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=4)
-        for j in range(1, 5):
-            ws.cell(row=r, column=j).border = BOX
-        ws.row_dimensions[r].height = 46
-        r += 1
-
-    # --- expansion register -------------------------------------------------
-    if awaiting_x or awaiting_y:
-        r += 1
-        ws.cell(row=r, column=1,
-                value="AWAITING DATA - not plotted").font = T_SUB
-        r += 1
-        header_row(ws, r, ["country", "code", "missing",
-                           "X: adoption (%)"], [20, 8, 74, 16])
-        r += 1
-        awaiting_x_first = r + len(awaiting_x)
-        for geo in awaiting_x:
-            ws.cell(row=r, column=1, value=COUNTRIES[geo]).font = T_BODY
-            ws.cell(row=r, column=2, value=geo).font = T_MONO
-            c = ws.cell(row=r, column=3,
-                        value=f"X - add {geo}.ECM.IND.BUY for 2024 (Eurostat "
-                              f"isoc_ec_ib20)")
-            c.font, c.fill = T_SMALL, F_GAP
-            for j in range(1, 4):
-                ws.cell(row=r, column=j).border = BOX
-            r += 1
-        for geo in awaiting_y:
-            ws.cell(row=r, column=1, value=COUNTRIES[geo]).font = T_BODY
-            ws.cell(row=r, column=2, value=geo).font = T_MONO
-            c = ws.cell(row=r, column=3,
-                        value=f"Y - add {geo}.ECM.ENT.TRN for 2024 (Eurostat "
-                              f"tin00110)")
-            c.font, c.fill = T_SMALL, F_GAP
-            # These countries lack Y, but they DO hold X - and that is testable
-            # evidence, not merely a to-do list. If the nine dropped states sat
-            # systematically high or low on adoption, the n=18 sample would be
-            # selected on X and the whole tail-selection argument above would
-            # collapse into the same error in a new costume.
-            xc = ws.cell(row=r, column=4, value=lookup(f"{geo}.ECM.IND.BUY",
-                                                       2024))
-            xc.font, xc.fill, xc.number_format = T_BODY, F_CALC, N_DEC
-            for j in range(1, 5):
-                ws.cell(row=r, column=j).border = BOX
-            r += 1
-
-        # --- is the missingness selective? ----------------------------------
-        ax = f"$D${awaiting_x_first}:$D${r - 1}"
-        r += 1
-        ws.cell(row=r, column=1,
-                value="IS THE MISSINGNESS SELECTIVE?").font = T_SUB
-        r += 1
-        for label, formula, reading in [
-            ("Mean adoption, plotted", f"=AVERAGE({xr})",
-             "Average X across the countries actually in the regression."),
-            ("Mean adoption, awaiting", f"=AVERAGE({ax})",
-             "Average X across the countries dropped for want of Y."),
-            ("Difference", f"=AVERAGE({ax})-AVERAGE({xr})",
-             "Percentage points. Near zero is the result you want."),
-            ("p-value, two-sample t-test", f"=TTEST({xr},{ax},2,2)",
-             "THE TEST. A large p-value means the dropped countries are not "
-             "distinguishable from the plotted ones on adoption, so the sample "
-             "is missing on Y availability rather than selected on X. This is "
-             "what separates this figure from the tail-selected version it "
-             "replaced - there, selection WAS on the axis."),
-        ]:
-            ws.cell(row=r, column=1, value=label).font = T_BODY
-            c = ws.cell(row=r, column=2, value=formula)
-            c.font, c.fill, c.number_format = T_BODY, F_CALC, N_THREE
-            rd = ws.cell(row=r, column=3, value=reading)
-            rd.font, rd.alignment = T_SMALL, WRAP
-            for j in range(1, 4):
-                ws.cell(row=r, column=j).border = BOX
-            ws.row_dimensions[r].height = 30
-            r += 1
-
-    source_note(ws, r + 1,
-                f"Sources: Eurostat isoc_ec_ib20 (ES7) for X; Eurostat tin00110 "
-                f"(ES5, ES6) for Y. "
-                f"WHY A CROSS-SECTION: the Danish adoption and outcome series "
-                f"share almost no observation years - the best time-series "
-                f"pairing in this dataset is n=2 - so a within-Denmark scatter "
-                f"of adoption against outcome cannot be drawn from verified "
-                f"data. "
-                f"SAMPLE: n={len(paired)} of 27 member states. This is a small "
-                f"sample; report the association descriptively and do not quote "
-                f"a p-value. Adding the missing values listed above raises n "
-                f"automatically on the next rebuild. "
-                f"WHAT Y MEASURES: tin00110 covers all enterprises with 10+ "
-                f"employees outside the financial sector, so it includes B2B and "
-                f"EDI ordering across every industry, not retail alone. X is a "
-                f"consumer measure. The two sit on different sides of the market, "
-                f"so a positive association is evidence that digital commerce is "
-                f"deep in an economy - not evidence that consumers buying online "
-                f"causes enterprise turnover.")
-    ws.sheet_view.showGridLines = False
-    return ws
-
-
-def sheet_policy(wb):
-    """The instruments themselves, dated and cited.
-
-    A workbook of outcomes cannot show policy impact, because impact is a
-    statement about what happened relative to something. This sheet supplies the
-    something. Each row is an instrument with a commencement date, a legal
-    citation, a source_id and the series it bears on; the figure sheets render
-    the same rows beneath their data.
-
-    The `precision` column exists because two of these dates are known only to
-    the year. Recording them as if they were known to the day would be the same
-    class of error as recording an interpolated value as a retrieved one.
-    """
-    ws = wb.create_sheet("09_POLICY")
-    title_block(ws, "Policy events",
-                "Dated instruments, with the series each one bears on. "
-                "Rendered as event tables beneath the figures they affect.")
-    header_row(ws, 4,
-               ["date", "precision", "instrument", "legal citation", "source_id",
-                "what it does", "series affected"],
-               [13, 11, 44, 32, 10, 74, 24])
-
-    r = 5
-    for when, precision, name, citation, src, desc, related in POLICY_EVENTS:
-        vals = [when, precision, name, citation, src, desc, related]
-        for j, v in enumerate(vals, start=1):
-            c = ws.cell(row=r, column=j, value=v)
-            c.font = T_MONO if j in (1, 5, 7) else T_BODY
-            c.border, c.alignment, c.fill = BOX, WRAP, F_RAW
-        ws.row_dimensions[r].height = 46
-        r += 1
-
-    source_note(ws, r + 1,
-                "Reading: the mandate date of 1 November 2014 is the hinge of this "
-                "workbook. Digital Post was not adopted by citizens choosing it; "
-                "citizens were enrolled automatically, and exemption is available "
-                "only against statutory criteria. Adoption rates after that date "
-                "therefore measure compliance with a legal obligation, not revealed "
-                "preference, and no figure in this workbook should be read as though "
-                "they measured preference.")
-    source_note(ws, r + 3,
-                "CORRECTION RECORDED: an earlier draft of this workbook stated that "
-                "SMV:Digital was being defunded. That claim could not be verified, "
-                "and the scheme's own 2026 grant-pool page (SMV1) documents pools "
-                "still open, with a further pool opening on 26 October 2026. The "
-                "claim has been withdrawn from the dataset and from the report's "
-                "argument. See 07_LIMITATIONS and 08_AI_LOG.")
-    ws.freeze_panes = "C5"
-    ws.sheet_view.showGridLines = False
-    return ws
-
-
-def sheet_f7(wb):
-    """Adoption is not the same thing as service quality, and Denmark proves it.
-
-    Denmark leads the EU on every adoption and capability measure in this
-    workbook, and sits BELOW the EU average on the eGovernment Benchmark score
-    for citizen services - 82.2 against 84.64 - and far below on cross-border
-    services. That pairing is the strongest finding in the dataset: near-universal
-    use of public digital services was achieved by statute, and universal use has
-    not produced above-average services.
-
-    The chart is a grouped bar rather than a scatter because these are six
-    different indicators on three different denominators; plotting them against
-    each other would imply a relationship that does not exist. What is being
-    compared is Denmark against the EU average, indicator by indicator.
-    """
-    ws = wb.create_sheet("F7_QUALITY")
-    title_block(ws, "Figure 7 - Denmark vs the EU: adoption and capability, then quality",
-                "Leads on every capability measure. Below average on citizen "
-                "service quality.")
-    header_row(ws, 4, ["indicator", "Denmark", "EU-27", "unit"], [46, 14, 14, 30])
-
-    rows = [
-        ("SMEs with at least basic digital intensity",
-         lookup("DK.ENT.DII", 2025), lookup("EU.ENT.DII", 2025), "% of SMEs"),
-        ("Enterprises adopting AI",
-         lookup("DK.ENT.AI", 2025), "", "% of enterprises (EU avg 19.95)"),
-        ("Digital public services for citizens",
-         lookup("DK.GOV.DPS.CIT", 2025), lookup("EU.GOV.DPS.CIT", 2025),
-         "eGovernment Benchmark score 0-100"),
-        ("Cross-border digital public services",
-         lookup("DK.GOV.DPS.XB", 2025), "", "score 0-100 (EU avg 75.28)"),
-    ]
-    r = 5
-    for label, dk, eu, unit in rows:
-        ws.cell(row=r, column=1, value=label).font = T_BODY
-        c = ws.cell(row=r, column=2, value=dk)
-        c.font, c.fill, c.number_format = T_BODY, F_CALC, N_DEC
-        if eu:
-            c = ws.cell(row=r, column=3, value=eu)
-            c.font, c.fill, c.number_format = T_BODY, F_CALC, N_DEC
-        ws.cell(row=r, column=4, value=unit).font = T_SMALL
-        for j in range(1, 5):
-            ws.cell(row=r, column=j).border = BOX
-        r += 1
-    last = r - 1
-
-    ch = BarChart()
-    ch.type, ch.grouping = "bar", "clustered"
-    ch.x_axis.title = "% or benchmark score"
-    ch.height, ch.width = 10, 18
-    data = Reference(ws, min_col=2, max_col=3, min_row=4, max_row=last)
-    cats = Reference(ws, min_col=1, min_row=5, max_row=last)
-    ch.add_data(data, titles_from_data=True)
-    ch.set_categories(cats)
-    paint(ch.series[0], C_ACCENT)   # Denmark
-    paint(ch.series[1], C_GREY)     # EU-27, context
-    style_chart(ch)
-    chart_title(ws, "F3", "Denmark vs EU-27 average",
-                "Denmark in blue, EU average in grey. Note the direction "
-                "reverses on the bottom two rows.")
-    ws.add_chart(ch, "F4")
-
-    r = last + 2
-    ws.cell(row=r, column=1,
-            value="THE GAP THAT MATTERS - service quality, not capability").font = T_SUB
-    r += 1
-    header_row(ws, r, ["quantity", "value", "reading"], [46, 14, 74])
-    r += 1
-    gaps = [
-        ("Digital public services, DK minus EU average",
-         f"={L('DK.GOV.DPS.CIT', 2025)}-{L('EU.GOV.DPS.CIT', 2025)}",
-         "Negative. The most digitalised population in the EU receives "
-         "below-average digital public services."),
-        ("Digital skills gap within Denmark, 16-24 minus 55-74",
-         f"={L('DK.SKL.1624', 2025)}-{L('DK.SKL.5574', 2025)}",
-         "The within-country spread. Note that Denmark's WEAKEST age group "
-         "(67.81%) still beats the EU average (42.60%) by 25pp, so Danish "
-         "exclusion is not a skills deficit relative to Europe - it is a mandate "
-         "calibrated above the bottom of its own distribution."),
-        ("AI adoption gap within Denmark, large firms minus SMEs",
-         f"={L('DK.ENT.AI.LRG', 2025)}-{L('DK.ENT.AI.SME', 2025)}",
-         "Breadth without depth, restated for AI."),
-    ]
-    for label, formula, note in gaps:
-        ws.cell(row=r, column=1, value=label).font = T_BODY
-        c = ws.cell(row=r, column=2, value=formula)
-        c.font, c.fill, c.number_format = T_BODY, F_CALC, N_DEC
-        ws.cell(row=r, column=3, value=note).font = T_SMALL
-        ws.cell(row=r, column=3).alignment = WRAP
-        for j in range(1, 4):
-            ws.cell(row=r, column=j).border = BOX
-        ws.row_dimensions[r].height = 44
-        r += 1
-
-    # The firm-size split used to sit only in the gap table above, as a single
-    # subtracted number. It is the report's central diffusion finding - the rail
-    # was built, and only the firms with complementary capital built on it - so
-    # it gets plotted rather than merely computed. Without this block the report
-    # cites a figure for a chart the workbook does not contain.
-    r += 1
-    ws.cell(row=r, column=1,
-            value="AI ADOPTION BY FIRM SIZE - who could build on the rail").font = T_SUB
-    r += 1
-    header_row(ws, r, ["firm size", "% adopting AI", "reading"], [46, 14, 74])
-    size_head = r
-    r += 1
-    sizes = [
-        ("All enterprises", lookup("DK.ENT.AI", 2025),
-         "Denmark's headline AI adoption rate."),
-        ("Large enterprises", lookup("DK.ENT.AI.LRG", 2025),
-         "Roughly three in four."),
-        ("Small and medium enterprises", lookup("DK.ENT.AI.SME", 2025),
-         "Two in five, though 92.45% of them clear the basic digital-intensity "
-         "threshold. The constraint is complementary capital, not connectivity."),
-    ]
-    for label, value, note in sizes:
-        ws.cell(row=r, column=1, value=label).font = T_BODY
-        c = ws.cell(row=r, column=2, value=value)
-        c.font, c.fill, c.number_format = T_BODY, F_CALC, N_DEC
-        ws.cell(row=r, column=3, value=note).font = T_SMALL
-        ws.cell(row=r, column=3).alignment = WRAP
-        for j in range(1, 4):
-            ws.cell(row=r, column=j).border = BOX
-        ws.row_dimensions[r].height = 30
-        r += 1
-    size_last = r - 1
-
-    ch2 = BarChart()
-    ch2.type, ch2.grouping = "col", "clustered"
-    ch2.y_axis.title = "% of enterprises"
-    ch2.height, ch2.width = 9, 14
-    data = Reference(ws, min_col=2, min_row=size_head, max_row=size_last)
-    cats = Reference(ws, min_col=1, min_row=size_head + 1, max_row=size_last)
-    ch2.add_data(data, titles_from_data=True)
-    ch2.set_categories(cats)
-    paint(ch2.series[0], C_ACCENT)
-    # The two bars that carry the finding are the outer ones; grey the aggregate
-    # so the eye compares large against SME rather than either against the mean.
-    dp = DataPoint(idx=0)
-    dp.graphicalProperties = GraphicalProperties(solidFill=C_GREY)
-    ch2.series[0].data_points = [dp]
-    style_chart(ch2)
-    chart_title(ws, "F26", "AI adoption by firm size, Denmark 2025",
-                "Large firms against SMEs. The aggregate is greyed because it "
-                "sits between them by construction.")
-    ws.add_chart(ch2, "F27")
-
-    source_note(ws, r + 1,
-                "Source: European Commission, Digital Decade 2026 country report for "
-                "Denmark (EC1). CAUTION: the eGovernment Benchmark is a scored "
-                "assessment, not a survey proportion, and a 2.4-point difference "
-                "between two scores should not be read as a precisely measured gap. "
-                "The direction is the finding; the magnitude is not.")
-    ws.sheet_view.showGridLines = False
-    return ws
-
-
-def sheet_f8(wb):
-    """The only control-group evidence in the workbook.
-
-    Every other adoption-and-outcome pairing here is correlational. The June 2025
-    Effektmaaling, prepared by Danmarks Statistik, compared SMV:Digital
-    participants against comparable non-participating firms and found higher
-    revenue and higher employment. A comparison group is worth more, evidentially,
-    than any cross-section of countries in this file - which is why this sheet
-    exists and why Figure 6 should be read as support for it rather than the
-    other way round.
-
-    No effect size is plotted because none was verified. Plotting the
-    participation shares as though they were an effect would repeat exactly the
-    error this workbook was rebuilt to avoid.
-    """
-    ws = wb.create_sheet("F8_SMVDIGITAL")
-    # The title used to read "the one policy with a control group". An audit
-    # caught that against 04_DEFINITIONS, which says of these same three series:
-    # "Self-reported by participants, with no control group." Both statements
-    # were defensible about DIFFERENT things - the EVALUATION used a matched
-    # comparison, but the three values PLOTTED HERE are participation and
-    # self-report measures that do not come from it, and whose effect sizes are
-    # deliberately absent. A title claiming a control group over numbers that
-    # have none lends them credibility they have not earned, which is the exact
-    # move this workbook exists to refuse.
-    title_block(ws, "Figure 8 - SMV:Digital participation (not the effect estimate)",
-                "Danmarks Statistik evaluation, June 2025. The evaluation used a "
-                "matched comparison; the three values below do not come from it.")
-    header_row(ws, 4, ["measure", "value", "unit"], [52, 14, 30])
-
-    # Order matters here. The two percentages come first so the chart can cover a
-    # contiguous range that EXCLUDES the project count. Plotting ~7,000 projects
-    # on the same axis as 65% and 2% - as this sheet did until an audit caught it
-    # - put a count and two proportions on one scale, and the percentage bars
-    # were flattened to nothing beside it. The count is kept in the table, where
-    # it belongs, and named in the chart subtitle.
-    rows = [
-        ("Participants investing further during the project",
-         lookup("DK.SME.SMVD.INV", 2025), "% of participants"),
-        ("Participants with no further investment plans",
-         lookup("DK.SME.SMVD.NOINV", 2025), "% of participants"),
-        ("Digitalisation projects supported since 2018",
-         lookup("DK.SME.SMVD.PROJ", 2025), "count"),
-    ]
-    r = 5
-    for label, formula, unit in rows:
-        ws.cell(row=r, column=1, value=label).font = T_BODY
-        c = ws.cell(row=r, column=2, value=formula)
-        c.font, c.fill = T_BODY, F_CALC
-        c.number_format = N_INT if unit == "count" else N_ONE
-        ws.cell(row=r, column=3, value=unit).font = T_SMALL
-        for j in range(1, 4):
-            ws.cell(row=r, column=j).border = BOX
-        r += 1
-    last = r - 1
-
-    ch = BarChart()
-    ch.type, ch.grouping = "bar", "clustered"
-    ch.x_axis.title = "% of participating enterprises"
-    ch.height, ch.width = 8, 16
-    data = Reference(ws, min_col=2, min_row=4, max_row=last - 1)
-    cats = Reference(ws, min_col=1, min_row=5, max_row=last - 1)
-    ch.add_data(data, titles_from_data=True)
-    ch.set_categories(cats)
-    paint(ch.series[0], C_ACCENT)
-    style_chart(ch, legend=None)
-    chart_title(ws, "E3", "SMV:Digital participant outcomes",
-                "Shares of the ~7,000 supported projects (count in the table, "
-                "off-axis). Participation only; no effect size is plotted "
-                "because none was verified.")
-    ws.add_chart(ch, "E4")
-
-    r = last + 2
-    ws.cell(row=r, column=1,
-            value="WHAT THIS FIGURE SHOWS - AND WHAT IT DOES NOT").font = T_SUB
-    r += 1
-    for line in [
-        "WHAT THE PLOTTED NUMBERS ARE: participation counts and participant "
-        "self-reports. 'Invested further' is a share OF PARTICIPANTS, with no "
-        "comparison group behind it. Read alone, these three values cannot "
-        "support any causal claim about the programme, and 04_DEFINITIONS says "
-        "so on the same series.",
-        "WHAT THE EVALUATION SEPARATELY FOUND: Danmarks Statistik compared "
-        "participating firms against comparable non-participants and reported "
-        "higher revenue AND higher employment among participants. That matched "
-        "comparison is the strongest research DESIGN behind any source in this "
-        "workbook - Figure 6's cross-section cannot rule out that richer "
-        "countries simply do more of both, and a matched comparison can.",
-        "WHY THE TWO ARE KEPT APART: the design belongs to the evaluation, not "
-        "to these three numbers. Citing the figure as 'the one policy with a "
-        "control group' - as this sheet's title did until an audit caught it - "
-        "borrows the evaluation's credibility for values that do not carry it. "
-        "If the report wants the causal claim, it must cite the evaluation's own "
-        "effect sizes, which means retrieving and verifying them first.",
-        "LIMIT: the effect sizes are not reproduced here because they were not "
-        "verified against the evaluation itself. The direction of the finding is "
-        "sourced; the magnitude is not, and must not be invented.",
-        "LIMIT: participation is voluntary, so selection into the programme by "
-        "more capable or more ambitious firms is not excluded by matching alone.",
-    ]:
-        c = ws.cell(row=r, column=1, value=line)
-        c.font, c.alignment = T_SMALL, WRAP
-        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=3)
-        ws.row_dimensions[r].height = 34
-        r += 1
-
-    r = policy_block(ws, r + 1, "DK.SME.SMVD.PROJ")
-
-    source_note(ws, r,
-                "Source: Effektmaaling af SMV:Digital, Danmarks Statistik for the "
-                "Agency for Digital Government, June 2025 (DG3); scheme status from "
-                "SMV:Digital's 2026 grant-pool page (SMV1).")
-    ws.sheet_view.showGridLines = False
-    return ws
-
-
-def sheet_f9(wb):
-    """Banking consolidation on three measures, and what the gap between them says.
-
-    The three series do not share a start year - branches begin in 2004,
-    institutions and employment in 1991 - so a single indexed chart would be
-    dishonest. Each category label therefore carries its own window, and the
-    percentage changes are never presented as though measured over one period.
-    """
-    ws = wb.create_sheet("F9_CONSOLIDATION")
-    title_block(ws, "Figure 9 - Consolidation of Danish retail banking",
-                "Three measures of the same structural shift. Note the different "
-                "start years: the periods are NOT comparable to one another.")
-
-    header_row(ws, 4,
-               ["measure", "period", "first", "last", "change"],
-               [30, 16, 14, 14, 14])
-    rows = [
-        ("Financial institutions", "1991-2024", "DK.FIN.INST", 1991, 2024),
-        ("Bank branches", "2004-2024", "DK.FIN.BRCH", 2004, 2024),
-        ("Bank employees", "1991-2024", "DK.FIN.EMP", 1991, 2024),
-    ]
-    for i, (label, period, code, y0, y1) in enumerate(rows):
-        r = 5 + i
-        ws.cell(row=r, column=1, value=label).font = T_BODY
-        ws.cell(row=r, column=2, value=period).font = T_MONO
-        for col, yr in ((3, y0), (4, y1)):
-            c = ws.cell(row=r, column=col, value=lookup(code, yr))
-            c.font, c.fill, c.number_format = T_BODY, F_CALC, N_INT
-        c = ws.cell(row=r, column=5,
-                    value=f"=({L(code, y1)}/{L(code, y0)})-1")
-        c.font, c.fill, c.number_format = T_BODY, F_CALC, N_PCT
-        for j in range(1, 6):
-            ws.cell(row=r, column=j).border = BOX
-    last = 4 + len(rows)
-
-    # --- chart: percentage change, with the period inside each label ---------
-    # A helper column carries "measure (period)" so the different windows are
-    # unmissable on the chart face rather than only in the table.
-    ws.cell(row=4, column=7, value="chart label (helper)").font = T_SMALL
-    ws.cell(row=4, column=8, value="change").font = T_SMALL
-    for i, (label, period, code, y0, y1) in enumerate(rows):
-        r = 5 + i
-        ws.cell(row=r, column=7, value=f"{label} ({period})").font = T_BODY
-        c = ws.cell(row=r, column=8, value=f"=({L(code, y1)}/{L(code, y0)})-1")
-        c.font, c.fill, c.number_format = T_BODY, F_CALC, N_PCT
-
-    ch = BarChart()
-    ch.type, ch.grouping = "bar", "clustered"
-    ch.x_axis.title = "Change over the stated period"
-    ch.height, ch.width = 8, 17
-    data = Reference(ws, min_col=8, min_row=4, max_row=last)
-    cats = Reference(ws, min_col=7, min_row=5, max_row=last)
-    ch.add_data(data, titles_from_data=True)
-    ch.set_categories(cats)
-    # Employment is the point of the chart: it is the bar that did NOT fall as
-    # far. It takes the accent; the two structural measures recede.
-    highlight_points(ch.series[0], len(rows), {2: C_ACCENT}, base=C_DARK)
-    style_chart(ch, legend=None)
-    chart_title(ws, "J3", "Banking consolidation, by measure",
-                "Employment in blue - it fell least. Periods differ by measure; "
-                "read each bar against its own label.")
-    ws.add_chart(ch, "J4")
-
-    # --- the finding: staff per institution ---------------------------------
-    r = last + 2
-    ws.cell(row=r, column=1,
-            value="THE ASYMMETRY - staff per institution").font = T_SUB
-    r += 1
-    header_row(ws, r, ["statistic", "1991", "2024", "reading"],
-               [30, 14, 14, 60])
-    r += 1
-    per = r
-    ws.cell(row=r, column=1, value="Employees per institution").font = T_BODY
-    for col, yr in ((2, 1991), (3, 2024)):
-        c = ws.cell(row=r, column=col,
-                    value=f"={L('DK.FIN.EMP', yr)}/{L('DK.FIN.INST', yr)}")
-        c.font, c.fill, c.number_format = T_BODY, F_CALC, N_INT
-    rd = ws.cell(row=r, column=4,
-                 value="Denmark did not shed banking labour in proportion to "
-                       "its institutions. It concentrated it.")
-    rd.font, rd.alignment = T_SMALL, WRAP
-    for j in range(1, 5):
-        ws.cell(row=r, column=j).border = BOX
-    ws.row_dimensions[r].height = 30
-    r += 1
-    ws.cell(row=r, column=1, value="Change in staff per institution").font = T_BODY
-    c = ws.cell(row=r, column=2,
-                value=f"=(({L('DK.FIN.EMP', 2024)}/{L('DK.FIN.INST', 2024)})"
-                      f"/({L('DK.FIN.EMP', 1991)}/{L('DK.FIN.INST', 1991)}))-1")
-    c.font, c.fill, c.number_format = T_BODY, F_CALC, N_PCT
-    ws.cell(row=r, column=3, value="").border = BOX
-    rd = ws.cell(row=r, column=4,
-                 value="The measure that rose. Every other line on this sheet "
-                       "falls.")
-    rd.font, rd.alignment = T_SMALL, WRAP
-    for j in range(1, 5):
-        ws.cell(row=r, column=j).border = BOX
-    r += 1
-    ws.cell(row=r, column=1, value="Employees per branch, 2024").font = T_BODY
-    c = ws.cell(row=r, column=2,
-                value=f"={L('DK.FIN.EMP', 2024)}/{L('DK.FIN.BRCH', 2024)}")
-    c.font, c.fill, c.number_format = T_BODY, F_CALC, N_ONE
-    ws.cell(row=r, column=3, value="").border = BOX
-    rd = ws.cell(row=r, column=4,
-                 value="Branch counts begin in 2004, so no 1991 comparison is "
-                       "available for this ratio.")
-    rd.font, rd.alignment = T_SMALL, WRAP
-    for j in range(1, 5):
-        ws.cell(row=r, column=j).border = BOX
-
-    r = policy_block(ws, r + 3, "DK.FIN.BRCH")
-
-    source_note(ws, r,
-                "Sources: Finans Danmark (FD1) for institutions, branches and "
-                "employment. CAUTION ON THE PERIODS: institutions and employment "
-                "run 1991-2024; branches only 2004-2024. The three percentage "
-                "changes above are therefore NOT measured over a common window "
-                "and must not be subtracted from one another. What is comparable "
-                "is institutions against employment, both 1991-2024: institutions "
-                "fell by roughly three quarters while employment fell by under a "
-                "third. Reading: consolidation removed institutions and branches "
-                "far faster than it removed jobs, so the surviving institutions "
-                "are much larger. This is a concentration and scale effect, not a "
-                "labour-shedding one, and it is the economic consequence of "
-                "digital payment adoption that the branch count alone does not "
-                "show. Employment figures are rounded by the source - it states "
-                "'around 51,000' and 'just under 36,000' - and carry flag e.")
-    ws.sheet_view.showGridLines = False
-    return ws
-
-
-def sheet_f10(wb):
-    """Digital skills by age band, Denmark against the EU-27 average.
-
-    The chart carries the section 4 argument on its own: Denmark leads at every
-    age, and its weakest band still beats the EU average for that band, so the
-    excluded population is not explained by a skills deficit.
-    """
-    ws = wb.create_sheet("F10_SKILLS")
-    title_block(ws, "Figure 10 - At least basic digital skills, by age band, 2025",
-                "Denmark against the EU-27 average. Same publication, same "
-                "definition, same year.")
-
-    header_row(ws, 4, ["age band", "Denmark", "EU-27", "DK lead"],
-               [16, 14, 14, 14])
-    bands = [("16-24", "SKL.1624"), ("25-54", "SKL.2554"), ("55-74", "SKL.5574")]
-    for i, (label, stem) in enumerate(bands):
-        r = 5 + i
-        ws.cell(row=r, column=1, value=label).font = T_MONO
-        for col, geo in ((2, "DK"), (3, "EU")):
-            c = ws.cell(row=r, column=col, value=lookup(f"{geo}.{stem}", 2025))
-            c.font, c.fill, c.number_format = T_BODY, F_CALC, N_DEC
-        c = ws.cell(row=r, column=4,
-                    value=f"={L(f'DK.{stem}', 2025)}-{L(f'EU.{stem}', 2025)}")
-        c.font, c.fill, c.number_format = T_BODY, F_CALC, N_SIGNED
-        for j in range(1, 5):
-            ws.cell(row=r, column=j).border = BOX
-    last = 4 + len(bands)
-
-    ch = BarChart()
-    ch.type, ch.grouping = "col", "clustered"
-    ch.y_axis.title = "% of age group"
-    ch.x_axis.title = "Age band"
-    ch.height, ch.width = 9, 15
-    data = Reference(ws, min_col=2, max_col=3, min_row=4, max_row=last)
-    cats = Reference(ws, min_col=1, min_row=5, max_row=last)
-    ch.add_data(data, titles_from_data=True)
-    ch.set_categories(cats)
-    paint(ch.series[0], C_ACCENT)   # Denmark
-    paint(ch.series[1], C_GREY)     # EU-27 average, context
-    ch.y_axis.scaling.max = 100
-    style_chart(ch)
-    chart_title(ws, "F3", "At least basic digital skills by age, DK vs EU-27",
-                "Denmark in blue; the EU-27 average in grey. Note that the "
-                "Danish 55-74 bar still clears the EU average for its own band.")
-    ws.add_chart(ch, "F4")
-
-    r = last + 2
-    ws.cell(row=r, column=1,
-            value="WHY THIS MATTERS FOR THE EXCLUSION ARGUMENT").font = T_SUB
-    r += 1
-    header_row(ws, r, ["statistic", "value", "reading"], [34, 14, 66])
-    r += 1
-    stats = [
-        ("Danish gradient, 16-24 less 55-74",
-         f"={L('DK.SKL.1624', 2025)}-{L('DK.SKL.5574', 2025)}", N_SIGNED,
-         "The internal spread across Danish age bands."),
-        ("EU gradient, 16-24 less 55-74",
-         f"={L('EU.SKL.1624', 2025)}-{L('EU.SKL.5574', 2025)}", N_SIGNED,
-         "The same spread for the EU as a whole. Denmark's is the narrower of "
-         "the two, so its age gradient is comparatively mild."),
-        ("Danish 55-74 less the EU average for 55-74",
-         f"={L('DK.SKL.5574', 2025)}-{L('EU.SKL.5574', 2025)}", N_SIGNED,
-         "Denmark's weakest band against the EU's same band - NOT against the "
-         "EU all-ages average. Positive and large."),
-    ]
-    for label, formula, fmt, reading in stats:
-        ws.cell(row=r, column=1, value=label).font = T_BODY
-        c = ws.cell(row=r, column=2, value=formula)
-        c.font, c.fill, c.number_format = T_BODY, F_CALC, fmt
-        rd = ws.cell(row=r, column=3, value=reading)
-        rd.font, rd.alignment = T_SMALL, WRAP
-        for j in range(1, 4):
-            ws.cell(row=r, column=j).border = BOX
-        ws.row_dimensions[r].height = 30
-        r += 1
-
-    source_note(ws, r + 1,
-                "Source: European Commission, Digital Decade 2026 country report "
-                "for Denmark (EC1). The three EU-27 values were previously held "
-                "only in the note field of the Danish rows; they are now "
-                "observations in 02_MASTER under EU.SKL.*, because a figure in a "
-                "note cannot be looked up, charted or traced. READING: Denmark "
-                "leads the EU average in every age band, and its weakest band "
-                "(55-74) clears the EU average for that same band by a wide "
-                "margin. The Danish population excluded from digital public "
-                "services is therefore not explained by low skills relative to "
-                "Europe - the mandate is calibrated above the bottom of its own "
-                "distribution. Compare the exclusion measures on F4: 4.7% are "
-                "formally exempt while 16.5% report difficulty. That gap is "
-                "administrative, not a capability deficit. Do not compare the "
-                "55-74 figure against an EU all-ages average; the comparison is "
-                "band against the same band.")
-    ws.sheet_view.showGridLines = False
-    return ws
-
-
-def sheet_f12(wb):
-    """E-government reach against what reach does not measure.
-
-    The two panels of Figure 12 sit on DIFFERENT bases and the sheet keeps
-    them in separate blocks so nobody subtracts one from the other. That is
-    the whole point of the figure: the indicator on which Denmark leads the
-    Union cannot see the population Question 4 is about.
-    """
-    ws = wb.create_sheet("F12_REACH")
-    title_block(ws, "Figure 12 - Reach, and what reach does not measure",
-                "Panel A and Panel B are NOT comparable. Different sources, "
-                "different reference years and different denominators. Read "
-                "each against its own base; never difference them.")
-
-    header_row(ws, 4, ["PANEL A - reach", "%", "base"], [34, 12, 40])
-    for i, (label, code) in enumerate((("Denmark", "DK.DGX.EGOV.USE"),
-                                       ("EU-27 average", "EU.DGX.EGOV.USE"))):
-        r = 5 + i
-        ws.cell(row=r, column=1, value=label).font = T_MONO
-        c = ws.cell(row=r, column=2, value=lookup(code, 2024))
-        c.font, c.fill, c.number_format = T_BODY, F_CALC, N_DEC
-        ws.cell(row=r, column=3,
-                value="individuals aged 16-74, 2024 (ES9)").font = T_SMALL
-        for j in range(1, 4):
-            ws.cell(row=r, column=j).border = BOX
-
-    header_row(ws, 8, ["PANEL B - what it does not measure", "%", "base"],
-               [34, 12, 40])
-    panel_b = (("Report difficulty using them", "DK.DGX.DIFF", 2026,
-                "individuals, 2026 (EC1)"),
-               ("Do not use them at all", "DK.DGX.NOUSE", 2026,
-                "individuals, 2026 (EC1)"),
-               ("Formally exempt from Digital Post", "DK.DGP.EXMP", 2026,
-                "citizens aged 15 and over, Q1 2026 (DG1)"))
-    for i, (label, code, yr, base) in enumerate(panel_b):
-        r = 9 + i
-        ws.cell(row=r, column=1, value=label).font = T_MONO
-        c = ws.cell(row=r, column=2, value=lookup(code, yr))
-        c.font, c.fill, c.number_format = T_BODY, F_CALC, N_DEC
-        ws.cell(row=r, column=3, value=base).font = T_SMALL
-        for j in range(1, 4):
-            ws.cell(row=r, column=j).border = BOX
-
-    source_note(ws, 13,
-                "Sources: Eurostat isoc_ciegi_ac (ES9); European Commission, "
-                "Digital Decade 2026 country report for Denmark (EC1); "
-                "Digitaliseringsstyrelsen (DG1). READING: 98.5% of Danish "
-                "individuals aged 16 to 74 used a public authority website or "
-                "app at least once during 2024, the highest share in the EU-27 "
-                "against an average of 70.0%. DENOMINATOR WARNING: the survey "
-                "records whether a person interacted AT ALL, ONCE, in twelve "
-                "months. It measures reach, not frequency, competence or "
-                "independent use, and Panel B is drawn on other bases "
-                "entirely. The two panels are shown together because the "
-                "contrast is the argument; they are never differenced.")
-
-
-def sheet_f11(wb):
-    """ICT waste recovery, Denmark against the EU-27.
-
-    Two observations and no trend: the source publishes one year. The sheet
-    exists so the figure has a traceable home like every other, not because
-    two numbers need a spreadsheet.
-    """
-    ws = wb.create_sheet("F11_EWASTE")
-    title_block(ws, "Figure 11 - ICT waste recycled or prepared for reuse, 2023",
-                "Denmark against the EU-27 average, as a share of ICT-related "
-                "WEEE collected. Same publication, same definition, same year.")
-
-    header_row(ws, 4, ["geography", "% recovered", "gap to EU-27"], [22, 16, 16])
-    for i, (label, geo) in enumerate((("Denmark", "DK"), ("EU-27", "EU"))):
-        r = 5 + i
-        ws.cell(row=r, column=1, value=label).font = T_MONO
-        c = ws.cell(row=r, column=2, value=lookup(f"{geo}.ENV.WEEE", 2023))
-        c.font, c.fill, c.number_format = T_BODY, F_CALC, N_DEC
-        c = ws.cell(row=r, column=3,
-                    value=f"={L(f'{geo}.ENV.WEEE', 2023)}-{L('EU.ENV.WEEE', 2023)}")
-        c.font, c.fill, c.number_format = T_BODY, F_CALC, N_SIGNED
-        for j in range(1, 4):
-            ws.cell(row=r, column=j).border = BOX
-
-    ch = BarChart()
-    ch.type, ch.grouping = "col", "clustered"
-    ch.y_axis.title = "% of ICT waste collected"
-    ch.height, ch.width = 9, 12
-    data = Reference(ws, min_col=2, max_col=2, min_row=4, max_row=6)
-    cats = Reference(ws, min_col=1, min_row=5, max_row=6)
-    ch.add_data(data, titles_from_data=True)
-    ch.set_categories(cats)
-    paint(ch.series[0], C_ACCENT)
-    ch.y_axis.scaling.max = 100
-    style_chart(ch)
-    chart_title(ws, "E3", "ICT waste recovery, Denmark against the EU-27",
-                "The one indicator on which Denmark's digital economy ranks "
-                "near the bottom of the Union rather than the top.")
-    ws.add_chart(ch, "E4")
-
-    source_note(ws, 9,
-                "Source: European Commission, Digital Decade 2026 country "
-                "report for Denmark (EC1). READING: Denmark recovers 15.37% of "
-                "the ICT waste it collects against an EU-27 average of 80.23%, "
-                "a gap of roughly 65 percentage points. DENOMINATOR: the base "
-                "is ICT-related WEEE COLLECTED, not ICT equipment placed on the "
-                "market, so this measures what happens to devices that reach "
-                "the waste stream and says nothing about how many never do. "
-                "The source publishes a single year, so no trend is available "
-                "and none is claimed.")
-
-
-def sheet_gap(wb):
-    ws = wb.create_sheet("06_RETAIL_GAP")
-    ws.column_dimensions["A"].width = 26
-    ws.column_dimensions["B"].width = 92
-    title_block(ws, "Documented gap - retail trade volume index",
-                "Recorded rather than silently omitted.")
-
-    r = 4
-    for k, v in [
-        ("Status", "NOT RETRIEVED"),
-        ("Indicator", "Retail trade turnover, volume index (mangdeindeks)"),
-        ("Authority", "Danmarks Statistik (DST1); also available via Eurostat sts_trtu_a"),
-        ("Filters required",
-         "geo=DK; nace_r2=G47; indic_bt=VOL; s_adj=SCA; unit=I21 (2021=100)"),
-        ("Why not retrieved",
-         "Values are published through StatBank and the Eurostat databrowser. This "
-         "session's network policy blocked direct access to both, and the figure "
-         "could not be verified by search. A value that cannot be traced is not "
-         "entered."),
-        ("Base year caution",
-         "Danmarks Statistik rebased the index from 2015=100 to 2021=100. Series "
-         "retrieved on different bases must not be joined."),
-        ("Effect on the analysis",
-         "The e-commerce section rests on the enterprise e-sales evidence in "
-         "F3_ESALES instead, which is better sourced. No conclusion in the report "
-         "depends on this series."),
-        ("To fill",
-         "Retrieve from statistikbanken.dk, add rows to dataset.py under series_code "
-         "DK.RET.VOL with unit 'index 2021=100', and re-run build_workbook.py."),
-    ]:
-        ws.cell(row=r, column=1, value=k).font = T_SUB
-        c = ws.cell(row=r, column=2, value=v)
-        c.font, c.alignment, c.fill, c.border = T_BODY, WRAP, F_GAP, BOX
-        ws.row_dimensions[r].height = 44 if len(v) > 80 else 20
-        r += 1
-
-    ws.sheet_view.showGridLines = False
-    return ws
-
-
-def sheet_limitations(wb):
-    ws = wb.create_sheet("07_LIMITATIONS")
-    ws.column_dimensions["A"].width = 30
-    ws.column_dimensions["B"].width = 92
-    title_block(ws, "Data quality statement", "Read before citing any value.")
-
-    items = [
-        ("Compiled date is not a per-value retrieval date",
-         "02_MASTER carries a compiled_date column holding a single build-time "
-         "constant, identical on all 113 rows. It records when this workbook "
-         "was generated, NOT when each value was retrieved from its authority - "
-         "those retrievals were made across several working sessions on "
-         "different days. The column was named extraction_date until an audit "
-         "of the generated file found that the name claimed per-observation "
-         "provenance the data does not hold. It is renamed rather than "
-         "back-filled, because inventing plausible retrieval dates would be "
-         "precisely the fabrication this workbook exists to avoid. Recording "
-         "true retrieval dates requires capturing them at retrieval time, in "
-         "dataset.py, which is the correct fix and is not retrospective."),
-        ("No inferential statistics",
-         "The longest series here has six observations. Regression, cointegration "
-         "and Granger-causality procedures require far more, and any such result on "
-         "this dataset would be uninterpretable. The workbook supports description "
-         "and comparison only. Co-movement between digital payment adoption and "
-         "branch closures is presented as association, never as measured causation."),
-        ("Figure 6 tail selection - RESOLVED, and what it cost",
-         "The adoption column in Figure 6 was originally assembled from a "
-         "Eurostat press release naming the highest three countries, the lowest "
-         "three and two large movers, so most plotted points came from the ends "
-         "of the EU distribution. Selecting on the extremes of X inflates the "
-         "correlation coefficient regardless of the underlying relationship, and "
-         "R-squared was withheld from the chart face for that reason. The column "
-         "is now the complete isoc_ec_ib20 databrowser extract for all 27 member "
-         "states, unrounded, so the selection is gone and R-squared is displayed. "
-         "The measured cost of the bias is retained on F6 because it is "
-         "informative: on the 6 tail countries the fit was R-squared 0.853 with a "
-         "slope of +0.655; on the complete cross-section it is R-squared 0.674 "
-         "with a slope of +0.602. Tail selection barely moved the slope and "
-         "flattered the fit by 0.18."),
-        ("No price deflator on the turnover series",
-         "E-sales as a share of enterprise turnover runs 2014 to 2024, spanning "
-         "the pandemic and the 2022 inflation episode. Turnover is nominal, and "
-         "online and physical retail did not face the same price path. Part of the "
-         "measured rise in the e-sales share is therefore relative price movement "
-         "rather than real reallocation of activity. No deflator was available in "
-         "this session and none has been applied, so the doubling of intensity "
-         "should be read as nominal."),
-        ("Banking series use different base years",
-         "This constrains F9_CONSOLIDATION directly: the three percentage "
-         "changes on that sheet are not measured over a common window, so they "
-         "must not be differenced against one another. Institutions and "
-         "employment are comparable to each other, both 1991-2024. "
-         "Branch counts begin in 2004; institution counts and employment begin in "
-         "1991. A 2004-2024 branch change and a 1991-2024 employment change are "
-         "not comparable, and placing the two percentages side by side in prose "
-         "would misrepresent both. 05_CALC labels every window explicitly. Either "
-         "state both windows or do not draw the comparison."),
-        ("No sampling error is reported anywhere",
-         "The Eurostat, Nationalbank and Agency for Digital Government figures are "
-         "survey estimates and carry sampling error that the issuing authorities "
-         "publish but this workbook does not reproduce. Small differences should "
-         "not be treated as established: a 2-3 point gap between two survey "
-         "proportions, or between two eGovernment Benchmark scores, may not be "
-         "distinguishable from zero. Directions are more robust than magnitudes "
-         "throughout."),
-        ("Headcount conversions rest on an implied denominator",
-         "A published figure for the Danish population aged 15 and over could not "
-         "be verified in this session. F4 therefore derives an implied 15+ base by "
-         "dividing the exempt headcount by the exemption rate, both from the same "
-         "source. Persons-affected figures built on it are orders of magnitude, "
-         "not counts, and the capability shares they scale are measured on 'the "
-         "population' rather than on the 15+ base - the denominators are not "
-         "identical. Every such cell is marked in place."),
-        ("A withdrawn claim about SMV:Digital",
-         "An earlier draft of this workbook asserted that SMV:Digital was being "
-         "defunded, and an argument was built on the contrast between a programme "
-         "that works and a programme being cut. The claim could not be verified. "
-         "The scheme's own 2026 grant-pool page documents pools still open and a "
-         "further pool opening on 26 October 2026. The claim has been removed from "
-         "the dataset and from the report's argument, and the correction is "
-         "recorded in 09_POLICY and 08_AI_LOG rather than silently erased."),
-        ("Unbalanced panel",
-         "Observation years differ by series because the underlying sources publish "
-         "on different cycles - payment habits roughly biennially, Eurostat annually, "
-         "branch counts irregularly. Gaps are genuine and are not filled."),
-        ("Denominator break",
-         "Danish online-purchasing figures change base between 2019 (% of "
-         "individuals) and 2020 onward (% of internet users). The 2019 observation "
-         "carries flag 'b' and is never plotted with later years."),
-        ("Verbal quantities",
-         "Values flagged 'e' were published as words, not figures - 'nearly one in "
-         "five', 'just under 36,000'. They are recorded as the stated approximation "
-         "with the original wording in the notes column."),
-        ("Confounded outcome",
-         "Branch closures reflect both digitalisation and sectoral consolidation "
-         "(219 institutions in 1991, 51 in 2024). The branch series alone cannot "
-         "separate these, and the report should not claim that it does."),
-        ("Definitional spread in exclusion measures",
-         "The five exclusion measures range from 4.7% to 25% because they define "
-         "the population differently. They are not competing estimates of one "
-         "quantity and must not be averaged or presented as a range."),
-        ("Cross-section complete on adoption, incomplete on outcome",
-         "The adoption measure now covers all 27 member states for 2024, so F5 is "
-         "a complete EU ranking. The enterprise-turnover measure does not: nine "
-         "member states hold adoption but not turnover and cannot enter Figure 6. "
-         "Those nine are dropped by data availability rather than by their "
-         "position on either axis, which is why the remaining 18 are treated as a "
-         "usable cross-section."),
-        ("Figure 6 sample size",
-         "The adoption-to-outcome scatter rests on 18 complete country pairs, up "
-         "from 6. That is enough to report a slope with a standard error and a "
-         "t-statistic, all three of which are on the sheet as live formulas. It "
-         "is not enough, and no sample size would be enough here, to support a "
-         "claim about causal direction: this is one year of cross-sectional data "
-         "with no control for national income. Say n explicitly, report the "
-         "slope with its standard error, and keep the language associational."),
-        ("Figure 6 measures two sides of the market",
-         "X is a consumer measure (individuals buying online); Y is an "
-         "all-enterprise, all-sector measure that includes B2B and EDI ordering. "
-         "A positive association indicates that digital commerce runs deep in an "
-         "economy. It is not evidence that consumer purchasing causes enterprise "
-         "turnover, and must not be written as though it were."),
-        ("Mirror-sourced column",
-         "The 16 country-level e-sales turnover values flagged 'u' were retrieved "
-         "via search of Eurostat tin00110 rather than from the databrowser "
-         "directly. Two values in the same column (EU27 19.49 and Ireland 38.25) "
-         "are independently corroborated by source ES5, which supports the "
-         "column, but each value should be spot-checked against the databrowser "
-         "before final submission."),
-        ("Search-based verification",
-         "Direct access to statistical portals was blocked in the build environment. "
-         "Values were verified against the issuing authority through search results "
-         "reporting those publications. This is weaker than downloading the dataset: "
-         "before final submission, spot-check high-stakes figures against the source "
-         "pages directly."),
-        ("Discarded material",
-         "An earlier candidate dataset was rejected in full after verification found "
-         "fabricated values carrying authentic dataset codes and extraction dates - "
-         "including a Eurostat cross-section that inverted the true EU country "
-         "ranking. None of it survives in this workbook."),
-    ]
-    r = 4
-    for k, v in items:
-        ws.cell(row=r, column=1, value=k).font = T_SUB
-        c = ws.cell(row=r, column=2, value=v)
-        c.font, c.alignment, c.border = T_BODY, WRAP, BOX
-        c.fill = F_FLAG
-        ws.row_dimensions[r].height = 62
-        r += 1
-
-    ws.sheet_view.showGridLines = False
-    return ws
-
-
-def sheet_ai_log(wb):
-    ws = wb.create_sheet("08_AI_LOG")
-    title_block(ws, "AI use and validation log",
-                "Raw material for the AI Use and Validation Appendix.")
-    header_row(ws, 4, ["step", "AI assistance used", "how it was validated", "outcome"],
-               [28, 40, 46, 34])
-
-    log = [
-        ("Source identification",
-         "AI used to identify candidate statistical sources and dataset codes.",
-         "Each source opened or search-verified against the issuing authority.",
-         "Source register in 03_SOURCES."),
-        ("Value retrieval",
-         "AI used to search for published values by authority and indicator.",
-         "Each value checked against a result reporting the issuing authority's own "
-         "publication.",
-         "Every retained observation carries a source_id."),
-        ("Rejection of a prior dataset",
-         "A candidate dataset produced with AI assistance was reviewed.",
-         "Cross-checked against Eurostat's published country ranking; the values "
-         "inverted the true ranking and contained duplicated and interpolated cells.",
-         "Dataset rejected in full and excluded."),
-        ("Withdrawal of an AI-suggested claim",
-         "An AI-assisted draft asserted that the SMV:Digital grant scheme was "
-         "being defunded, and an argument was built on the contrast between a "
-         "programme with measured positive effects and a programme being cut.",
-         "Searched for the scheme's funding status. The scheme's own 2026 "
-         "grant-pool page documents pools still open and a further pool opening "
-         "26 October 2026. No source supported the defunding claim.",
-         "Claim withdrawn from the dataset and the argument; the withdrawal is "
-         "recorded in 09_POLICY and 07_LIMITATIONS rather than erased."),
-        ("Statistical self-audit",
-         "AI was asked to audit its own workbook as a macroeconomic policy "
-         "reviewer would.",
-         "The audit found that Figure 6's adoption column had been assembled "
-         "from a press release naming only the top three, bottom three and three "
-         "large movers - a sample drawn from the tails, which inflates R-squared "
-         "by construction.",
-         "R-squared removed from the chart face; a selection warning added to "
-         "F6; the limitation recorded in 07_LIMITATIONS. Later resolved - see "
-         "the two rows below."),
-        ("Failed verification attempt",
-         "AI was asked to retrieve Eurostat isoc_ec_ib20 for 2024 for the twelve "
-         "member states missing from Figure 6, so the tail selection could be "
-         "removed.",
-         "Eurostat and the national statistical offices are unreachable from the "
-         "build environment. Web search returned only the press release naming "
-         "the same tails, two country values with no attributable source, and one "
-         "answer mixing the '% of internet users' and '% of individuals' "
-         "denominators in a single paragraph.",
-         "No values accepted. Recorded because the honest outcome of a "
-         "verification attempt is sometimes that it failed."),
-        ("Author-supplied authoritative extract",
-         "The author retrieved the complete isoc_ec_ib20 table from the Eurostat "
-         "databrowser and supplied it as a spreadsheet; AI parsed it into the "
-         "dataset.",
-         "The extract carries its own provenance header - dataset code, "
-         "extraction timestamp, last-update date, and an explicit unit of "
-         "'percentage of individuals who used internet within the last year'. "
-         "The ten values it overlapped with were compared against the rounded "
-         "press-release figures already held; all ten agreed to rounding.",
-         "All 27 member states plus the EU-27 aggregate added under source ES7. "
-         "Figure 6 went from n=6 to n=18 and R-squared was restored to the chart "
-         "face. The superseded rounded values are recorded in each row's note."),
-        ("Workbook construction",
-         "AI wrote the Python build script that generates this workbook.",
-         "Structural assertions run at build time: source_ids resolve, units and "
-         "denominators present, no duplicate observations, break flags set.",
-         "build_workbook.py, re-runnable."),
-        ("Analytical framing",
-         "AI used to interpret patterns and suggest framings.",
-         "Author reviewed each interpretation against the underlying values.",
-         "Interpretations appear in the report, attributed to the author."),
-        ("Not delegated to AI",
-         "Selection of the research question, country, industries, SDG and policy "
-         "comparator; the argument; the conclusions.",
-         "n/a",
-         "Author's own work."),
-    ]
-    r = 5
-    for step, used, how, outcome in log:
-        for j, v in enumerate([step, used, how, outcome], start=1):
-            c = ws.cell(row=r, column=j, value=v)
-            c.font, c.alignment, c.border, c.fill = T_BODY, WRAP, BOX, F_RAW
-        ws.row_dimensions[r].height = 52
-        r += 1
-
-    source_note(ws, r + 1,
-                "This log records assistance during data assembly. Complete it with "
-                "any further AI use during drafting before submission. The assessment "
-                "requires that AI-assisted content be verified and acknowledged.")
-    ws.sheet_view.showGridLines = False
-    return ws
+    ws.write_string(r, 0, AI_LOG_FOOTER, fmt["small"])
+
+    finish(ws, [(0, 0, 34), (1, 1, 62), (2, 2, 62), (3, 3, 52)],
+           hide_grid=True, tab=style.TAB_CAUTION)
+    return len(LIMITATIONS), len(AI_LOG)
+
+
+# ------------------------------------------------------------------ build ---
+CONTENTS = [
+    ("00_COVER", "This sheet - what the workbook is and how to read it"),
+    ("02_MASTER", "Every observation, one row each. Start here."),
+    ("03_SOURCES", "Source register: authority, dataset code, URL, access date"),
+    ("04_DEFINITIONS", "What each series measures, and its denominator"),
+    ("05_CALC", "Derived quantities, as live formulas over 02_MASTER"),
+    ("F2_PAYMENTS", "Chart - instrument shares of physical-retail payments"),
+    ("F4_EXCLUSION", "Chart - six measures of digital exclusion"),
+    ("F5_EU27", "Chart - online purchasing across all 27 member states"),
+    ("F6_ADOPT_BENEFIT", "Chart - adoption against economic effect, with OLS"),
+    ("F1_BRANCHES", "Series behind report Figure 1"),
+    ("F11_EWASTE", "Series behind report Figure 9"),
+    ("F12_REACH", "Series behind report Figure 10"),
+    ("09_POLICY", "Dated policy instruments with legal citations"),
+    ("07_LIMITATIONS", "What the data cannot support, plus the AI use log"),
+]
 
 
 def main():
-    n = validate()
-    wb = Workbook()
-    wb.remove(wb.active)
+    n_obs = validate()
+    wb = xlsxwriter.Workbook(OUT, {"strings_to_numbers": False})
+    wb.set_properties({
+        "title": "Denmark: digital adoption and policy outcomes",
+        "subject": "ECON1596 Assessment 2 data workbook",
+        "author": STUDENT_ID,
+        "comments": f"Generated by build_workbook.py, v{VERSION}, {BUILT}.",
+    })
+    fmt = style.formats(wb)
 
-    sheet_cover(wb)
-    sheet_readme(wb)
-    sheet_master(wb)
-    sheet_sources(wb)
-    sheet_definitions(wb)
-    sheet_calc(wb)
-    sheet_f1(wb)
-    sheet_f2(wb)
-    sheet_f3(wb)
-    sheet_f4(wb)
-    sheet_f5(wb)
-    sheet_f6(wb)
-    sheet_f7(wb)
-    sheet_f8(wb)
-    sheet_f9(wb)
-    sheet_f10(wb)
-    sheet_f11(wb)
-    sheet_f12(wb)
-    sheet_gap(wb)
-    sheet_limitations(wb)
-    sheet_ai_log(wb)
-    sheet_policy(wb)
+    sheet_cover(wb, fmt, CONTENTS)
+    sheet_master(wb, fmt)
+    used = sheet_sources(wb, fmt)
+    n_series = sheet_definitions(wb, fmt)
+    n_calc = sheet_calc(wb, fmt)
 
-    wb.properties.title = "Denmark: Digital Adoption and Policy Outcomes"
-    wb.properties.subject = COURSE
-    wb.properties.creator = STUDENT_ID
-    wb.properties.description = (
-        f"Statistical annex, v{VERSION}, built {BUILT}. {n} verified observations."
-    )
+    sheet_payments(wb, fmt)
+    sheet_exclusion(wb, fmt)
+    dk_rank, n_countries = sheet_eu27(wb, fmt)
+    n_pairs, slope, r2, _xs, _ys, _paired = sheet_adopt_benefit(wb, fmt)
 
-    wb.save(OUT)
-    print(f"wrote {os.path.abspath(OUT)}")
-    print(f"{n} observations, {len(wb.sheetnames)} sheets")
+    n_extract = 0
+    for name, title, blurb, codes, source in EXTRACTS:
+        n_extract += sheet_extract(wb, fmt, name, title, blurb, codes, source)
+
+    n_policy = sheet_policy(wb, fmt)
+    n_lim, n_ai = sheet_limitations(wb, fmt)
+
+    # The contents list must match the tabs that actually exist. The previous
+    # workbook's cover omitted a sheet and misordered another, which is exactly
+    # the drift this assertion prevents.
+    built = [ws.get_name() for ws in wb.worksheets()]
+    listed = [n for n, _ in CONTENTS]
+    assert built == listed, f"contents list does not match tabs:\n{built}\n{listed}"
+
+    wb.close()
+
+    unknown = used - set(SOURCES)
+    assert not unknown, f"observations cite unknown sources: {sorted(unknown)}"
+
+    print(f"wrote {os.path.relpath(OUT, HERE)}")
+    print(f"  {len(built)} sheets, 4 charts")
+    print(f"  {n_obs} observations across {n_series} series, "
+          f"{len(SOURCES)} sources ({len(used)} cited)")
+    print(f"  {n_calc} derived quantities, {n_extract} rows in series extracts")
+    print(f"  {n_policy} policy events, {n_lim} limitations, {n_ai} AI log rows")
+    print(f"  Denmark ranks {dk_rank} of {n_countries} on online purchasing")
+    print(f"  OLS on {n_pairs} pairs: slope {slope:+.3f}, R-squared {r2:.3f}")
 
 
 if __name__ == "__main__":
