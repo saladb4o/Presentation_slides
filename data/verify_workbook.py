@@ -10,6 +10,7 @@ check below, named for the defect it exists to catch.
 """
 
 import os
+import re
 import sys
 
 import openpyxl
@@ -31,13 +32,55 @@ def check(condition, message):
         FAILURES.append(message)
 
 
-# The sheet names report/render.py and report/draft/appendix/A_regression.md
-# cite. The rebuild kept the report untouched, so losing one of these would
-# leave a caption pointing at a tab that does not exist.
-CITED_BY_REPORT = [
-    "02_MASTER", "09_POLICY", "F1_BRANCHES", "F2_PAYMENTS",
-    "F6_ADOPT_BENEFIT", "F11_EWASTE", "F12_REACH",
+REPORT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
+                          "report")
+
+# Three shapes a caption or an appendix uses to name a sheet:
+#   "workbook F9."            "Workbook sheet 09_POLICY"
+#   "on sheet `F6_ADOPT_BENEFIT`"
+#   "reproducible from `02_MASTER`"
+# The first requires a leading digit or capital so that "workbook value" and
+# "the workbook computes" are not read as sheet names; the third matches only
+# the unambiguous sheet-name shapes, so ordinary backticked code is not caught.
+SHEET_REFS = [
+    re.compile(r"[Ww]orkbook (?:sheet )?`?([0-9A-Z][A-Za-z0-9_]*)"),
+    re.compile(r"sheets? `?([0-9]{2}_[A-Z]+|F[0-9]+_[A-Z_]+)`?"),
+    re.compile(r"`([0-9]{2}_[A-Z]+|F[0-9]+_[A-Z_]+)`"),
 ]
+
+
+def referenced_sheets():
+    """Every workbook sheet the report names, with where it names it.
+
+    Scanning for this rather than keeping a list by hand is the check that
+    matters: the hand-kept list was built from a regex that only matched names
+    of the form F<digits>_<CAPS>, so it silently missed the captions that said
+    "workbook F9" and "Workbook F8". Four of those pointed at sheets the rebuild
+    had removed, and nothing noticed.
+    """
+    # Only the sources a caption is authored in: render.py, which holds the
+    # caption table, and the draft prose. DRAFT_REPORT.md is generated from
+    # those and would report stale references until it is rebuilt; the *_PLAN.md
+    # files are working notes, where a reference to a removed sheet is history
+    # rather than a defect.
+    sources = [os.path.join(REPORT_DIR, "render.py")]
+    for root, _dirs, files in os.walk(os.path.join(REPORT_DIR, "draft")):
+        sources += [os.path.join(root, f) for f in sorted(files)
+                    if f.endswith(".md")]
+
+    found = {}
+    for path in sources:
+        if not os.path.exists(path):
+            continue
+        with open(path, encoding="utf-8") as fh:
+            for lineno, line in enumerate(fh, 1):
+                for pattern in SHEET_REFS:
+                    for sheet in pattern.findall(line):
+                        where = f"{os.path.relpath(path, REPORT_DIR)}:{lineno}"
+                        seen = found.setdefault(sheet, [])
+                        if where not in seen:
+                            seen.append(where)
+    return found
 
 
 def cell_extent(anchor):
@@ -74,10 +117,16 @@ def main():
             continue
         check(name in on_cover, f"{name} is a tab but is not listed on 00_COVER")
 
-    # -- 2. every cited sheet still exists -----------------------------------
-    for name in CITED_BY_REPORT:
-        check(name in names,
-              f"{name} is cited by the report but is not a sheet in the workbook")
+    # -- 2. every sheet the report names still exists -------------------------
+    refs = referenced_sheets()
+    total = sum(len(v) for v in refs.values())
+    check(len(refs) >= 4 and total >= 12,
+          f"only {len(refs)} distinct sheet names over {total} references found "
+          f"in the report; the scanner is probably no longer matching")
+    for sheet, where in sorted(refs.items()):
+        check(sheet in names,
+              f"the report names workbook sheet {sheet} at {', '.join(where)}, "
+              f"but no such sheet exists")
 
     # -- 3. master integrity --------------------------------------------------
     master = wb["02_MASTER"]

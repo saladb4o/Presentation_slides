@@ -60,16 +60,16 @@ APPENDIX_BY_TOPIC = {stem.split("_", 1)[1]: letter
 # appendices do.
 APPENDIX_FIGURES = {
     "AF_RESID": ("figA_c1_residuals.png",
-                 "Residuals against fitted values, EU 2024 regression. Workbook F6."),
+                 "Residuals against fitted values, EU 2024 regression. Workbook F6_ADOPT_BENEFIT."),
     "AF_JACK": ("figA_c2_jackknife.png",
-                "Leave-one-out slopes, all 18 drops. Workbook F6."),
+                "Leave-one-out slopes, all 18 drops. Workbook F6_ADOPT_BENEFIT."),
     "AF_TAIL": ("figA_c3_tailselection.png",
-                "The six tail countries against the full cross-section. Workbook F6."),
+                "The six tail countries against the full cross-section. Workbook F6_ADOPT_BENEFIT."),
     "AF_LADDER": ("figA_d1_denominators.png",
                   "The exclusion estimates converted to people on their own bases."),
     "AF_SMV": ("fig8_smvdigital.png",
                "SMV:Digital participation: self-reported by participants to the "
-               "scheme's own funder. Workbook F8."),
+               "scheme's own funder. Workbook 06_SERIES."),
     "AF_GANTT": ("figA_f1_gantt.png",
                  "Implementation and evaluation timeline for the SMV:Digital "
                  "scoring-threshold design proposed in Question 2."),
@@ -90,20 +90,20 @@ SECTIONS = ["Q1_industries", "Q2_policy_comparison", "Q3_sdg",
 # Workbook sheet -> caption. The report figure NUMBER is assigned by first
 # appearance, so it never appears in this table.
 CAPTIONS = {
-    "F1":  "Danish retail bank branches, 2004-2024. Finans Danmark; workbook F1_BRANCHES.",
-    "F9":  "Danish banking consolidation: institutions, branches, employment. The three series begin in different years and must never be differenced. Finans Danmark; workbook F9.",
-    "F6":  "Consumer adoption and enterprise e-commerce turnover, EU 2024. Eurostat; workbook F6.",
-    "F3":  "E-sales share of enterprise turnover, Denmark and EU-27, 2014 and 2024. Eurostat; workbook F3.",
-    "F7":  "AI adoption by firm size, Denmark 2025. European Commission; workbook F7.",
-    "F4":  "Five estimates of Danish digital exclusion; denominators and years differ. Workbook F4.",
-    "F10": "Basic digital skills by age band, Denmark and EU-27, 2025. European Commission; workbook F10.",
+    "F1":  "Danish retail bank branches, 2004-2024. Finans Danmark; workbook 06_SERIES.",
+    "F9":  "Danish banking consolidation: institutions, branches, employment. The three series begin in different years and must never be differenced. Finans Danmark; workbook 06_SERIES.",
+    "F6":  "Consumer adoption and enterprise e-commerce turnover, EU 2024. Eurostat; workbook F6_ADOPT_BENEFIT.",
+    "F3":  "E-sales share of enterprise turnover, Denmark and EU-27, 2014 and 2024. Eurostat; workbook 06_SERIES.",
+    "F7":  "AI adoption by firm size, Denmark 2025. European Commission; workbook 06_SERIES.",
+    "F4":  "Five estimates of Danish digital exclusion; denominators and years differ. Workbook F4_EXCLUSION.",
+    "F10": "Basic digital skills by age band, Denmark and EU-27, 2025. European Commission; workbook 06_SERIES.",
     "F2":  "Instrument shares of physical-retail payments, 2017-2025. Danmarks Nationalbank; workbook F2_PAYMENTS.",
-    "F11": "ICT waste recycled or prepared for reuse, 2023. European Commission; workbook F11_EWASTE.",
+    "F11": "ICT waste recycled or prepared for reuse, 2023. European Commission; workbook 06_SERIES.",
     "F12": ("E-government reach against the measures it cannot see, Denmark. "
             "Left panel, Eurostat isoc_ciegi_ac, individuals aged 16 to 74, 2024; "
             "right panel, European Commission and Digitaliseringsstyrelsen, 2026, "
             "each measure on its own base. The panels are not comparable and are "
-            "never differenced; workbook F12_REACH."),
+            "never differenced; workbook 06_SERIES."),
 }
 
 # Table 1 is trimmed to the instruments the argument actually turns on; the full

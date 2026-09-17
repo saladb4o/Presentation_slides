@@ -21,6 +21,7 @@ TWO RULES THIS BUILD ENFORCES BY CONSTRUCTION
 """
 
 import os
+import re
 import sys
 from datetime import date
 
@@ -56,37 +57,80 @@ MASTER_HEADERS = [
 FIRST = 2                    # first Excel data row on 02_MASTER
 LAST = 1 + len(OBS)          # last Excel data row
 
-# Which report figure each series feeds. Read off report/build_figures.py, which
-# is the only place the report decides what a figure plots. This is the column
-# that lets a marker go from a number in the report to its row here in one step.
+# Which report figure each series feeds, keyed by the sheet key report/render.py
+# uses. The printed figure NUMBER is not that key: render.py numbers figures 1..n
+# by order of first appearance in the draft, so [[F6]] prints as "Figure 4". The
+# numbers below are therefore read out of the draft at build time rather than
+# written down here, because a hand-kept copy would drift the moment a paragraph
+# moved - and an earlier version of this column did exactly that, sending a
+# reader after "Fig 9" for a series the report prints as Figure 7.
+REPORT_DIR = os.path.join(HERE, "..", "report")
+
 FIGURE_SERIES = {
-    "Fig 1": ["DK.FIN.BRCH"],
-    "Fig 2": ["DK.FIN.INST", "DK.FIN.BRCH", "DK.FIN.EMP"],
-    "Fig 4": ["DK.ECM.ENT.TRN", "EU.ECM.ENT.TRN"],
-    "Fig 5": ["DK.ENT.AI", "DK.ENT.AI.LRG", "DK.ENT.AI.SME"],
-    "Fig 6": ["DK.DGP.EXMP", "DK.DGX.NOUSE", "DK.DGX.DIFF", "DK.DGX.DISADV.LO",
-              "DK.DGX.DISADV.HI", "DK.DGX.JUST"],
-    "Fig 7": ["DK.SKL.1624", "EU.SKL.1624", "DK.SKL.2554", "EU.SKL.2554",
-              "DK.SKL.5574", "EU.SKL.5574"],
-    "Fig 8": ["DK.SME.SMVD.INV", "DK.SME.SMVD.NOINV", "DK.SME.SMVD.PROJ"],
-    "Fig 9": ["DK.ENV.WEEE", "EU.ENV.WEEE"],
-    "Fig 10": ["DK.DGX.EGOV.USE", "EU.DGX.EGOV.USE", "DK.DGX.DIFF",
-               "DK.DGX.NOUSE", "DK.DGP.EXMP", "DK.FIN.INST", "DK.FIN.BRCH",
-               "DK.FIN.EMP", "DK.ENT.AI.LRG", "DK.ENT.AI.SME"],
-    "App. A": ["DK.PRD.LP.PER"],
-    "App. D": ["DK.POP.TOT", "DK.DGP.EXMP.N"],
-    "App. E": ["DK.PAY.CASH.POS", "DK.PAY.CRD.PHYS", "DK.PAY.WLT.SHR",
-               "EU.ECM.IND.BUY"],
+    "F1": ["DK.FIN.BRCH"],
+    "F9": ["DK.FIN.INST", "DK.FIN.BRCH", "DK.FIN.EMP"],
+    "F2": ["DK.PAY.CASH.POS", "DK.PAY.CRD.PHYS", "DK.PAY.WLT.SHR"],
+    "F6": [],                      # built from the cross-section, not one series
+    "F3": ["DK.ECM.ENT.TRN", "EU.ECM.ENT.TRN"],
+    "F7": ["DK.ENT.AI", "DK.ENT.AI.LRG", "DK.ENT.AI.SME"],
+    "F11": ["DK.ENV.WEEE", "EU.ENV.WEEE"],
+    "F12": ["DK.DGX.EGOV.USE", "EU.DGX.EGOV.USE", "DK.DGX.DIFF",
+            "DK.DGX.NOUSE", "DK.DGP.EXMP", "DK.FIN.INST", "DK.FIN.BRCH",
+            "DK.FIN.EMP", "DK.ENT.AI.LRG", "DK.ENT.AI.SME"],
+    "F4": ["DK.DGP.EXMP", "DK.DGX.NOUSE", "DK.DGX.DIFF", "DK.DGX.DISADV.LO",
+           "DK.DGX.DISADV.HI", "DK.DGX.JUST"],
+    "F10": ["DK.SKL.1624", "EU.SKL.1624", "DK.SKL.2554", "EU.SKL.2554",
+            "DK.SKL.5574", "EU.SKL.5574"],
+}
+
+# Figures that live in an appendix are numbered within it, so they never take a
+# body figure number.
+APPENDIX_FIGURE_SERIES = {
+    "Appendix B": ["DK.SME.SMVD.INV", "DK.SME.SMVD.NOINV", "DK.SME.SMVD.PROJ"],
+    "Appendix A": ["DK.PRD.LP.PER"],
+    "Appendix D": ["DK.POP.TOT", "DK.DGP.EXMP.N"],
 }
 
 
+def figure_numbers():
+    """sheet key -> printed figure number, by render.py's own rule.
+
+    Reads the draft and applies the same first-appearance ordering render.py
+    applies, so the workbook and the report cannot disagree about which figure
+    is which. If the draft is missing the workbook still builds, with the feeds
+    column naming the sheet key instead of a number.
+    """
+    draft = os.path.join(REPORT_DIR, "draft")
+    if not os.path.isdir(draft):
+        return {}
+    blob = []
+    for root, _dirs, files in os.walk(draft):
+        for name in sorted(files):
+            if name.endswith(".md"):
+                with open(os.path.join(root, name), encoding="utf-8") as fh:
+                    blob.append(fh.read().split("\n---\n")[0])
+    # Body sections first, then appendices, matching render.py's concatenation.
+    order, seen = [], set()
+    for key in re.findall(r"\[\[(F\d+)\]\]", "\n".join(blob)):
+        if key not in seen:
+            seen.add(key)
+            order.append(key)
+    return {key: i + 1 for i, key in enumerate(order)}
+
+
 def _report_refs():
-    """series_code -> the figures it feeds, as 'Fig 1; Fig 2'."""
+    """series_code -> the figures it feeds, as 'Figure 1; Figure 2'."""
+    nums = figure_numbers()
     out = {}
-    for fig, codes in FIGURE_SERIES.items():
+    for key, codes in FIGURE_SERIES.items():
+        label = f"Figure {nums[key]}" if key in nums else key
         for code in codes:
-            out.setdefault(code, []).append(fig)
-    return {c: "; ".join(f) for c, f in out.items()}
+            out.setdefault(code, []).append((nums.get(key, 99), label))
+    for label, codes in APPENDIX_FIGURE_SERIES.items():
+        for code in codes:
+            out.setdefault(code, []).append((100, label))
+    return {c: "; ".join(lab for _n, lab in sorted(set(v)))
+            for c, v in out.items()}
 
 
 REPORT_REF = _report_refs()
@@ -875,43 +919,56 @@ def sheet_adopt_benefit(wb, fmt):
     return n, slope, r2, xs, ys, paired
 
 
-# -------------------------------------------------- series-extract sheets ---
-# F1_BRANCHES, F11_EWASTE and F12_REACH carry no chart. They exist because the
-# report cites them by name - "workbook F1_BRANCHES" names a series, not a
-# figure - and the report is not being touched in this rebuild. Each is the
-# observations behind one report figure, which is all the citation promises.
-EXTRACTS = [
-    ("F1_BRANCHES", "Danish retail bank branches",
-     "The series behind Figure 1 of the report. Years are uneven because the "
-     "authority publishes irregularly; they are not interpolated.",
-     ["DK.FIN.BRCH"],
-     "Finans Danmark, Institutter, filialer og ansatte."),
-    ("F11_EWASTE", "ICT waste recycled or prepared for reuse",
-     "The series behind Figure 9 of the report. Denmark against the EU-27 "
-     "aggregate, same year and same base.",
-     ["DK.ENV.WEEE", "EU.ENV.WEEE"],
-     "European Commission, WEEE recovery statistics."),
-    ("F12_REACH", "How far the digital state reaches, and who it misses",
-     "The series behind Figure 10 of the report. Levels rather than "
-     "differences: these measures do not share a denominator and are never "
-     "differenced.",
-     ["DK.DGX.EGOV.USE", "EU.DGX.EGOV.USE", "DK.DGX.DIFF", "DK.DGX.NOUSE",
-      "DK.DGP.EXMP", "DK.FIN.INST", "DK.FIN.BRCH", "DK.FIN.EMP",
-      "DK.ENT.AI.LRG", "DK.ENT.AI.SME"],
-     "As recorded per row in 03_SOURCES."),
-]
+# ------------------------------------------------------------- 06_SERIES ---
+# One sheet for every report figure that has no chart sheet of its own. The
+# three separate extract sheets it replaces held 6, 2 and 19 observations and
+# overlapped - DK.FIN.BRCH appeared on two of them - so they were three tabs of
+# mostly the same few columns.
+#
+# It also carries the series behind four figures whose sheets the rebuild had
+# removed without repointing their captions (F3_ESALES, F7_QUALITY,
+# F9_CONSOLIDATION, F10_SKILLS) and the SMV:Digital series behind the Appendix B
+# figure, each of which was left pointing at a tab that no longer existed.
+SERIES_SHEET = "06_SERIES"
+
+# The figure keys whose data lives here rather than on a chart sheet. F2, F4 and
+# F6 are absent because each has its own chart sheet.
+SERIES_SHEET_FIGURES = ["F1", "F9", "F3", "F7", "F11", "F12", "F10"]
+SERIES_SHEET_APPENDIX = ["Appendix B"]
 
 
-def sheet_extract(wb, fmt, name, title, blurb, codes, source):
-    ws = wb.add_worksheet(name)
-    figure_header(ws, fmt, title, blurb)
+def series_sheet_codes():
+    """Every series the merged sheet shows, deduplicated, in report order."""
+    nums = figure_numbers()
+    ordered = []
+    for key in sorted(SERIES_SHEET_FIGURES, key=lambda k: nums.get(k, 99)):
+        for code in FIGURE_SERIES[key]:
+            if code not in ordered:
+                ordered.append(code)
+    for label in SERIES_SHEET_APPENDIX:
+        for code in APPENDIX_FIGURE_SERIES[label]:
+            if code not in ordered:
+                ordered.append(code)
+    return ordered
 
-    for c, h in enumerate(["series_code", "indicator", "geo", "year", "value",
-                           "unit", "denominator", "flag", "source"]):
+
+def sheet_series(wb, fmt):
+    ws = wb.add_worksheet(SERIES_SHEET)
+    figure_header(
+        ws, fmt, "Series behind the report figures",
+        "Every figure that is not drawn on its own sheet in this workbook. A "
+        "series feeding more than one figure appears once, with every figure it "
+        "feeds named in the last column.")
+
+    heads = ["series_code", "indicator", "geo", "year", "value", "unit",
+             "denominator", "flag", "source", "feeds"]
+    for c, h in enumerate(heads):
         ws.write(3, c, h, fmt["head"])
 
+    codes = series_sheet_codes()
     rows = sorted([r for r in OBS if r[0] in codes],
                   key=lambda r: (codes.index(r[0]), r[3]))
+
     for i, (code, ind, geo, year, value, unit, denom, flag, src, _note) \
             in enumerate(rows):
         r = 4 + i
@@ -926,13 +983,22 @@ def sheet_extract(wb, fmt, name, title, blurb, codes, source):
         ws.write_string(r, 6, denom, fmt["text"])
         ws.write_string(r, 7, flag, fmt["text_n"])
         ws.write_string(r, 8, src, fmt["code"])
+        ws.write_string(r, 9, REPORT_REF.get(code, ""), fmt["text_n"])
 
-    source_note(ws, fmt, 4 + len(rows) + 1, source)
+    note = 4 + len(rows) + 1
+    ws.write(note, 0, "Series feeding a figure that IS drawn in this workbook "
+                      "are on that chart's own sheet: payments on F2_PAYMENTS, "
+                      "exclusion on F4_EXCLUSION, the cross-section on "
+                      "F6_ADOPT_BENEFIT.", fmt["small"])
+    source_note(ws, fmt, note + 1, "As recorded per row in 03_SOURCES.")
+
+    ws.autofilter(3, 0, 3 + len(rows), len(heads) - 1)
     finish(ws, [(0, 0, 21), (1, 1, 44), (2, 2, 6), (3, 3, 7), (4, 4, 12),
-                (5, 5, 9), (6, 6, 34), (7, 7, 6), (8, 8, 9)],
-           freeze=(4, 1), hide_grid=False, tab=style.TAB_SUPPORT)
+                (5, 5, 9), (6, 6, 34), (7, 7, 6), (8, 8, 9), (9, 9, 26)],
+           freeze=(4, 1), hide_grid=False, repeat_header=True,
+           tab=style.TAB_SUPPORT)
     ws.set_row(3, 22)
-    return len(rows)
+    return len(rows), len(codes)
 
 
 # -------------------------------------------------------------- 09_POLICY ---
@@ -1031,13 +1097,11 @@ CONTENTS = [
     ("03_SOURCES", "Source register: authority, dataset code, URL, access date"),
     ("04_DEFINITIONS", "What each series measures, and its denominator"),
     ("05_CALC", "Derived quantities, as live formulas over 02_MASTER"),
+    ("06_SERIES", "Series behind every report figure not drawn here"),
     ("F2_PAYMENTS", "Chart - instrument shares of physical-retail payments"),
     ("F4_EXCLUSION", "Chart - six measures of digital exclusion"),
     ("F5_EU27", "Chart - online purchasing across all 27 member states"),
     ("F6_ADOPT_BENEFIT", "Chart - adoption against economic effect, with OLS"),
-    ("F1_BRANCHES", "Series behind report Figure 1"),
-    ("F11_EWASTE", "Series behind report Figure 9"),
-    ("F12_REACH", "Series behind report Figure 10"),
     ("09_POLICY", "Dated policy instruments with legal citations"),
     ("07_LIMITATIONS", "What the data cannot support, plus the AI use log"),
 ]
@@ -1060,14 +1124,12 @@ def main():
     n_series = sheet_definitions(wb, fmt)
     n_calc = sheet_calc(wb, fmt)
 
+    n_series_rows, n_series_codes = sheet_series(wb, fmt)
+
     sheet_payments(wb, fmt)
     sheet_exclusion(wb, fmt)
     dk_rank, n_countries = sheet_eu27(wb, fmt)
     n_pairs, slope, r2, _xs, _ys, _paired = sheet_adopt_benefit(wb, fmt)
-
-    n_extract = 0
-    for name, title, blurb, codes, source in EXTRACTS:
-        n_extract += sheet_extract(wb, fmt, name, title, blurb, codes, source)
 
     n_policy = sheet_policy(wb, fmt)
     n_lim, n_ai = sheet_limitations(wb, fmt)
@@ -1088,7 +1150,8 @@ def main():
     print(f"  {len(built)} sheets, 4 charts")
     print(f"  {n_obs} observations across {n_series} series, "
           f"{len(SOURCES)} sources ({len(used)} cited)")
-    print(f"  {n_calc} derived quantities, {n_extract} rows in series extracts")
+    print(f"  {n_calc} derived quantities, {n_series_rows} rows across "
+          f"{n_series_codes} series on {SERIES_SHEET}")
     print(f"  {n_policy} policy events, {n_lim} limitations, {n_ai} AI log rows")
     print(f"  Denmark ranks {dk_rank} of {n_countries} on online purchasing")
     print(f"  OLS on {n_pairs} pairs: slope {slope:+.3f}, R-squared {r2:.3f}")

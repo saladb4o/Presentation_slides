@@ -28,21 +28,21 @@ Whether wider adoption is associated with greater commercial activity can in tur
 | 2014-11-01 | Lov om Offentlig Digital Post | Digital Post becomes mandatory for citizens aged 15+ | Digitaliseringsstyrelsen 2025a |
 | 2023-10-31 | National electronic ID replacement programme | NemID fully phased out | Digitaliseringsstyrelsen 2023 |
 
-![Figure 1. Danish retail bank branches, 2004-2024. Finans Danmark; workbook F1_BRANCHES.](figures/fig1_branches.png)
+![Figure 1. Danish retail bank branches, 2004-2024. Finans Danmark; workbook 06_SERIES.](figures/fig1_branches.png)
 
-*Figure 1. Danish retail bank branches, 2004-2024. Finans Danmark; workbook F1_BRANCHES.*
+*Figure 1. Danish retail bank branches, 2004-2024. Finans Danmark; workbook 06_SERIES.*
 
-![Figure 2. Danish banking consolidation: institutions, branches, employment. The three series begin in different years and must never be differenced. Finans Danmark; workbook F9.](figures/fig2_consolidation.png)
+![Figure 2. Danish banking consolidation: institutions, branches, employment. The three series begin in different years and must never be differenced. Finans Danmark; workbook 06_SERIES.](figures/fig2_consolidation.png)
 
-*Figure 2. Danish banking consolidation: institutions, branches, employment. The three series begin in different years and must never be differenced. Finans Danmark; workbook F9.*
+*Figure 2. Danish banking consolidation: institutions, branches, employment. The three series begin in different years and must never be differenced. Finans Danmark; workbook 06_SERIES.*
 
 ![Figure 3. Instrument shares of physical-retail payments, 2017-2025. Danmarks Nationalbank; workbook F2_PAYMENTS.](figures/figA_e2_payments.png)
 
 *Figure 3. Instrument shares of physical-retail payments, 2017-2025. Danmarks Nationalbank; workbook F2_PAYMENTS.*
 
-![Figure 4. Consumer adoption and enterprise e-commerce turnover, EU 2024. Eurostat; workbook F6.](figures/fig3_regression.png)
+![Figure 4. Consumer adoption and enterprise e-commerce turnover, EU 2024. Eurostat; workbook F6_ADOPT_BENEFIT.](figures/fig3_regression.png)
 
-*Figure 4. Consumer adoption and enterprise e-commerce turnover, EU 2024. Eurostat; workbook F6.*
+*Figure 4. Consumer adoption and enterprise e-commerce turnover, EU 2024. Eurostat; workbook F6_ADOPT_BENEFIT.*
 
 ---
 
@@ -60,13 +60,13 @@ Denmark's SMV:Digital and Germany's *Digital Jetzt* were built for this purpose,
 
 **Recommended improvement.** The remedy is latent in the Danish design, since SMV:Digital already scores its applicants and so already produces a funding threshold, which it then discards. Near that cut-off, funding turns on assessor variation rather than on the firm, which makes applicants just above and below comparable on precisely the unobservables that defeat matching. Retaining the scores and publishing the cut-off would therefore permit a regression discontinuity estimate at administrative cost alone (Appendix B).
 
-![Figure 5. E-sales share of enterprise turnover, Denmark and EU-27, 2014 and 2024. Eurostat; workbook F3.](figures/fig4_esales.png)
+![Figure 5. E-sales share of enterprise turnover, Denmark and EU-27, 2014 and 2024. Eurostat; workbook 06_SERIES.](figures/fig4_esales.png)
 
-*Figure 5. E-sales share of enterprise turnover, Denmark and EU-27, 2014 and 2024. Eurostat; workbook F3.*
+*Figure 5. E-sales share of enterprise turnover, Denmark and EU-27, 2014 and 2024. Eurostat; workbook 06_SERIES.*
 
-![Figure 6. AI adoption by firm size, Denmark 2025. European Commission; workbook F7.](figures/fig5_ai_firmsize.png)
+![Figure 6. AI adoption by firm size, Denmark 2025. European Commission; workbook 06_SERIES.](figures/fig5_ai_firmsize.png)
 
-*Figure 6. AI adoption by firm size, Denmark 2025. European Commission; workbook F7.*
+*Figure 6. AI adoption by firm size, Denmark 2025. European Commission; workbook 06_SERIES.*
 
 ---
 
@@ -80,9 +80,9 @@ Against this, Denmark performs the disposal side of the same goal badly, for the
 
 The two halves are connected by the same policy, which makes the contrast more than coincidence: a mandate requiring every adult to transact digitally also requires every adult to hold a device capable of running MitID, and that obligation was justified on an administrative saving alone. The environmental case for Danish digitalisation has accordingly been made on dematerialisation, while the circularity side of the same goal is where performance is weakest.
 
-![Figure 7. ICT waste recycled or prepared for reuse, 2023. European Commission; workbook F11_EWASTE.](figures/fig9_ewaste.png)
+![Figure 7. ICT waste recycled or prepared for reuse, 2023. European Commission; workbook 06_SERIES.](figures/fig9_ewaste.png)
 
-*Figure 7. ICT waste recycled or prepared for reuse, 2023. European Commission; workbook F11_EWASTE.*
+*Figure 7. ICT waste recycled or prepared for reuse, 2023. European Commission; workbook 06_SERIES.*
 
 ---
 
@@ -98,17 +98,17 @@ That gap is administrative rather than a skills deficit, as the skills data make
 
 The criteria should accordingly be widened to admit documented difficulty rather than the listed statutory grounds alone, and Denmark has solved the adjacent problem already. Folketinget (2023) provided that from June 2023 an exempt citizen is entitled, on request, to a non-digital alternative to any mandatory self-service solution. That decoupled the channel from the obligation but left the qualifying criteria untouched, because the right runs only to those already exempt. The Conseil d'État (2022) and the Belgian Cour constitutionnelle (2025) have since attached the equivalent entitlement to the difficulty itself rather than to a prior status (Appendix D).
 
-![Figure 8. E-government reach against the measures it cannot see, Denmark. Left panel, Eurostat isoc_ciegi_ac, individuals aged 16 to 74, 2024; right panel, European Commission and Digitaliseringsstyrelsen, 2026, each measure on its own base. The panels are not comparable and are never differenced; workbook F12_REACH.](figures/fig10_reach.png)
+![Figure 8. E-government reach against the measures it cannot see, Denmark. Left panel, Eurostat isoc_ciegi_ac, individuals aged 16 to 74, 2024; right panel, European Commission and Digitaliseringsstyrelsen, 2026, each measure on its own base. The panels are not comparable and are never differenced; workbook 06_SERIES.](figures/fig10_reach.png)
 
-*Figure 8. E-government reach against the measures it cannot see, Denmark. Left panel, Eurostat isoc_ciegi_ac, individuals aged 16 to 74, 2024; right panel, European Commission and Digitaliseringsstyrelsen, 2026, each measure on its own base. The panels are not comparable and are never differenced; workbook F12_REACH.*
+*Figure 8. E-government reach against the measures it cannot see, Denmark. Left panel, Eurostat isoc_ciegi_ac, individuals aged 16 to 74, 2024; right panel, European Commission and Digitaliseringsstyrelsen, 2026, each measure on its own base. The panels are not comparable and are never differenced; workbook 06_SERIES.*
 
-![Figure 9. Five estimates of Danish digital exclusion; denominators and years differ. Workbook F4.](figures/fig6_exclusion.png)
+![Figure 9. Five estimates of Danish digital exclusion; denominators and years differ. Workbook F4_EXCLUSION.](figures/fig6_exclusion.png)
 
-*Figure 9. Five estimates of Danish digital exclusion; denominators and years differ. Workbook F4.*
+*Figure 9. Five estimates of Danish digital exclusion; denominators and years differ. Workbook F4_EXCLUSION.*
 
-![Figure 10. Basic digital skills by age band, Denmark and EU-27, 2025. European Commission; workbook F10.](figures/fig7_skills.png)
+![Figure 10. Basic digital skills by age band, Denmark and EU-27, 2025. European Commission; workbook 06_SERIES.](figures/fig7_skills.png)
 
-*Figure 10. Basic digital skills by age band, Denmark and EU-27, 2025. European Commission; workbook F10.*
+*Figure 10. Basic digital skills by age band, Denmark and EU-27, 2025. European Commission; workbook 06_SERIES.*
 
 ---
 
@@ -241,17 +241,17 @@ That test has a limit worth stating, since the limit is the strongest objection 
 
 Adoption is measured on consumers and turnover on enterprises, including business-to-business ordering no consumer ever touches, so the two axes are not two sides of one transaction. National income appears on neither axis and would plausibly raise both. Both are single-year cross-sections, so nothing here identifies a direction of causation. The relationship is an association that survives every robustness check available on eighteen observations, and that is the whole of the claim.
 
-![Figure A1. Residuals against fitted values, EU 2024 regression. Workbook F6.](figures/figA_c1_residuals.png)
+![Figure A1. Residuals against fitted values, EU 2024 regression. Workbook F6_ADOPT_BENEFIT.](figures/figA_c1_residuals.png)
 
-*Figure A1. Residuals against fitted values, EU 2024 regression. Workbook F6.*
+*Figure A1. Residuals against fitted values, EU 2024 regression. Workbook F6_ADOPT_BENEFIT.*
 
-![Figure A2. Leave-one-out slopes, all 18 drops. Workbook F6.](figures/figA_c2_jackknife.png)
+![Figure A2. Leave-one-out slopes, all 18 drops. Workbook F6_ADOPT_BENEFIT.](figures/figA_c2_jackknife.png)
 
-*Figure A2. Leave-one-out slopes, all 18 drops. Workbook F6.*
+*Figure A2. Leave-one-out slopes, all 18 drops. Workbook F6_ADOPT_BENEFIT.*
 
-![Figure A3. The six tail countries against the full cross-section. Workbook F6.](figures/figA_c3_tailselection.png)
+![Figure A3. The six tail countries against the full cross-section. Workbook F6_ADOPT_BENEFIT.](figures/figA_c3_tailselection.png)
 
-*Figure A3. The six tail countries against the full cross-section. Workbook F6.*
+*Figure A3. The six tail countries against the full cross-section. Workbook F6_ADOPT_BENEFIT.*
 
 ---
 
@@ -310,9 +310,9 @@ Figure B2
 
 The schedule is anchored on the grant pool opening 26 October 2026 (SMV:Digital 2026). The critical path runs through scoring and disclosure, not disbursement: every later step depends on the scores and the cut-off being recorded at the time, and none of it can be reconstructed afterwards. A scheme that allocates first and asks about effect later has already foreclosed the sharper answer, which is the position SMV:Digital is in today.
 
-![Figure B1. SMV:Digital participation: self-reported by participants to the scheme's own funder. Workbook F8.](figures/fig8_smvdigital.png)
+![Figure B1. SMV:Digital participation: self-reported by participants to the scheme's own funder. Workbook 06_SERIES.](figures/fig8_smvdigital.png)
 
-*Figure B1. SMV:Digital participation: self-reported by participants to the scheme's own funder. Workbook F8.*
+*Figure B1. SMV:Digital participation: self-reported by participants to the scheme's own funder. Workbook 06_SERIES.*
 
 ![Figure B2. Implementation and evaluation timeline for the SMV:Digital scoring-threshold design proposed in Question 2.](figures/figA_f1_gantt.png)
 

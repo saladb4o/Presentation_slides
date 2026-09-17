@@ -69,14 +69,35 @@ would mean re-verifying, which is how the fabricated-data incident recorded in
 
 ## Sheets
 
-Fourteen, down from twenty-two. The eight chart sheets that were dropped
-duplicated report figures that are already rendered at publication quality; their
-observations remain in `02_MASTER` and their derived numbers in `05_CALC`.
+Twelve, down from twenty-two. The chart sheets that were dropped duplicated
+report figures already rendered at publication quality; their observations remain
+in `02_MASTER` and their derived numbers in `05_CALC`.
 
-`F1_BRANCHES`, `F11_EWASTE` and `F12_REACH` carry no chart. They exist because
-`report/render.py` cites them by name, and the report was deliberately left
-untouched by this rebuild. `verify_workbook.py` fails if any of the seven sheet
-names the report cites stops existing.
+`06_SERIES` holds the series behind every report figure that is not drawn in this
+workbook, deduplicated, with a `feeds` column naming each figure. It replaces the
+three separate extract sheets `F1_BRANCHES`, `F11_EWASTE` and `F12_REACH`, which
+between them held 34 rows of the same ten columns and overlapped — `DK.FIN.BRCH`
+appeared on two of them.
+
+### The figure-number trap
+
+`render.py` numbers figures 1..n **by order of first appearance in the draft**,
+so its caption keys are not figure numbers: `[[F6]]` prints as "Figure 4". An
+earlier version of the `report_ref` column was written by hand from
+`build_figures.py`'s function names and was therefore wrong for almost every
+series — it sent a reader after "Fig 9" for what the report prints as Figure 7,
+and labelled the payments series "App. E" when it is Figure 3.
+
+`figure_numbers()` in `build_workbook.py` now applies render.py's own rule to the
+draft at build time, so the two cannot disagree.
+
+### Sheet references in the report are checked, not listed
+
+`verify_workbook.py` scans `render.py` and the draft for every sheet name they
+mention and fails if one does not exist. The previous hand-kept list was built
+from a regex matching only `F<digits>_<CAPS>`, so it missed the captions reading
+"workbook F9" and "Workbook F8" — and four of those pointed at sheets this
+rebuild had removed, with nothing to notice.
 
 ## Presentation conventions
 
