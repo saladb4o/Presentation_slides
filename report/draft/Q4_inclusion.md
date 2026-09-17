@@ -1,11 +1,10 @@
 ## Question 4. Digital inclusion: older citizens and the Digital Post mandate
 
 A mandate binding every adult falls most heavily on those least able to comply,
-whose only relief is statutory exemption from Digital Post. The scale of that
-relief among the oldest citizens therefore indicates the difficulty:
-Digitaliseringsstyrelsen [[DG1:y]] reports that nearly one
-citizen in five aged 75 to 84 holds a formal exemption, rising to roughly one in
-three among those aged 85 and over.
+whose only relief is statutory exemption from Digital Post. The scale of that relief among the oldest citizens therefore indicates the
+difficulty: Digitaliseringsstyrelsen [[DG1:y]] reports that nearly one citizen
+in five aged 75 to 84 holds a formal exemption, rising to roughly one in three
+among those 85 and over.
 
 The measure on which Denmark ranks first is the one least able to detect this,
 since Eurostat [[ES9:y]] puts Danish e-government use at 98.5% while the survey
@@ -18,12 +17,11 @@ that do not agree, the narrowest being exemption itself: in the first quarter of
 2026, 4.7% of citizens aged 15 and over, or 238,479 people, held one.
 The European Commission [[EC1:y]] reports that 16.5% of Danes have difficulty
 using digital public services, while Digitaliseringsstyrelsen [[DG2:y]] and
-Justitia [[JU1:y]] put the widest estimates near a quarter of adults. These are not points on a scale, since measure, year and denominator all differ;
+Justitia [[JU1:y]] put the widest estimates near a quarter of adults. These are not points on a scale, since measure, year and denominator differ;
 [[F4]] sets them side by side and [[AP:exclusion]] reconciles them. Because the
-counts are clearer than the percentages, the conversion is worth making: against
-a population of 6,025,603 [[DST2]], 16.5% is roughly 994,000 people to 238,479
-exempt, so that some three-quarters of a million Danes struggle with a compulsory system
-while holding no standing outside it.
+counts are clearer than the percentages, the conversion is worth making: against a population of 6,025,603 [[DST2]], 16.5% is roughly 994,000 people to
+238,479 exempt, meaning that some three-quarters of a million Danes struggle
+with a compulsory system while holding no standing outside it.
 
 That gap is administrative rather than a skills deficit, as the skills data make
 clear: Denmark's weakest age band, those aged 55 to 74, reaches 68% with at
@@ -33,7 +31,7 @@ the bottom of its own distribution, and the exemption criteria are drawn more
 narrowly than the difficulty they relieve.
 
 The criteria should accordingly be widened to admit documented difficulty rather
-than only the listed statutory grounds, and Denmark has solved the adjacent
+than the listed statutory grounds alone, and Denmark has solved the adjacent
 problem already. Folketinget [[LOV1:y]]
 provided that from June 2023 an exempt citizen is entitled, on request, to a
 non-digital alternative to any mandatory self-service solution. That decoupled the channel from the obligation but left the qualifying criteria

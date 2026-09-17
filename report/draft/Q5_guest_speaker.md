@@ -9,12 +9,14 @@ Tran [[GS1:y]] reported that in a PwC survey of Asia-Pacific chief executives,
 82% had adopted generative artificial intelligence within five years while far
 fewer could identify revenue attributable to it. Denmark shows the same gap,
 adoption being high by European standards at 42% of enterprises yet concentrated
-at 75% of large firms against 41% of small and medium ones. Access has been distributed and capability has not, the conclusion Question 2
-reaches from Danish registers and the speaker reached from a regional survey.
+at 75% of large firms against 41% of small and medium ones. Access has been distributed and capability has not, which is the conclusion
+Question 2 reaches from Danish registers and the speaker from a regional
+survey.
 
-The sustainability half supplied a test for that kind of claim, Tran's position
-being that a net zero commitment means little unless an external body has
-validated it, an unvalidated commitment being one the claimant grades itself, whereas PwC's own reduction of 22% is stated against a target the Science Based
+The sustainability half supplied a test for that kind of claim. Tran's position
+was that a net zero commitment means little unless an external body has
+validated it, because an unvalidated commitment is one the claimant grades
+itself; PwC's own reduction of 22% is stated against a target the Science Based
 Targets initiative validated. Applied to Denmark, that standard is uncomfortable, since SMV:Digital's headline
 figures are reported by participants to the body funding the scheme [[DG3]],
 which is why Question 2 recommends an evaluation the agency does not run.
@@ -24,7 +26,7 @@ it can be stated at all.
 
 One detail transfers directly to policy: Tran put the cost of validation at USD
 10,000 to 25,000, which in practice restricts it to large corporations, and
-described public programmes extending that capability to smaller firms.
-That is the same instrument, and the same justification, as SMV:Digital, since
-the fixed cost of proving anything, emissions or returns, weighs more heavily
-the smaller the firm bearing it.
+described public programmes extending that capability to smaller firms. That is
+the same instrument, and the same justification, as SMV:Digital, since the fixed
+cost of proving anything, emissions or returns, weighs the more heavily on the
+smaller firm.

@@ -358,9 +358,9 @@ def build():
         },
         "thesis": (
             "Thesis. Danish digital adoption is near-universal among citizens "
-            "and thin among firms and at the edges of the population, and the "
-            "instrument that delivered the universal part, legal compulsion, "
-            "is why the rest is missing."
+            "but thin among firms and at the edges of the population, and "
+            "legal compulsion, the instrument that delivered the universal "
+            "part, is why the rest is missing."
         ),
         "sections": sections,
         "table1": table1,

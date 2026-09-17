@@ -1,7 +1,7 @@
 ## Question 2. Policy comparison: SME digitalisation support in Denmark and Germany
 
 Denmark's difficulty is not getting technology to its firms but getting value
-out of it once it arrives, and both policies here address that gap. Its citizens rank first in the Union on e-government use, yet its firms rank
+out of it once it arrives, and both policies compared below address that gap. Its citizens rank first in the Union on e-government use, yet its firms rank
 second on e-sales while only 39% make any, behind Lithuania at 43% [[ES5]]: a
 high rank on a low level is the problem rather than the achievement.
 
@@ -17,8 +17,8 @@ digital-intensity threshold against an EU average of 71%. What they lack is the
 complementary capital, namely data, systems integration and specialist staff,
 that converts access into application.
 
-Denmark's SMV:Digital and Germany's *Digital Jetzt* were both built for this
-purpose, both being co-financed grants aimed at small and medium enterprises that would
+Denmark's SMV:Digital and Germany's *Digital Jetzt* were built for this purpose,
+both being co-financed grants aimed at small and medium enterprises that would
 not otherwise invest. They
 differ chiefly in how they choose recipients: SMV:Digital scores applications
 and funds the highest scorers until the pool is exhausted [[SMV1]], whereas
@@ -26,11 +26,11 @@ and funds the highest scorers until the pool is exhausted [[SMV1]], whereas
 
 **Effectiveness.** Denmark's scheme is the better evidenced, since Digitaliseringsstyrelsen [[DG3:y]] links recipients to Danmarks Statistik
 registers and compares them with matched controls, reporting revenue growth of
-18% against 13% and employment growth of 8% against 4%. No comparable register-linked estimate is published for *Digital Jetzt*, whose
-allocation rule moreover drew an objection Denmark's does not face. The
-Bundesrechnungshof [[BRH1:y]] criticised awarding funding by lottery rather than
-on criteria, warned that firms would postpone investment while awaiting a
-favourable draw, and called for the procedure to be discontinued. A lottery makes the grant a prize worth waiting for, and waiting is the opposite
+18% against 13% and employment growth of 8% against 4%. No comparable estimate is published for *Digital Jetzt*, whose allocation rule
+moreover drew an objection Denmark's does not face. The Bundesrechnungshof
+[[BRH1:y]] criticised awarding funding by lottery rather than on criteria,
+warned that firms would postpone investment while awaiting a favourable draw,
+and called for the procedure to be discontinued. A lottery makes the grant a prize worth waiting for, and waiting is the opposite
 of what the scheme exists to produce.
 
 **Weaknesses.** Denmark's advantage is nevertheless narrower than it appears,
@@ -42,7 +42,7 @@ the firms that never apply.
 
 **Recommended improvement.** The remedy is latent in the Danish design, since SMV:Digital already scores its
 applicants and so already produces a funding threshold, which it then discards. Near that cut-off, funding turns on assessor variation rather than on the firm,
-which makes applicants just above and just below comparable on precisely the
+which makes applicants just above and below comparable on precisely the
 unobservables that defeat matching. Retaining the scores and publishing the
 cut-off would therefore permit a regression discontinuity estimate at
 administrative cost alone ([[AP:policy_spec]]).
