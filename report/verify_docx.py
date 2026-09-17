@@ -9,6 +9,7 @@ reads: if these properties are present and correct, Word applies them.
 What this does NOT prove: that the result looks good. Open it once before
 submitting.
 """
+import html
 import pathlib
 import re
 import sys
@@ -17,7 +18,7 @@ import zipfile
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "report"))
 from render import build, FIGURE_FILES                      # noqa: E402
-from sources import REFERENCE_ONLY, SOURCES                 # noqa: E402
+from sources import REFERENCE_ONLY, SOURCES, plain          # noqa: E402
 
 W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 failures, checks = [], 0
@@ -74,7 +75,14 @@ def main():
           f"page size is not A4: {pg.groups() if pg else 'absent'}")
 
     # --- structure --------------------------------------------------------
-    text = re.sub(r"<[^>]+>", "", doc)
+    # Unescape AFTER stripping tags, never before: "&lt;" unescaped first would
+    # become a "<" that the tag pattern then eats, taking the URL with it.
+    # Without this, every reference ending in <https://...> is stored escaped and
+    # matches nothing, so the reference-list strings are never removed from the
+    # prose below and their own punctuation is checked as though the report had
+    # written it. That is how DG4's "Digital Post - lovgivning" surfaced as a
+    # house-style dash breach in prose that does not contain it.
+    text = html.unescape(re.sub(r"<[^>]+>", "", doc))
 
     # Every column the renderer defines must reach the document, and every
     # date in Table 1 is a factual claim that must carry its source.
@@ -97,7 +105,8 @@ def main():
             check(fig["caption"][:40] in text,
                   f"missing caption: {fig['caption'][:40]}")
     for ref in r["references"]:
-        check(ref.split(",")[0] in text, f"missing reference: {ref[:40]}")
+        check(plain(ref).split(",")[0] in text,
+              f"missing reference: {plain(ref)[:40]}")
     check(len(z.read("word/footer1.xml")) > 0 if "word/footer1.xml" in z.namelist()
           else False, "no footer part")
     footer = z.read("word/footer1.xml").decode("utf-8")
@@ -217,7 +226,12 @@ def main():
     # stray dash in the body hide behind a dash in a title.
     prose = text
     for ref in r["references"]:
-        prose = prose.replace(ref, "")
+        # plain(): the reference strings carry asterisks around the italicised
+        # title, and the text extracted from the .docx does not - the asterisks
+        # became formatting. Removing the marked-up form would remove nothing,
+        # and DG4's en dash would then read as a house-style breach in prose it
+        # is not part of.
+        prose = prose.replace(plain(ref), "")
     # A hyphen with a space either side is a dash by another name. The em and
     # en dash check below never saw the one in the thesis line because that
     # string lives in the renderer, not in a draft file.

@@ -19,10 +19,9 @@ SOURCES = {
         url="https://www.nationalbanken.dk/en/what-we-do/safe-and-efficient-payments/payment-habits-in-denmark",
         accessed=ACCESSED,
         harvard=(
-            "Danmarks Nationalbank 2025, Danskernes betalingsvaner, Danmarks "
+            "Danmarks Nationalbank 2025, *Danskernes betalingsvaner*, Danmarks "
             "Nationalbank, Copenhagen, accessed 12 September 2026, "
-            "<https://www.nationalbanken.dk/en/what-we-do/safe-and-efficient-payments/"
-            "payment-habits-in-denmark>."
+            "<https://www.nationalbanken.dk/en/what-we-do/safe-and-efficient-payments/payment-habits-in-denmark>."
         ),
     ),
     "FD1": dict(
@@ -32,7 +31,7 @@ SOURCES = {
         url="https://finansdanmark.dk/tal-og-data/institutter-filialer-ansatte/",
         accessed=ACCESSED,
         harvard=(
-            "Finans Danmark 2025, Institutter, filialer & ansatte, Finans Danmark, "
+            "Finans Danmark 2025, *Institutter, filialer & ansatte*, Finans Danmark, "
             "Copenhagen, accessed 12 September 2026, "
             "<https://finansdanmark.dk/tal-og-data/institutter-filialer-ansatte/>."
         ),
@@ -44,8 +43,9 @@ SOURCES = {
         url="https://ec.europa.eu/eurostat/statistics-explained/index.php?title=E-commerce_statistics_for_individuals",
         accessed=ACCESSED,
         harvard=(
-            "Eurostat 2025, E-commerce statistics for individuals, Statistics "
-            "Explained, European Commission, Luxembourg, accessed 12 September 2026."
+            "Eurostat 2025, *E-commerce statistics for individuals*, Statistics "
+            "Explained, European Commission, Luxembourg, accessed 12 September 2026, "
+            "<https://ec.europa.eu/eurostat/statistics-explained/index.php?title=E-commerce_statistics_for_individuals>."
         ),
     ),
     "ES2": dict(
@@ -55,8 +55,9 @@ SOURCES = {
         url="https://ec.europa.eu/eurostat/web/products-eurostat-news/-/ddn-20210217-1",
         accessed=ACCESSED,
         harvard=(
-            "Eurostat 2021, Online shopping ever more popular in 2020, European "
-            "Commission, Luxembourg, accessed 12 September 2026."
+            "Eurostat 2021, *Online shopping ever more popular in 2020*, European "
+            "Commission, Luxembourg, accessed 12 September 2026, "
+            "<https://ec.europa.eu/eurostat/web/products-eurostat-news/-/ddn-20210217-1>."
         ),
     ),
     "ES3": dict(
@@ -66,8 +67,9 @@ SOURCES = {
         url="https://ec.europa.eu/eurostat/web/products-eurostat-news/-/ddn-20220202-1",
         accessed=ACCESSED,
         harvard=(
-            "Eurostat 2022, Online shopping ever more popular, European Commission, "
-            "Luxembourg, accessed 12 September 2026."
+            "Eurostat 2022, *Online shopping ever more popular*, European Commission, "
+            "Luxembourg, accessed 12 September 2026, "
+            "<https://ec.europa.eu/eurostat/web/products-eurostat-news/-/ddn-20220202-1>."
         ),
     ),
     "ES4": dict(
@@ -77,8 +79,9 @@ SOURCES = {
         url="https://ec.europa.eu/eurostat/web/products-eurostat-news/w/ddn-20250220-3",
         accessed=ACCESSED,
         harvard=(
-            "Eurostat 2025, E-commerce statistics for individuals, European "
-            "Commission, Luxembourg, accessed 12 September 2026."
+            "Eurostat 2025, *E-commerce statistics for individuals*, European "
+            "Commission, Luxembourg, accessed 12 September 2026, "
+            "<https://ec.europa.eu/eurostat/web/products-eurostat-news/w/ddn-20250220-3>."
         ),
     ),
     "ES5": dict(
@@ -88,8 +91,9 @@ SOURCES = {
         url="https://ec.europa.eu/eurostat/web/products-eurostat-news/w/ddn-20250227-2",
         accessed=ACCESSED,
         harvard=(
-            "Eurostat 2025, EU enterprises' online sales reach new heights, European "
-            "Commission, Luxembourg, accessed 12 September 2026."
+            "Eurostat 2025, *EU enterprises' online sales reach new heights*, "
+            "European Commission, Luxembourg, accessed 12 September 2026, "
+            "<https://ec.europa.eu/eurostat/web/products-eurostat-news/w/ddn-20250227-2>."
         ),
     ),
     "ES6": dict(
@@ -102,9 +106,10 @@ SOURCES = {
         url="https://ec.europa.eu/eurostat/databrowser/view/tin00110/default/table?lang=en",
         accessed=ACCESSED,
         harvard=(
-            "Eurostat 2025, Share of enterprises' turnover on e-commerce "
-            "(tin00110), European Commission, Luxembourg, accessed "
-            "12 September 2026."
+            "Eurostat 2025, *Share of enterprises' turnover on e-commerce "
+            "(tin00110)*, European Commission, Luxembourg, accessed 12 September "
+            "2026, "
+            "<https://ec.europa.eu/eurostat/databrowser/view/tin00110/default/table?lang=en>."
         ),
     ),
     "EC1": dict(
@@ -117,8 +122,10 @@ SOURCES = {
         url="https://digital-strategy.ec.europa.eu/en/policies/desi",
         accessed=ACCESSED,
         harvard=(
-            "European Commission 2026, Digital Decade 2026 country report: Denmark, "
-            "SWD(2026) 155 final, Part 7/27, European Commission, Brussels."
+            "European Commission 2026, *Digital Decade 2026 country report: Denmark*, "
+            "SWD(2026) 155 final, Part 7/27, European Commission, Brussels, accessed "
+            "12 September 2026, "
+            "<https://digital-strategy.ec.europa.eu/en/policies/desi>."
         ),
     ),
     "DG1": dict(
@@ -128,8 +135,9 @@ SOURCES = {
         url="https://digst.dk/tal-og-statistik/",
         accessed=ACCESSED,
         harvard=(
-            "Digitaliseringsstyrelsen 2026, Statistik om Digital Post, Agency for "
-            "Digital Government, Copenhagen, accessed 12 September 2026."
+            "Digitaliseringsstyrelsen 2026, *Statistik om Digital Post*, Agency for "
+            "Digital Government, Copenhagen, accessed 12 September 2026, "
+            "<https://digst.dk/tal-og-statistik/>."
         ),
     ),
     "DG2": dict(
@@ -139,9 +147,10 @@ SOURCES = {
         url="https://digst.dk/digital-inklusion/viden-om-digital-inklusion/hvem-oplever-udfordringer-ved-det-digitale/",
         accessed=ACCESSED,
         harvard=(
-            "Digitaliseringsstyrelsen 2025, Hvem oplever udfordringer ved det "
-            "digitale?, Agency for Digital Government, Copenhagen, accessed "
-            "12 September 2026."
+            "Digitaliseringsstyrelsen 2025, *Hvem oplever udfordringer ved det "
+            "digitale?*, Agency for Digital Government, Copenhagen, accessed 12 "
+            "September 2026, "
+            "<https://digst.dk/digital-inklusion/viden-om-digital-inklusion/hvem-oplever-udfordringer-ved-det-digitale/>."
         ),
     ),
     "DG3": dict(
@@ -151,10 +160,10 @@ SOURCES = {
         url="https://digst.dk/media/yz2ouzzz/effektmaaling-af-smvdigital-2025.pdf",
         accessed=ACCESSED,
         harvard=(
-            "Digitaliseringsstyrelsen 2025, Effektmåling af SMV:Digital, prepared by "
-            "Danmarks Statistik, Agency for Digital Government, Copenhagen, accessed "
-            "12 September 2026, <https://digst.dk/media/yz2ouzzz/"
-            "effektmaaling-af-smvdigital-2025.pdf>."
+            "Digitaliseringsstyrelsen 2025, *Effektmåling af SMV:Digital*, prepared "
+            "by Danmarks Statistik, Agency for Digital Government, Copenhagen, "
+            "accessed 12 September 2026, "
+            "<https://digst.dk/media/yz2ouzzz/effektmaaling-af-smvdigital-2025.pdf>."
         ),
     ),
     "JU1": dict(
@@ -164,8 +173,9 @@ SOURCES = {
         url="https://justitia-int.org/wp-content/uploads/2022/09/Rapport_Retssikkerhed-for-digitalt-udsatte-borgere-1.pdf",
         accessed=ACCESSED,
         harvard=(
-            "Justitia 2022, Retssikkerhed for digitalt udsatte borgere, Justitia, "
-            "Copenhagen, accessed 12 September 2026."
+            "Justitia 2022, *Retssikkerhed for digitalt udsatte borgere*, Justitia, "
+            "Copenhagen, accessed 12 September 2026, "
+            "<https://justitia-int.org/wp-content/uploads/2022/09/Rapport_Retssikkerhed-for-digitalt-udsatte-borgere-1.pdf>."
         ),
     ),
     "IMR1": dict(
@@ -175,9 +185,10 @@ SOURCES = {
         url="https://menneskeret.dk/sites/menneskeret.dk/files/media/document/Rettigheder%20i%20den%20digitale%20velf%C3%A6rdsstat.%20Analyse,%20Institut%20for%20Menneskerettigheder,%20december%202023.PDF",
         accessed=ACCESSED,
         harvard=(
-            "Institut for Menneskerettigheder 2023, Rettigheder i den digitale "
-            "velfærdsstat, Danish Institute for Human Rights, Copenhagen, accessed "
-            "12 September 2026."
+            "Institut for Menneskerettigheder 2023, *Rettigheder i den digitale "
+            "velfærdsstat*, Danish Institute for Human Rights, Copenhagen, accessed "
+            "12 September 2026, "
+            "<https://menneskeret.dk/sites/menneskeret.dk/files/media/document/Rettigheder%20i%20den%20digitale%20velf%C3%A6rdsstat.%20Analyse,%20Institut%20for%20Menneskerettigheder,%20december%202023.PDF>."
         ),
     ),
     "RI1": dict(
@@ -187,8 +198,9 @@ SOURCES = {
         url="https://www.retsinformation.dk/eli/lta/2012/528",
         accessed=ACCESSED,
         harvard=(
-            "Denmark 2012, Lov om Offentlig Digital Post (LOV nr 528 af 11/06/2012), "
-            "Retsinformation, Copenhagen, accessed 12 September 2026."
+            "Folketinget 2012, *Lov om Offentlig Digital Post*, LOV nr 528 af 11. "
+            "juni 2012, Retsinformation, Copenhagen, accessed 12 September 2026, "
+            "<https://www.retsinformation.dk/eli/lta/2012/528>."
         ),
     ),
     "RR1": dict(
@@ -201,9 +213,10 @@ SOURCES = {
         url="https://www.rigsrevisionen.dk/revisionssager-arkiv/2016/jan/beretning-om-besparelsespotentialet-ved-obligatorisk-digital-post-paa-ca-1-mia-kr-om-aaret",
         accessed=ACCESSED,
         harvard=(
-            "Rigsrevisionen 2016, Beretning om besparelsespotentialet ved "
-            "obligatorisk Digital Post på ca. 1 mia. kr. om året, National Audit "
-            "Office of Denmark, Copenhagen, accessed 12 September 2026."
+            "Rigsrevisionen 2016, *Beretning om besparelsespotentialet ved "
+            "obligatorisk Digital Post på ca. 1 mia. kr. om året*, National Audit "
+            "Office of Denmark, Copenhagen, accessed 12 September 2026, "
+            "<https://www.rigsrevisionen.dk/revisionssager-arkiv/2016/jan/beretning-om-besparelsespotentialet-ved-obligatorisk-digital-post-paa-ca-1-mia-kr-om-aaret>."
         ),
     ),
     "RI2": dict(
@@ -213,8 +226,9 @@ SOURCES = {
         url="https://www.finanstilsynet.dk/finansielle-temaer/betalingstjenester-og-e-penge/kontantreglen",
         accessed=ACCESSED,
         harvard=(
-            "Finanstilsynet 2025, Kontantreglen, Danish Financial Supervisory "
-            "Authority, Copenhagen, accessed 12 September 2026."
+            "Finanstilsynet 2025, *Kontantreglen*, Danish Financial Supervisory "
+            "Authority, Copenhagen, accessed 12 September 2026, "
+            "<https://www.finanstilsynet.dk/finansielle-temaer/betalingstjenester-og-e-penge/kontantreglen>."
         ),
     ),
     "DG4": dict(
@@ -224,8 +238,9 @@ SOURCES = {
         url="https://digst.dk/it-loesninger/digital-post/lovgivning/",
         accessed=ACCESSED,
         harvard=(
-            "Digitaliseringsstyrelsen 2025, Digital Post – lovgivning, Agency for "
-            "Digital Government, Copenhagen, accessed 12 September 2026."
+            "Digitaliseringsstyrelsen 2025, *Digital Post – lovgivning*, Agency for "
+            "Digital Government, Copenhagen, accessed 12 September 2026, "
+            "<https://digst.dk/it-loesninger/digital-post/lovgivning/>."
         ),
     ),
     "SMV1": dict(
@@ -235,8 +250,9 @@ SOURCES = {
         url="https://smvdigital.dk/content/ydelser/tilskudspuljer-i-2026/8efa07f4-5032-47f4-b7fa-bab57412b762/",
         accessed=ACCESSED,
         harvard=(
-            "SMV:Digital 2026, Tilskudspuljer i 2026, SMV:Digital, Copenhagen, "
-            "accessed 12 September 2026."
+            "SMV:Digital 2026, *Tilskudspuljer i 2026*, SMV:Digital, Copenhagen, "
+            "accessed 12 September 2026, "
+            "<https://smvdigital.dk/content/ydelser/tilskudspuljer-i-2026/8efa07f4-5032-47f4-b7fa-bab57412b762/>."
         ),
     ),
     "DST2": dict(
@@ -246,8 +262,9 @@ SOURCES = {
         url="https://www.dst.dk/da/Statistik/emner/borgere/befolkning/befolkningstal",
         accessed=ACCESSED,
         harvard=(
-            "Danmarks Statistik 2026, Befolkningstal, Statistics Denmark, "
-            "Copenhagen, accessed 12 September 2026."
+            "Danmarks Statistik 2026, *Befolkningstal*, Statistics Denmark, "
+            "Copenhagen, accessed 12 September 2026, "
+            "<https://www.dst.dk/da/Statistik/emner/borgere/befolkning/befolkningstal>."
         ),
     ),
     "ES7": dict(
@@ -261,11 +278,10 @@ SOURCES = {
         url="https://ec.europa.eu/eurostat/databrowser/view/isoc_ec_ib20/default/table?lang=en",
         accessed=ACCESSED,
         harvard=(
-            "Eurostat 2026, Internet purchases by individuals (2020 onwards), "
+            "Eurostat 2026, *Internet purchases by individuals (2020 onwards)*, "
             "dataset isoc_ec_ib20, Statistical Office of the European Union, "
             "Luxembourg, data last updated 17 April 2026, accessed 12 September 2026, "
-            "<https://ec.europa.eu/eurostat/databrowser/view/isoc_ec_ib20/default/"
-            "table?lang=en>."
+            "<https://ec.europa.eu/eurostat/databrowser/view/isoc_ec_ib20/default/table?lang=en>."
         ),
     ),
     "DST1": dict(
@@ -275,8 +291,9 @@ SOURCES = {
         url="https://www.dst.dk/da/Statistik/dokumentation/statistikdokumentation/detailomsaetningsindeks",
         accessed=ACCESSED,
         harvard=(
-            "Danmarks Statistik 2025, Detailomsætningsindeks, Statistics Denmark, "
-            "Copenhagen, accessed 12 September 2026."
+            "Danmarks Statistik 2025, *Detailomsætningsindeks*, Statistics Denmark, "
+            "Copenhagen, accessed 12 September 2026, "
+            "<https://www.dst.dk/da/Statistik/dokumentation/statistikdokumentation/detailomsaetningsindeks>."
         ),
     ),
     "ES8": dict(
@@ -290,11 +307,11 @@ SOURCES = {
         url="https://ec.europa.eu/eurostat/databrowser/view/tesem160/default/table?lang=en",
         accessed="2026-09-13",
         harvard=(
-            "Eurostat 2026, Labour productivity per person employed and hour "
-            "worked (EU27_2020=100), dataset tesem160, last updated 9 September "
-            "2026, Eurostat, accessed 13 September 2026, "
-            "<https://ec.europa.eu/eurostat/databrowser/view/tesem160/default/"
-            "table?lang=en>."
+            "Eurostat 2026, *Labour productivity per person employed and hour worked "
+            "(EU27_2020=100)*, dataset tesem160, Statistical Office of the European "
+            "Union, Luxembourg, data last updated 9 September 2026, accessed 13 "
+            "September 2026, "
+            "<https://ec.europa.eu/eurostat/databrowser/view/tesem160/default/table?lang=en>."
         ),
     ),
     "ES9": dict(
@@ -308,11 +325,10 @@ SOURCES = {
         url="https://ec.europa.eu/eurostat/databrowser/view/isoc_ciegi_ac/default/table?lang=en",
         accessed="2026-09-14",
         harvard=(
-            "Eurostat 2026, E-government activities of individuals via websites, "
+            "Eurostat 2026, *E-government activities of individuals via websites*, "
             "dataset isoc_ciegi_ac, Statistical Office of the European Union, "
             "Luxembourg, accessed 14 September 2026, "
-            "<https://ec.europa.eu/eurostat/databrowser/view/"
-            "isoc_ciegi_ac/default/table?lang=en>."
+            "<https://ec.europa.eu/eurostat/databrowser/view/isoc_ciegi_ac/default/table?lang=en>."
         ),
     ),
     # D: the eID timeline rows used to cite DG4, a Digital Post LEGISLATION
@@ -326,10 +342,9 @@ SOURCES = {
         url="https://www.mitid.dk/en-gb/about-mitid/news/nemid-is-about-to-be-closed/",
         accessed="2026-09-14",
         harvard=(
-            "Digitaliseringsstyrelsen 2023, NemID is about to be closed, MitID, "
-            "Agency for Digital Government, Copenhagen, accessed 14 September "
-            "2026, <https://www.mitid.dk/en-gb/about-mitid/news/"
-            "nemid-is-about-to-be-closed/>."
+            "Digitaliseringsstyrelsen 2023, *NemID is about to be closed*, MitID, "
+            "Agency for Digital Government, Copenhagen, accessed 14 September 2026, "
+            "<https://www.mitid.dk/en-gb/about-mitid/news/nemid-is-about-to-be-closed/>."
         ),
     ),
     "LOV1": dict(
@@ -342,9 +357,9 @@ SOURCES = {
         url="https://www.retsinformation.dk/eli/lta/2023/603",
         accessed="2026-09-13",
         harvard=(
-            "Folketinget 2023, Lov om fravigelse fra obligatorisk digital "
-            "selvbetjening, LOV nr 603 af 31. maj 2023, in force 1 June 2023, "
-            "Retsinformation, accessed 13 September 2026, "
+            "Folketinget 2023, *Lov om fravigelse fra obligatorisk digital "
+            "selvbetjening*, LOV nr 603 af 31. maj 2023, in force 1 June 2023, "
+            "Retsinformation, Copenhagen, accessed 13 September 2026, "
             "<https://www.retsinformation.dk/eli/lta/2023/603>."
         ),
     ),
@@ -361,11 +376,10 @@ SOURCES = {
         ),
         accessed="2026-09-13",
         harvard=(
-            "Bundesrechnungshof 2022, Bemerkungen 2022 zur Haushalts- und "
-            "Wirtschaftsführung des Bundes, German Federal Court of Auditors, "
+            "Bundesrechnungshof 2022, *Bemerkungen 2022 zur Haushalts- und "
+            "Wirtschaftsführung des Bundes*, German Federal Court of Auditors, Bonn, "
             "accessed 13 September 2026, "
-            "<https://www.bundesrechnungshof.de/SharedDocs/Pressemitteilungen/"
-            "DE/2022/bemerkungen2022-hauptband.html>."
+            "<https://www.bundesrechnungshof.de/SharedDocs/Pressemitteilungen/DE/2022/bemerkungen2022-hauptband.html>."
         ),
     ),
     "CE1": dict(
@@ -378,10 +392,9 @@ SOURCES = {
         url="https://www.conseil-etat.fr/fr/arianeweb/CE/decision/2022-06-03/452798",
         accessed="2026-09-13",
         harvard=(
-            "Conseil d'État 2022, Decision No. 452798, 3 June 2022, Conseil "
-            "d'État, Paris, accessed 13 September 2026, "
-            "<https://www.conseil-etat.fr/fr/arianeweb/CE/decision/2022-06-03/"
-            "452798>."
+            "Conseil d'État 2022, *Decision No. 452798*, 3 June 2022, Conseil d'État, "
+            "Paris, accessed 13 September 2026, "
+            "<https://www.conseil-etat.fr/fr/arianeweb/CE/decision/2022-06-03/452798>."
         ),
     ),
     "BE1": dict(
@@ -394,10 +407,9 @@ SOURCES = {
         url="https://fr.const-court.be/public/f/2025/2025-126f.pdf",
         accessed="2026-09-13",
         harvard=(
-            "Cour constitutionnelle 2025, Arrêt no. 126/2025, 25 September "
-            "2025, ECLI:BE:GHCC:2025:ARR.126, Cour constitutionnelle, "
-            "Brussels, accessed 13 September 2026, "
-            "<https://fr.const-court.be/public/f/2025/2025-126f.pdf>."
+            "Cour constitutionnelle 2025, *Arrêt no. 126/2025*, 25 September 2025, "
+            "ECLI:BE:GHCC:2025:ARR.126, Cour constitutionnelle, Brussels, accessed 13 "
+            "September 2026, <https://fr.const-court.be/public/f/2025/2025-126f.pdf>."
         ),
     ),
     "NO1": dict(
@@ -410,10 +422,9 @@ SOURCES = {
         url="https://www.digdir.no/digitale-felleslosninger/kontakt-og-reservasjonsregisteret-krr/865",
         accessed="2026-09-13",
         harvard=(
-            "Digitaliseringsdirektoratet 2025, Kontakt- og "
-            "reservasjonsregisteret, Norwegian Digitalisation Agency, accessed "
-            "13 September 2026, <https://www.digdir.no/digitale-felleslosninger/"
-            "kontakt-og-reservasjonsregisteret-krr/865>."
+            "Digitaliseringsdirektoratet 2025, *Kontakt- og reservasjonsregisteret*, "
+            "Norwegian Digitalisation Agency, Oslo, accessed 13 September 2026, "
+            "<https://www.digdir.no/digitale-felleslosninger/kontakt-og-reservasjonsregisteret-krr/865>."
         ),
     ),
     "GS1": dict(
@@ -427,11 +438,12 @@ SOURCES = {
         # requires of a data source do not apply; it is REFERENCE_ONLY.
         url="",
         accessed="",
-        harvard=("Tran, TT 2026, 'Guest speaker session: corporate sustainability "
-                 "and the adoption of artificial intelligence', guest lecture, "
-                 "ECON1596 Business Challenges in the Digital Economy, "
-                 "RMIT University Vietnam, Ho Chi Minh City, "
-                 "[LECTURE DATE: to be completed by the author]."),
+        harvard=(
+            "Tran, TT 2026, 'Guest speaker session: corporate sustainability and the "
+            "adoption of artificial intelligence', guest lecture, *ECON1596 Business "
+            "Challenges in the Digital Economy*, RMIT University Vietnam, Ho Chi Minh "
+            "City, [LECTURE DATE: to be completed by the author]."
+        ),
     ),
     "HOW1": dict(
         intext="Howell",
@@ -442,7 +454,7 @@ SOURCES = {
         accessed="2026-09-13",
         harvard=(
             "Howell, ST 2017, 'Financing innovation: evidence from R&D grants', "
-            "American Economic Review, vol. 107, no. 4, pp. 1136-1164."
+            "*American Economic Review*, vol. 107, no. 4, pp. 1136-1164."
         ),
     ),
     "SAN1": dict(
@@ -456,11 +468,10 @@ SOURCES = {
         url="https://pietrosantoleri.github.io/files/Santoleri_et_al_The_effects_of_R_D_grants.pdf",
         accessed="2026-09-13",
         harvard=(
-            "Santoleri, P, Barrows, G, Caravella, S, Crespi, F and Pellegrino, "
-            "G 2022, The causal effects of R&D grants: evidence from a "
-            "regression discontinuity, working paper, accessed 13 September "
-            "2026, <https://pietrosantoleri.github.io/files/"
-            "Santoleri_et_al_The_effects_of_R_D_grants.pdf>."
+            "Santoleri, P, Barrows, G, Caravella, S, Crespi, F & Pellegrino, G 2022, "
+            "*The causal effects of R&D grants: evidence from a regression "
+            "discontinuity*, working paper, accessed 13 September 2026, "
+            "<https://pietrosantoleri.github.io/files/Santoleri_et_al_The_effects_of_R_D_grants.pdf>."
         ),
     ),
 }
@@ -486,3 +497,17 @@ REFERENCE_ONLY = frozenset({
     "BRH1",  # German Federal Court of Auditors on lottery allocation - the
              # reason Appendix F rejects that instrument. Argument, not data.
 })
+
+
+def plain(harvard):
+    """A Harvard string with its emphasis markers removed.
+
+    The reference strings above italicise the title of each standalone work by
+    wrapping it in asterisks, because ``build_docx.para`` renders Markdown
+    emphasis as real runs and RMIT Harvard italicises those titles. Anywhere the
+    string is written as plain text instead - the workbook's ``03_SOURCES``
+    sheet, or a comparison against the text extracted from the .docx - the
+    markers have to come off first, or the asterisks show up in the output and
+    the comparison silently fails to match.
+    """
+    return harvard.replace("*", "")

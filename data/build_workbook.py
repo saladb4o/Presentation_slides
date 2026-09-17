@@ -30,7 +30,7 @@ import xlsxwriter
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from dataset import COUNTRIES, OBS, POLICY_EVENTS, cross_section, validate
-from sources import ACCESSED, SOURCES
+from sources import ACCESSED, SOURCES, plain
 import style
 from style import finish
 
@@ -317,7 +317,7 @@ def sheet_sources(wb, fmt):
             ws.write_url(r, 5, url, fmt["link"], url)
         else:
             ws.write_string(r, 5, "", fmt["text"])
-        ws.write_string(r, 6, s["harvard"], fmt["text"])
+        ws.write_string(r, 6, plain(s["harvard"]), fmt["text"])
 
     ws.autofilter(3, 0, 3 + len(SOURCES), len(heads) - 1)
     finish(ws, [(0, 0, 10), (1, 1, 30), (2, 2, 42), (3, 3, 16), (4, 4, 11),
