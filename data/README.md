@@ -40,6 +40,25 @@ measured defects, each of which is now a check in `verify_workbook.py`:
 | Cover contents omitted a sheet and misordered another | The contents list must equal the real tab list, in order |
 | A mistyped series code rendered as a silent blank | A lookup to an observation that does not exist raises at build time |
 
+Version 2.1 fixed three more, found by auditing the generated file rather than
+the build script:
+
+| Defect in v2.0 | What now prevents it |
+|---|---|
+| 34 cells on `07_LIMITATIONS` clipped, including every entry in the AI log's validation column, because row heights assumed a fixed 95 characters per line whatever the column's real width was | Every wrapped cell in a row whose height the file sets must fit that height, measured against the column's actual width |
+| `06_SERIES` repeated row 1 when printed, so page 2 carried the sheet title where the column headings belonged, and five other sheets repeated nothing | A repeated row must carry the navy heading band; `finish()` takes the heading row explicitly instead of assuming row 0 |
+| Units reading "million DK", dataset codes and figure references cut off against the occupied cell to their right | Column widths corrected; the audit sweep is recorded below |
+
+### Why openpyxl cannot be asked for a column width
+
+XlsxWriter emits one `<col min=".." max="..">` element per run of equal-width
+columns, and openpyxl files that whole run under the **first** column's letter.
+`ws.column_dimensions["C"]` on a B:C run returns `None`, which is
+indistinguishable from a column nobody set. An audit chased that as a missing
+width on the AI log's validation column before checking the XML; the column was
+63 wide all along. `verify_workbook.column_widths()` reads the sheet XML, and
+anything checking widths must use it.
+
 The data layer was not rebuilt. `dataset.py` and `sources.py` carry 136
 observations verified individually against their issuing authorities, and the
 statistical portals are unreachable from the build environment; re-entering them
@@ -136,6 +155,11 @@ charts went unseen.
 
 The previews are a proxy, not the article. Excel will differ in fonts, spacing
 and tick placement. **Open the workbook before submitting.**
+
+What a preview cannot reach at all is the sheets: nine of the twelve carry no
+chart, and their defects are widths, row heights and print setup. Those are
+checked against the generated .xlsx instead, which is where the v2.0 clipping
+was eventually found.
 
 ## Adding data
 

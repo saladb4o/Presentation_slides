@@ -9,15 +9,49 @@ caption, and 201 formula cells with no cached value. Each of those is now a
 check below, named for the defect it exists to catch.
 """
 
+import math
 import os
 import re
 import sys
+import zipfile
 
 import openpyxl
+from openpyxl.utils import get_column_letter
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import build_workbook as B
+
+# Excel's column-width unit is the width of one "0" in the default font.
+# Calibri's lowercase averages narrower than that, so a width-62 column usually
+# fits nearer 70 characters - but the estimate here stays at 1.0 deliberately.
+# Understating what fits makes this check demand slightly taller rows than
+# strictly necessary, and an over-tall row costs whitespace while an over-short
+# one costs text.
+CHARS_PER_UNIT = 1.0
+PT_PER_LINE = 13.5
+DEFAULT_COL_WIDTH = 8.43
+NAVY_RGB = "1F3A5F"
+
+
+def column_widths(path):
+    """{sheet name: {1-based column index: width}} read from the sheet XML."""
+    with zipfile.ZipFile(path) as z:
+        rels = dict(re.findall(
+            r'Id="rId(\d+)" Type="[^"]*worksheet" Target="([^"]+)"',
+            z.read("xl/_rels/workbook.xml.rels").decode()))
+        out = {}
+        for name, rid in re.findall(r'<sheet name="([^"]+)"[^>]*r:id="rId(\d+)"',
+                                    z.read("xl/workbook.xml").decode()):
+            xml = z.read("xl/" + rels[rid].lstrip("/")).decode()
+            cols = {}
+            for lo, hi, w in re.findall(
+                    r'<col min="(\d+)" max="(\d+)"[^>]*width="([\d.]+)"', xml):
+                for c in range(int(lo), int(hi) + 1):
+                    cols[c] = float(w)
+            out[name] = cols
+    return out
+
 from build_workbook import CONTENTS, INDEX, OUT
 from dataset import OBS
 from sources import REFERENCE_ONLY, SOURCES
@@ -272,9 +306,22 @@ def main():
     check(charts == 4, f"expected 4 charts, found {charts}")
 
     # -- 9. every sheet has its furniture -------------------------------------
+    # Column widths come from the sheet XML, not from openpyxl's
+    # column_dimensions: XlsxWriter emits one <col min=".." max=".."> element per
+    # run of equal-width columns, and openpyxl files that whole run under the
+    # FIRST column's letter. Asking it for column C of a B:C run returns None,
+    # which reads exactly like a column nobody set - an audit chased that as a
+    # missing width on the AI log before checking the XML.
+    widths = column_widths(OUT)
+
     for ws in wb.worksheets:
-        check(len(ws.column_dimensions) > 0,
-              f"{ws.title} has no column widths set")
+        cols = widths[ws.title]
+        for c in range(1, ws.max_column + 1):
+            if any(ws.cell(r, c).value not in (None, "")
+                   for r in range(1, ws.max_row + 1)):
+                check(c in cols,
+                      f"{ws.title} column {get_column_letter(c)} holds content "
+                      f"but has no width set")
         check(ws.sheet_properties.tabColor is not None,
               f"{ws.title} has no tab colour")
         check(ws.page_setup.orientation in ("portrait", "landscape"),
@@ -282,6 +329,40 @@ def main():
         pr = ws.sheet_properties.pageSetUpPr
         check(pr is not None and pr.fitToPage,
               f"{ws.title} is not set to fit to page width when printed")
+
+        # A row whose height this file sets is a row Excel will not re-fit, so
+        # wrapped text taller than that height is cut off - on screen and on
+        # paper, with nothing to show it happened. 07_LIMITATIONS lost 34 cells
+        # this way to a formula that assumed a fixed 95 characters per line
+        # whatever the column's real width was.
+        for r in range(1, ws.max_row + 1):
+            h = ws.row_dimensions[r].height
+            if not h:
+                continue          # no stated height; Excel fits it to content
+            for c in range(1, ws.max_column + 1):
+                cell = ws.cell(r, c)
+                if not isinstance(cell.value, str) or not cell.alignment.wrap_text:
+                    continue
+                w = cols.get(c, DEFAULT_COL_WIDTH)
+                lines = math.ceil(len(cell.value) / max(1.0, w * CHARS_PER_UNIT))
+                check(lines * PT_PER_LINE <= h + 0.5,
+                      f"{ws.title}!{get_column_letter(c)}{r} wraps to about "
+                      f"{lines} lines in a column {w:.0f} wide, but its row is "
+                      f"{h:.0f}pt - roughly {int(h / PT_PER_LINE)} lines fit, so "
+                      f"the rest is clipped")
+
+        # A table that prints over more than one page needs its column headings
+        # on every page, and the heading row is rarely row 1: most sheets here
+        # open with a title and a subtitle. 06_SERIES repeated row 1 and printed
+        # its sheet title where the column names belonged.
+        titles = ws.print_title_rows
+        if titles:
+            first = int(titles.split(":")[0].lstrip("$"))
+            head_fill = ws.cell(first, 1).fill
+            check(head_fill is not None and head_fill.fgColor is not None
+                  and (head_fill.fgColor.rgb or "").endswith(NAVY_RGB),
+                  f"{ws.title} repeats row {first} when printed, but that row is "
+                  f"not the heading band - the headings carry the navy fill")
 
     # -- 10. the correction record survives -----------------------------------
     #    A correction that leaves no trace is indistinguishable from never

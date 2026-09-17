@@ -283,10 +283,10 @@ def sheet_master(wb, fmt):
     ws.autofilter(0, 0, len(OBS), len(MASTER_HEADERS) - 1)
     finish(ws, [(M_ID, M_ID, 7), (M_CODE, M_CODE, 21), (M_IND, M_IND, 44),
                 (M_GEO, M_GEO, 6), (M_YEAR, M_YEAR, 7), (M_VAL, M_VAL, 12),
-                (M_UNIT, M_UNIT, 9), (M_DENOM, M_DENOM, 34),
-                (M_FLAG, M_FLAG, 6), (M_SRC, M_SRC, 10), (M_REF, M_REF, 15),
+                (M_UNIT, M_UNIT, 21), (M_DENOM, M_DENOM, 34),
+                (M_FLAG, M_FLAG, 6), (M_SRC, M_SRC, 10), (M_REF, M_REF, 19),
                 (M_NOTE, M_NOTE, 56)],
-           freeze=(1, 2), hide_grid=False, repeat_header=True,
+           freeze=(1, 2), hide_grid=False, header_row=0,
            tab=style.TAB_REFERENCE)
     ws.set_row(0, 30)
 
@@ -320,9 +320,10 @@ def sheet_sources(wb, fmt):
         ws.write_string(r, 6, plain(s["harvard"]), fmt["text"])
 
     ws.autofilter(3, 0, 3 + len(SOURCES), len(heads) - 1)
-    finish(ws, [(0, 0, 10), (1, 1, 30), (2, 2, 42), (3, 3, 16), (4, 4, 11),
+    finish(ws, [(0, 0, 10), (1, 1, 30), (2, 2, 42), (3, 3, 41), (4, 4, 11),
                 (5, 5, 48), (6, 6, 80)],
-           freeze=(4, 1), hide_grid=False, tab=style.TAB_REFERENCE)
+           freeze=(4, 1), hide_grid=False, header_row=3,
+           tab=style.TAB_REFERENCE)
     ws.set_row(3, 28)
     return used
 
@@ -386,9 +387,10 @@ def sheet_definitions(wb, fmt):
                    "zero, so the two cannot be confused in this workbook - but "
                    "they could be in one that did.", fmt["prose"])
 
-    finish(ws, [(0, 0, 21), (1, 1, 46), (2, 2, 6), (3, 3, 9), (4, 4, 36),
+    finish(ws, [(0, 0, 21), (1, 1, 46), (2, 2, 6), (3, 3, 21), (4, 4, 36),
                 (5, 5, 12), (6, 6, 11), (7, 7, 15)],
-           freeze=(4, 1), hide_grid=False, tab=style.TAB_REFERENCE)
+           freeze=(4, 1), hide_grid=False, header_row=3,
+           tab=style.TAB_REFERENCE)
     ws.set_row(3, 28)
     return len(series)
 
@@ -511,7 +513,7 @@ def sheet_calc(wb, fmt):
         ws.write_string(r, 3, words, fmt["text"])
 
     finish(ws, [(0, 0, 46), (1, 1, 14), (2, 2, 8), (3, 3, 62)],
-           freeze=(4, 1), hide_grid=False, tab=style.TAB_CHART)
+           freeze=(4, 1), hide_grid=False, header_row=3, tab=style.TAB_CHART)
     ws.set_row(3, 22)
     return len(q)
 
@@ -995,7 +997,7 @@ def sheet_series(wb, fmt):
     ws.autofilter(3, 0, 3 + len(rows), len(heads) - 1)
     finish(ws, [(0, 0, 21), (1, 1, 44), (2, 2, 6), (3, 3, 7), (4, 4, 12),
                 (5, 5, 9), (6, 6, 34), (7, 7, 6), (8, 8, 9), (9, 9, 26)],
-           freeze=(4, 1), hide_grid=False, repeat_header=True,
+           freeze=(4, 1), hide_grid=False, header_row=3,
            tab=style.TAB_SUPPORT)
     ws.set_row(3, 22)
     return len(rows), len(codes)
@@ -1027,7 +1029,8 @@ def sheet_policy(wb, fmt):
 
     finish(ws, [(0, 0, 12), (1, 1, 10), (2, 2, 40), (3, 3, 28), (4, 4, 9),
                 (5, 5, 20), (6, 6, 70)],
-           freeze=(4, 1), hide_grid=False, tab=style.TAB_SUPPORT)
+           freeze=(4, 1), hide_grid=False, header_row=3,
+           tab=style.TAB_SUPPORT)
     ws.set_row(3, 22)
     return len(POLICY_EVENTS)
 
@@ -1035,6 +1038,14 @@ def sheet_policy(wb, fmt):
 # --------------------------------------------------------- 07_LIMITATIONS ---
 def sheet_limitations(wb, fmt):
     from content import AI_LOG, AI_LOG_FOOTER, LIMITATIONS, RETAIL_GAP
+
+    # Declared once, because the row heights below are computed from them. The
+    # previous formula assumed a fixed 95 characters to the line whatever the
+    # column was, and clipped 34 cells on this sheet - including every entry in
+    # the AI log's validation column, which is the raw material for the AI Use
+    # and Validation Appendix and therefore the last thing that should be cut
+    # off mid-sentence.
+    W_LABEL, W_DETAIL, W_VALID, W_OUTCOME = 34, 62, 62, 52
 
     ws = wb.add_worksheet("07_LIMITATIONS")
     ws.write(0, 0, "Limitations, gaps, and the AI use log", fmt["title"])
@@ -1047,9 +1058,10 @@ def sheet_limitations(wb, fmt):
     ws.write(r, 1, "detail", fmt["head"])
     r += 1
     for head, body in LIMITATIONS:
-        ws.write_string(r, 0, head, fmt["label"])
+        ws.write_string(r, 0, head, fmt["label_wrap"])
         ws.write_string(r, 1, body, fmt["prose"])
-        ws.set_row(r, max(14, 11 * (len(body) // 95 + 1)))
+        ws.set_row(r, style.prose_row_height(
+            [(head, W_LABEL), (body, W_DETAIL)]))
         r += 1
 
     r += 2
@@ -1058,9 +1070,9 @@ def sheet_limitations(wb, fmt):
     ws.write(r, 0, "Recorded rather than silently omitted.", fmt["subtitle"])
     r += 1
     for k, v in RETAIL_GAP:
-        ws.write_string(r, 0, k, fmt["label"])
+        ws.write_string(r, 0, k, fmt["label_wrap"])
         ws.write_string(r, 1, v, fmt["gap"])
-        ws.set_row(r, max(14, 11 * (len(v) // 95 + 1)))
+        ws.set_row(r, style.prose_row_height([(k, W_LABEL), (v, W_DETAIL)]))
         r += 1
 
     r += 2
@@ -1074,18 +1086,24 @@ def sheet_limitations(wb, fmt):
         ws.write(r, c, h, fmt["head"])
     r += 1
     for step, used, validated, outcome in AI_LOG:
-        ws.write_string(r, 0, step, fmt["label"])
+        ws.write_string(r, 0, step, fmt["label_wrap"])
         ws.write_string(r, 1, used, fmt["prose"])
         ws.write_string(r, 2, validated, fmt["prose"])
         ws.write_string(r, 3, outcome, fmt["prose"])
-        longest = max(len(used), len(validated), len(outcome))
-        ws.set_row(r, max(14, 11 * (longest // 44 + 1)))
+        # The longest string is not the tallest cell: these three columns are
+        # not the same width. Measure lines, not characters.
+        ws.set_row(r, style.prose_row_height(
+            [(step, W_LABEL), (used, W_DETAIL), (validated, W_VALID),
+             (outcome, W_OUTCOME)]))
         r += 1
 
     r += 1
     ws.write_string(r, 0, AI_LOG_FOOTER, fmt["small"])
 
-    finish(ws, [(0, 0, 34), (1, 1, 62), (2, 2, 62), (3, 3, 52)],
+    # No header_row: this sheet carries two tables with headings on different
+    # rows, so repeating either one would mislabel the other's pages.
+    finish(ws, [(0, 0, W_LABEL), (1, 1, W_DETAIL), (2, 2, W_VALID),
+                (3, 3, W_OUTCOME)],
            hide_grid=True, tab=style.TAB_CAUTION)
     return len(LIMITATIONS), len(AI_LOG)
 

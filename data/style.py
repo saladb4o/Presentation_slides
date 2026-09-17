@@ -32,6 +32,8 @@ Two schemes, used for different jobs, because they answer different questions.
 Charts take bare RGB with a leading '#', which is what XlsxWriter expects.
 """
 
+import math
+
 # --- chart colour ----------------------------------------------------------
 CAT_1 = "#2a78d6"      # categorical slot 1 - blue
 CAT_2 = "#eb6834"      # categorical slot 2 - orange
@@ -86,6 +88,11 @@ def formats(wb):
         "head": f(font_size=10, bold=True, font_color="#FFFFFF", bg_color=NAVY,
                   text_wrap=True, valign="bottom", border=0),
         "label": f(font_size=10, bold=True, font_color=INK, valign="top"),
+        # Same, but wrapping. A row-label column narrower than its longest
+        # label clips it against the occupied cell to its right; wrapping
+        # costs nothing where the row height is computed from the label too.
+        "label_wrap": f(font_size=10, bold=True, font_color=INK,
+                        valign="top", text_wrap=True),
 
         "text": f(font_size=10, font_color=INK, valign="top", text_wrap=True),
         "text_n": f(font_size=10, font_color=INK, valign="top"),
@@ -117,10 +124,15 @@ def formats(wb):
 
 
 def finish(ws, widths, freeze=None, hide_grid=True, landscape=True,
-           repeat_header=False, tab=None):
+           header_row=None, tab=None):
     """Apply the furniture every sheet gets and the old workbook gave almost none.
 
     widths: list of (first_col, last_col, width) triples.
+    header_row: 0-based row holding the column headings, repeated at the top of
+        every printed page. It is passed explicitly rather than assumed to be
+        row 0, because most sheets here open with a title and a subtitle and put
+        their headings on row 3. 06_SERIES repeated row 0 for exactly that
+        reason and printed its sheet title above page 2 instead of its columns.
     """
     for first, last, width in widths:
         ws.set_column(first, last, width)
@@ -140,6 +152,33 @@ def finish(ws, widths, freeze=None, hide_grid=True, landscape=True,
     ws.set_paper(9)              # A4
     ws.set_margins(0.5, 0.5, 0.6, 0.6)
     ws.fit_to_pages(1, 0)        # one page wide, as many down as it takes
-    if repeat_header:
-        ws.repeat_rows(0)
+    if header_row is not None:
+        ws.repeat_rows(header_row)
     ws.set_footer("&L&A&C&D&R Page &P of &N")
+
+
+def prose_row_height(cells, minimum=14.0):
+    """Height in points for a row of wrapped prose.
+
+    cells: (text, column_width) for every wrapped cell in the row.
+
+    Excel does not re-fit a row whose height the file sets, so a height that is
+    too small silently truncates - it does not scroll, and it does not print.
+    The previous formula was ``11 * (len(text) // 95 + 1)`` with a fixed 95
+    regardless of how wide the column actually was, and it clipped 34 cells on
+    07_LIMITATIONS, among them the whole validation column of the AI use log.
+
+    Two corrections. The line count comes from the column's real width, and
+    CHARS_PER_UNIT stays deliberately below what Calibri usually fits, so the
+    estimate errs long: a row a line too tall costs nothing, a row a line too
+    short loses text. PT_PER_LINE is the 10pt line box, not the 11pt guess.
+    """
+    CHARS_PER_UNIT = 1.0         # conservative; Calibri averages nearer 1.15
+    PT_PER_LINE = 13.5
+    lines = 1
+    for text, width in cells:
+        if not text:
+            continue
+        per_line = max(1.0, width * CHARS_PER_UNIT)
+        lines = max(lines, math.ceil(len(text) / per_line))
+    return max(minimum, lines * PT_PER_LINE + 2)
