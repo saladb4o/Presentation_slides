@@ -1,6 +1,6 @@
 Question 4 reports five estimates of Danish digital exclusion ranging from 4.7% to
-25%. They are not five measurements of one quantity, and this appendix sets out
-why, because the spread is the finding rather than an embarrassment.
+25%. They are not five measurements of one quantity, and this appendix sets out why,
+since the spread is itself the finding rather than an embarrassment.
 
 ### [[AP]].1 The estimates differ in three ways at once
 
@@ -43,9 +43,9 @@ million implied by the Digital Post statistics, and the total population of
 
 ### [[AP]].4 What survives
 
-Exemption reaches 238,479 people. The narrowest estimate of need that measures
-difficulty rather than legal status is 16.5%, or roughly 994,000 on the stated
-base. The gap between the relief mechanism and the difficulty it relieves is
+Exemption reaches 238,479 people, whereas the narrowest estimate of need that
+measures difficulty rather than legal status is 16.5%, or roughly 994,000 on the
+stated base. The gap between the relief mechanism and the difficulty it relieves is
 therefore on the order of three-quarters of a million people, and that statement
 holds under any of the bases considered here, which is why Question 4 makes it in
 that form rather than as a precise subtraction.

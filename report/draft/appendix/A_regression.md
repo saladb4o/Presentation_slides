@@ -83,19 +83,19 @@ the estimate would be selected rather than merely incomplete.
 
 They average **75.67%** on adoption against the plotted eighteen's **77.23%**, a
 difference of −1.57pp, with a two-sample t of −0.372 on 25 degrees of freedom,
-p ≈ 0.71. The two groups are statistically indistinguishable on the x-axis. The
-sample is missing on availability of the outcome measure, not selected on the
-regressor.
+p ≈ 0.71. The two groups are therefore statistically indistinguishable on the x-axis, so
+that the sample is missing on availability of the outcome measure rather than
+selected on the regressor.
 
-That test has a limit worth stating, because it is the strongest objection to this
-section. Balance on the regressor is not balance on the outcome, and the reasons a
+That test has a limit worth stating, since the limit is the strongest objection
+to this section. Balance on the regressor is not balance on the outcome, and the reasons a
 national statistical institute fails to publish an e-sales turnover figure are not
 all random with respect to economic structure. Eurostat requires turnover at basic
 prices excluding VAT, and rejects national submissions failing coherence checks
 against Structural Business Statistics. Web and EDI sales behave differently, since
 EDI carries industrial business-to-business volume, so a small change in which
 large manufacturers fall into the sample can move a national share by several
-points. And secondary suppression removes a national total outright where one or
+points. Secondary suppression, finally, removes a national total outright where one or
 two dominant firms in a NACE division would let their figure be recovered by
 subtraction. That last mechanism is the troubling one: it makes missingness a
 function of market concentration, which is plausibly related to enterprise

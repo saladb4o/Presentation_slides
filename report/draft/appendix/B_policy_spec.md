@@ -1,21 +1,20 @@
-Question 2 recommends restructuring
-SMV:Digital's allocation so that the scheme can measure its own effect, is a
-research design as much as a policy, and a design is only as good as its specification. This appendix
-states it at the level of detail an administering agency would need to act on it.
+The restructuring Question 2 recommends, which would let SMV:Digital measure its
+own effect, is a research design as much as a policy, and a design is only as
+good as its specification. This appendix states it at the level of detail an
+administering agency would need in order to act on it.
 
 ### [[AP]].1 What the present scheme can and cannot establish
 
-SMV:Digital is better evaluated than most such schemes. Digitaliseringsstyrelsen
-links recipients to Danmarks Statistik registers and compares them with matched
+SMV:Digital is better evaluated than most such schemes, since
+Digitaliseringsstyrelsen links recipients to Danmarks Statistik registers and compares them with matched
 control firms, reporting revenue growth of 18% against the controls' 13%, a gap of
-five percentage points, and employment growth of 8% against 4% [[DG3]]. That is register
-data with a comparison group, and it disposes of the naive reading of the scheme's
-own headline, that 65% of participants invested further, which compares
-applicants with the general SME population and is besides self-reported to the
-scheme's own funder.
+five percentage points, and employment growth of 8% against 4% [[DG3]]. That is register data with a comparison group, and it disposes of the naive
+reading of the scheme's own headline, that 65% of participants invested further,
+which compares applicants with the general SME population and is in addition
+self-reported to the body funding the scheme.
 
-The residual problem is the one matching cannot reach. Recipients are matched on
-what the registers record: sector, size, age, prior trajectory. Selection into a
+The residual problem is the one matching cannot reach, because recipients are
+matched on what the registers record: sector, size, age, prior trajectory. Selection into a
 voluntary scheme runs on what they do not record: managerial ambition, an
 existing digitalisation plan, the slack to write an application. Those are
 precisely the traits that also produce revenue growth, so the matched estimate
@@ -69,15 +68,16 @@ turns on assessor variation rather than on the firm, so above and below are
 comparable on the unobservables that defeat matching, which is the entire gain
 over the present evaluation. Nothing about who receives money changes: the
 highest-scoring applicants are still funded, so the reform imposes no cost on
-applicants and needs no new appropriation. And the control arm already exists, since
-those firms are being turned away today; the scheme simply stops discarding the
-information that it turned them away at a known distance from a known threshold.
+applicants and needs no new appropriation. The control arm, moreover, already exists, since those firms are being turned
+away today; the scheme simply stops discarding the information that it turned
+them away at a known distance from a known threshold.
 
 ### [[AP]].3 The alternative, and why it is rejected
 
 The cleaner design is randomised allocation among eligible applicants, and an
-oversubscribed pool would supply it at no budgetary cost. Germany tried it. Under
-*Digital Jetzt*, the Bundesrechnungshof criticised allocation by lottery rather
+oversubscribed pool would supply it at no budgetary cost. Germany tried exactly
+that, and the result is a caution rather than a precedent: under *Digital Jetzt*
+the Bundesrechnungshof criticised allocation by lottery rather
 than on criteria, warning that firms would **postpone** investment while waiting
 for a favourable draw, and called for the
 procedure to be discontinued [[BRH1]]. The objection is not a technicality about
@@ -88,9 +88,9 @@ remains the dominant strategy whichever side of the cut-off one lands on.
 
 ### [[AP]].4 What the design can and cannot deliver
 
-The estimate is local to the threshold. It identifies the effect of the grant on
-marginal applicants, meaning firms the assessors found neither clearly strong nor
-clearly weak, and not on the strongest recipients, and not on Danish SMEs generally. That is
+The estimate is local to the threshold. It identifies the effect of the grant on marginal applicants, meaning firms the
+assessors found neither clearly strong nor clearly weak, rather than on the
+strongest recipients or on Danish SMEs generally. That is
 a narrower quantity than the present evaluation claims, and a credible one, which
 is the trade the design makes.
 
