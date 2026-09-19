@@ -88,8 +88,10 @@ worked out something the others under-specify.
 
 ### The correction worth making first
 
-**Kishōtenketsu is not Japanese.** It is 起承轉結, Chinese in origin, from the structure of Tang
-regulated verse — the four lines of a *jueju* quatrain. It is read:
+**Kishōtenketsu is not Japanese.** It is 起承轉結, Chinese in origin, from classical Chinese poetics
+and composition — canonically the four lines of a *jueju* (絕句) quatrain. (*Jueju* is the quatrain;
+*lüshi* is regulated verse proper, at eight lines. An earlier draft of this document conflated them.)
+It is read:
 
 - *qǐ – chéng – zhuǎn – hé* (Chinese)
 - *ki – shō – ten – ketsu* (Japanese)
@@ -259,7 +261,8 @@ so a stranger's rank instantly reads as threat or safety).
 **Zhang-hui chaptered chain** (章回體 — *Water Margin*, *Journey to the West*) — self-contained
 installments, each ending on a hook, characters accreting into a growing ensemble as the chain runs.
 The classical Chinese answer to the picaresque: episodes are complete in themselves, and the *cast*
-is what accumulates. One Piece's arc structure is this, unchanged.
+is what accumulates. The long-running shōnen arc structure is a clear descendant of this pattern,
+whatever the chain of transmission.
 
 #### Korean shapes
 
@@ -391,7 +394,7 @@ fix in writing.
 
 ---
 
-### Tempo (slot T) — Jo-ha-kyū at every scale
+## 5. Tempo (slot T) — Jo-ha-kyū at every scale
 
 序破急 — *jo* (slow introduction), *ha* (breaking, acceleration), *kyū* (rapid finish). From gagaku
 and formalised by Zeami for Noh.
@@ -421,12 +424,23 @@ Two rules do most of the work:
 
 ---
 
-## 5. Flavor (slot C) — a real palette
+## 6. Flavor (slot C) — a real palette
 
 My earlier three-option version was the weakest part of this document. Three flavors is impoverished;
-the Sanskrit tradition has been working with nine for two thousand years.
+Indian dramaturgy has worked with eight or nine for the better part of two millennia.
 
-### Rasa — the nine dominant aims
+**Which vocabulary to use.** Four overlapping systems appear below, and you do not need all of them.
+Default to **rasa** — it is the most precise and the most useful for scene selection. Reach for the
+regional terms when rasa has no word for what you mean, which happens mainly around **han** and
+**jeong**. Frye is a coarse Western cross-check. The plain shorthand is for talking to other people
+about your book. If you only take one thing from this section, take the habit of naming a *dominant*
+flavor and two supporting ones.
+
+### Rasa — the dominant aims
+
+A note on the count: Bharata's *Nāṭyaśāstra* enumerates **eight**. **Śānta** was argued into the
+canon considerably later, most influentially by Abhinavagupta around the tenth to eleventh century,
+and remains the contested one. It is also, for our purposes, the most interesting.
 
 The doctrine of *rasa* (रस, "juice" or "essence") holds that a work aims to produce **one dominant
 emotional flavor** in the audience, with others present in support. The list, and what each asks of
@@ -491,7 +505,7 @@ is where the precision lives.
 
 ---
 
-## 6. The Symptom Index
+## 7. The Symptom Index
 
 You consult structures **when something is wrong and you can name the wrongness.** The symptom is
 the index.
@@ -530,7 +544,7 @@ Three habits:
 
 ---
 
-## 7. Worked Blends
+## 8. Worked Blends
 
 **The masterpieces do not share a formula. They share a skeleton and differ in every slot.**
 
@@ -682,11 +696,23 @@ hybrid every time.
 | *1001 Nights* | frame | free variation | mixed | all, by design |
 | *John Wick* | arrow | escalation | 100% opp | vīra, triumph |
 
-No two rows match. Every row runs the same atom.
+No two rows match across all four columns. But read the table honestly and it says two more things,
+both worth knowing:
+
+**The scene-engine column is nearly uniform.** Seven of nine rows are opposition-dominant. That is a
+weakness in the *sample*, not a refutation of the slot — these are mostly plot-forward, widely known
+works, which is exactly the population where opposition wins. *Frieren* is the only genuine
+counterweight here. If you want evidence that a juxtaposition-dominant book can hold a reader for
+four hundred pages, this table will not give it to you; go and read one.
+
+**Avatar and LOTR are near-twins.** Same book shape, effectively the same sequence shapes, both
+opposition-dominant. They diverge only in flavor. That is not a flaw in the analysis — it is the
+finding: both are Western-spine epics, and what separates them is almost entirely slot C. Which is a
+useful demonstration that flavor is not decoration.
 
 ---
 
-## 8. The Seams
+## 9. The Seams
 
 Three places a borrowed structure genuinely fights the skeleton, and the fix for each.
 
@@ -718,7 +744,7 @@ Those two are load-bearing at every scale.
 
 ---
 
-## 9. What this still leaves out
+## 10. What this still leaves out
 
 An honest boundary. This covers the traditions with worked-out, transmissible plot doctrine that
 composes with a mini-arc skeleton. It does not cover:
@@ -735,13 +761,19 @@ composes with a mini-arc skeleton. It does not cover:
 - **Medieval interlace** (*entrelacement*), the Arthurian romance technique of braiding many threads
   by deliberate interruption — arguably it belongs here; I'm flagging rather than faking it.
 
+One more gap, and it is in the architecture rather than the coverage: **slot A is the thinnest slot,
+and it is Western and Sinosphere only.** Every tradition added to this document contributes a
+*shape* or a *flavor*; none contributes a third way for a scene to turn. That may be true — three
+engines might exhaust the possibilities — or it may be a limit of my reading. Treat it as an open
+question rather than a finding, and if you meet a fourth engine in the wild, it goes here.
+
 There is no complete taxonomy. Anyone who offers you one is selling something. What matters is that
 the *slots* are complete — engine, shape, tempo, flavor — so that when you meet a structure not
 listed here, you can place it.
 
 ---
 
-## 10. The Card
+## 11. The Card
 
 ```
 BEFORE YOU DRAFT
@@ -762,7 +794,7 @@ WHILE YOU DRAFT — this alone
                 am I still adding material during kyū?
 
 WHEN A STRETCH GOES SHAPELESS
-  Name the symptom. Take one structure off the shelf (§6).
+  Name the symptom. Take one structure off the shelf (§7).
   Use it for a sequence. Put it back.
 
 AFTER THE DRAFT
@@ -773,7 +805,7 @@ AFTER THE DRAFT
 
 ---
 
-## 11. The short version
+## 12. The short version
 
 **One atom. Four slots. Mix as you like.**
 
