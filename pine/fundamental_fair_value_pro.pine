@@ -432,7 +432,11 @@ i_use_rkv = input.bool(true, '💎 Apply Rhodes-Kropf (RKV) M/B Decomposition', 
 i_sbc_proxy = input.bool(false, 'Subtract Non-cash items as SBC proxy', group = group_calc, tooltip = 'Pine has no stock-based-compensation field. NON_CASH_ITEMS also holds impairments, deferred tax, FX and fair-value moves, so subtracting it from FCF is a guess. Off by default.')
 i_flow_ttm = input.bool(true, 'Request flows as TTM', group = group_calc, tooltip = 'Income and cash-flow items are requested as TTM directly instead of summing four FQ values. If a financial ID errors on TTM for your market, switch this off.')
 group_iv = 'Intrinsic Value Models (Automated)'
-i_analyst_growth = input.float(10.0, 'Analyst Consensus Growth %', group = group_iv) / 100
+i_growth_src = input.string('Auto (Consensus EPS -> Sales CAGR)', 'Forward growth source', options = ['Auto (Consensus EPS -> Sales CAGR)', 'Manual'], group = group_iv, tooltip = 'Auto: FY consensus EPS growth (EARNINGS_ESTIMATE, has history and passes the report-lag gate), else 3y sales CAGR, else the manual value.\n\nAnalyst PRICE targets are never used here: they exist only for today, so they would leak into the backtest and make the street comparison circular.')
+i_analyst_growth = input.float(10.0, 'Manual forward growth %', group = group_iv, tooltip = 'Used when the source is Manual, or as the last fallback in Auto.') / 100
+group_street = 'Street Consensus (analyst targets)'
+i_show_street = input.bool(true, 'Show street comparison', group = group_street, tooltip = 'Uses syminfo.target_price_* and syminfo.recommendations_* (0 request slots). Display only: never enters the blend, the plot or the backtest.')
+i_conf_gap = input.float(15.0, 'Agreement band: ours vs street PV (%)', minval = 1, maxval = 50, group = group_street) / 100
 i_iv_projection_period = input.int(10, 'RIM Projection Period (Years)', group = group_iv, minval = 5, maxval = 20)
 i_cagr_years = input.int(3, 'CAGR Lookback Years', group = group_iv, minval = 1, maxval = 10)
 i_dcf_stage1_yrs = input.int(10, 'DCF: High-Growth Years (Stage 1)', group = group_iv, minval = 1, maxval = 15, tooltip = 'Used by every DCF-type model: main DCF, rNPV, AFFO DCF, Unbundled ServeCo and ECF.')
@@ -1520,7 +1524,12 @@ float effective_sgr = base_profitability > 0 ? normalized_sgr : nz(sales_cagr_3y
 float reinvestment_rate = nopat_adjusted > 0 ? (nopat_adjusted - true_fcf) / nopat_adjusted : 0.0
 float roic_sgr = math.max(roic_adj * reinvestment_rate, 0.0)
 // [MACRO] The CPI/GDP macro adjustment is gone with the feeds.
-float base_triangulated_growth = (effective_sgr * 0.15) + (roic_sgr * 0.40) + (i_analyst_growth * 0.15) + (nz(sales_cagr_3y, 0.05) * 0.30)
+// [STREET-1] Forward growth leg: consensus EPS growth (historical, lag-gated),
+// then sales CAGR, then the manual value. Replaces the fixed 10% input.
+bool g_manual = i_growth_src == 'Manual'
+float fwd_growth_leg = g_manual ? i_analyst_growth : not na(fwd_eps_growth) ? fwd_eps_growth : not na(sales_cagr_3y) ? sales_cagr_3y : i_analyst_growth
+string fwd_growth_src = g_manual ? 'Manual' : not na(fwd_eps_growth) ? 'Consensus EPS' : not na(sales_cagr_3y) ? 'Sales CAGR' : 'Manual (fallback)'
+float base_triangulated_growth = (effective_sgr * 0.15) + (roic_sgr * 0.40) + (fwd_growth_leg * 0.15) + (nz(sales_cagr_3y, 0.05) * 0.30)
 float final_explicit_growth = base_triangulated_growth
 float calc_growth_triangulated = math.min(math.max(final_explicit_growth, -0.10), 0.35)
 float dynamic_growth_cap = 0.25
@@ -2026,6 +2035,115 @@ else if close < finalFairValue - fv_band
 else
     valuation_status := 'Fairly Valued'
 // ==============================================================
+// === STREET CONSENSUS: BEAR / BASE / BULL + CONFIDENCE =========
+// ==============================================================
+// Snapshot data (same value on every bar). Display only.
+f_clamp01(float x) =>
+    na(x) ? na : math.max(math.min(x, 1.0), 0.0)
+// Log RMS error of stored fair values vs price `horizon` quarters later.
+f_log_rmse(array<float> fv, array<float> px, int horizon) =>
+    int n = math.min(array.size(fv), array.size(px)) - horizon
+    float sse = 0.0
+    int k = 0
+    if n > 0
+        for i = 0 to n - 1
+            float f = array.get(fv, i)
+            float p = array.get(px, i + horizon)
+            if not na(f) and not na(p) and f > 0 and p > 0
+                sse += math.pow(math.log(p / f), 2)
+                k += 1
+    k >= 4 ? math.sqrt(sse / k) : na
+// Percentile rank of x inside a ratio history (0..1).
+f_pct_rank(array<float> a, float x) =>
+    int n = array.size(a)
+    float r = na
+    if n >= 4 and not na(x)
+        int below = 0
+        for i = 0 to n - 1
+            below += array.get(a, i) < x ? 1 : 0
+        r := below / float(n)
+    r
+float st_lo_raw = syminfo.target_price_low
+float st_hi_raw = syminfo.target_price_high
+float st_md_raw = nz(syminfo.target_price_median, syminfo.target_price_average)
+float st_n = nz(syminfo.target_price_estimates, 0)
+bool st_has = not na(st_md_raw) and st_md_raw > 0
+float st_lo_t = st_has ? nz(st_lo_raw, st_md_raw) : na
+float st_hi_t = st_has ? nz(st_hi_raw, st_md_raw) : na
+// 12-month targets -> today: discount at CoE less the dividend carry.
+float st_disc = 1 + math.max(cost_of_equity - nz(div_yield, 0), 0.0)
+float st_lo = st_has ? st_lo_t / st_disc : na
+float st_md = st_has ? st_md_raw / st_disc : na
+float st_hi = st_has ? st_hi_t / st_disc : na
+// Implied growth (reverse DCF on each PV) and implied forward P/E.
+f_st_growth(float pv) =>
+    not na(pv) and pv > 0 ? f_calculate_reverse_dcf(pv, dcf_input_fcf_total_rev, shares_out_latest, math.max(final_discount_rate, 0.01), final_terminal_growth, 10) : na
+float st_g_lo = f_st_growth(st_lo)
+float st_g_md = f_st_growth(st_md)
+float st_g_hi = f_st_growth(st_hi)
+float our_implied_g = f_st_growth(finalFairValue)
+f_st_pe(float t) =>
+    not na(t) and not na(eps_est_ttm) and eps_est_ttm > 0 ? t / eps_est_ttm : na
+float st_pe_lo = f_st_pe(st_lo_t)
+float st_pe_md = f_st_pe(st_md_raw)
+float st_pe_hi = f_st_pe(st_hi_t)
+float st_pe_rank_hi = f_pct_rank(M_PE.hist, st_pe_hi)
+float st_pe_rank_md = f_pct_rank(M_PE.hist, st_pe_md)
+// Range overlap (ours Bear-Bull vs street Bear-Bull), 0..1.
+float our_lo_r = nz(compositeLo, finalFairValue)
+float our_hi_r = nz(compositeHi, finalFairValue)
+float rng_union = st_has and not na(finalFairValue) ? math.max(our_hi_r, st_hi) - math.min(our_lo_r, st_lo) : na
+float rng_overlap = na(rng_union) ? na : rng_union <= 0 ? 1.0 : math.max(math.min(our_hi_r, st_hi) - math.max(our_lo_r, st_lo), 0.0) / rng_union
+// --- OUR confidence ---
+int our_n_models = 0
+bool our_track = false
+if omni_active
+    our_n_models := omni_n
+    our_track := omni_w_sum > 0
+else
+    for i = 0 to 14
+        float b_i = array.get(blend_bv, i)
+        if not na(b_i) and b_i > 0 and array.get(blend_w, i) > 0
+            our_n_models += 1
+    our_track := not blend_eq
+float oc_agree = not na(finalFairValue) and finalFairValue > 0 ? f_clamp01(1 - (nz(fv_stddev, finalFairValue * 0.15) / finalFairValue) / 0.5) : na
+float oc_depth = f_clamp01(our_n_models / 8.0) * (our_track ? 1.0 : 0.5)
+float our_err = f_log_rmse(hist_iv_comp, hist_px_tracker, i_w_horizon)
+float oc_rel = na(our_err) ? 0.3 : math.exp(-our_err / 0.3)
+float oc_tier = (f_tier_q(t_eps) + f_tier_q(t_rev) + f_tier_q(t_ocf) + f_tier_q(t_equity) + f_tier_q(t_ebit)) / 5.0
+float oc_flags = (is_rkv_value_trap ? 0.2 : 0.0) + (i_useBeneishCheck and is_manipulator ? 0.2 : 0.0) + (not na(altman_z) and altman_z < z_safe_cut ? 0.2 : 0.0)
+float oc_qual = f_clamp01(oc_tier - oc_flags)
+float our_conf = na(oc_agree) ? na : 100 * (0.35 * oc_agree + 0.20 * oc_depth + 0.25 * oc_rel + 0.20 * oc_qual)
+// --- STREET confidence ---
+float sc_agree = st_has ? f_clamp01(1 - ((st_hi_t - st_lo_t) / st_md_raw) / 0.8) : na
+float sc_depth = st_has ? f_clamp01(math.sqrt(math.max(st_n, 1)) / math.sqrt(10)) : na
+float st_age_d = st_has and not na(syminfo.target_price_date) ? (timenow - syminfo.target_price_date) / 86400000.0 : na
+float sc_fresh = na(st_age_d) ? (st_has ? 0.5 : na) : st_age_d <= 30 ? 1.0 : math.max(1.0 - (st_age_d - 30) / 150 * 0.8, 0.2)
+float rc_buy = nz(syminfo.recommendations_buy, 0) + nz(syminfo.recommendations_buy_strong, 0)
+float rc_hold = nz(syminfo.recommendations_hold, 0)
+float rc_sell = nz(syminfo.recommendations_sell, 0) + nz(syminfo.recommendations_sell_strong, 0)
+float rc_tot = rc_buy + rc_hold + rc_sell
+float sc_conv = st_has ? (rc_tot > 0 ? math.max(rc_buy, rc_hold, rc_sell) / rc_tot : 0.5) : na
+float st_conf = st_has ? 100 * (0.35 * sc_agree + 0.20 * sc_depth + 0.25 * sc_fresh + 0.20 * sc_conv) : na
+// 1 = strong buy ... 5 = strong sell
+float rc_score = rc_tot > 0 ? (1 * nz(syminfo.recommendations_buy_strong, 0) + 2 * nz(syminfo.recommendations_buy, 0) + 3 * rc_hold + 4 * nz(syminfo.recommendations_sell, 0) + 5 * nz(syminfo.recommendations_sell_strong, 0)) / rc_tot : na
+// --- Verdict + confidence-weighted value ---
+float st_gap = st_has and not na(finalFairValue) ? finalFairValue / st_md - 1 : na
+string st_verdict = 'No coverage'
+if st_has and not na(our_conf)
+    bool agree_v = math.abs(st_gap) <= i_conf_gap
+    if our_conf >= 60 and st_conf >= 60
+        st_verdict := agree_v ? 'High conviction' : 'Real disagreement'
+    else if our_conf < 40 and st_conf < 40
+        st_verdict := 'Low information'
+    else if our_conf - st_conf >= 20
+        st_verdict := agree_v ? 'Agree (ours stronger)' : 'Trust ours'
+    else if st_conf - our_conf >= 20
+        st_verdict := agree_v ? 'Agree (street stronger)' : 'Trust street'
+    else
+        st_verdict := agree_v ? 'Agree' : 'Mixed'
+float cw_fv = st_has and not na(our_conf) and our_conf + st_conf > 0 ? (finalFairValue * our_conf + st_md * st_conf) / (our_conf + st_conf) : na
+// ==============================================================
 // ⚙️ QUANTITATIVE QUALITY & MANAGEMENT RATIOS
 // ==============================================================
 float raw_shares_prev = ta.valuewhen(is_new_quarter, calc_shares, 4)
@@ -2084,10 +2202,15 @@ f_mult_tt(float avgr, float curr, float plo, float phi) =>
          '\n\nBear multiple: ' + (na(plo) ? 'n/a' : str.tostring(plo, '#.##') + 'x') +
          '\nBull multiple: ' + (na(phi) ? 'n/a' : str.tostring(phi, '#.##') + 'x') +
          "\n\nBear/Bull are percentiles of this ticker's own stored ratio history applied to the same per-share base. Blank = too few observations.\n[xx%] = weight in the Standard blend."
+f_gtxt(float g) => na(g) ? '-' : str.tostring(g * 100, '#.#') + '%'
+f_petxt(float pe) => na(pe) ? '-' : str.tostring(pe, '#.#') + 'x'
+f_ctxt(float c) => na(c) ? '-' : str.tostring(c, '#')
+f_ccol(float c) => na(c) ? color_bg : c >= 60 ? color_under : c >= 40 ? color.new(color.orange, 40) : color_over
+f_stxt(float c) => na(c) ? '-' : str.tostring(c, '#.00')
 if barstate.islast
-    var table T = table.new(position.top_right, 4, 60, border_width = 1)
+    var table T = table.new(position.top_right, 4, 80, border_width = 1)
     table.set_position(T, i_tablePos == 'top_right' ? position.top_right : i_tablePos == 'middle_right' ? position.middle_right : position.bottom_right)
-    table.clear(T, start_column = 0, start_row = 0, end_column = 3, end_row = 59)
+    table.clear(T, start_column = 0, start_row = 0, end_column = 3, end_row = 79)
     table.cell(table_id = T, column = 0, row = 0, text = active_model_desc + ' [REAL-TIME]', text_color = color.white, bgcolor = color.new(color.purple, 20), text_size = i_textSize)
     table.cell(table_id = T, column = 1, row = 0, text = '', text_color = color.white, bgcolor = color.new(color.purple, 20), text_size = i_textSize)
     table.cell(table_id = T, column = 2, row = 0, text = '', text_color = color.white, bgcolor = color.new(color.purple, 20), text_size = i_textSize)
@@ -2189,6 +2312,63 @@ if barstate.islast
         f_cell(T, 2, row_idx, omni_manual ? (i_omni_strict ? 'Manual (strict)' : 'Manual') : 'Auto', color_text, color_bg, i_textSize)
         f_cell(T, 3, row_idx, omni_n == 0 ? 'INACTIVE' : omni_dupe ? 'DOUBLE-COUNT' : omni_w_sum > 0 ? 'Weighted' : 'Equal wt', omni_n == 0 ? color.red : omni_dupe ? color.orange : color_text, color_bg, i_textSize)
         row_idx := row_idx + 1
+    // ================= STREET CONSENSUS ==================
+    if i_show_street
+        table.cell(T, 0, row_idx, 'Street Consensus' + (st_has ? ' (' + str.tostring(st_n, '#') + ' analysts)' : ''), text_color = color_text, bgcolor = color_header, text_size = i_textSize, tooltip = 'Analyst targets are 12-month-forward prices. "PV" rows discount them to today at CoE less dividend yield, so they compare with our fair value. Display only.')
+        table.cell(T, 1, row_idx, 'Bear', text_color = color_text, bgcolor = color_header, text_size = i_textSize)
+        table.cell(T, 2, row_idx, 'Base', text_color = color_text, bgcolor = color_header, text_size = i_textSize)
+        table.cell(T, 3, row_idx, 'Bull', text_color = color_text, bgcolor = color_header, text_size = i_textSize)
+        row_idx += 1
+        if not st_has
+            f_cell(T, 0, row_idx, 'No analyst coverage on TradingView', color_text, color_bg, i_textSize)
+            row_idx += 1
+        else
+            f_model_row(T, row_idx, 'Street target (12M)', st_lo_t, st_md_raw, st_hi_t, st_n <= 1 ? '1 analyst: no range.' : 'Low / median / high analyst target.')
+            row_idx += 1
+            f_model_row(T, row_idx, 'Street PV (today)', st_lo, st_md, st_hi, 'Target / (1 + CoE ' + str.tostring(cost_of_equity * 100, '#.#') + '% - div yield). Comparable to our fair value.')
+            row_idx += 1
+            f_model_row(T, row_idx, 'Ours (composite)', compositeLo, finalFairValue, compositeHi, 'Range overlap with street: ' + (na(rng_overlap) ? 'N/A' : str.tostring(rng_overlap * 100, '#') + '%') + '. Near 0% = we disagree on the whole distribution, not just the midpoint.')
+            row_idx += 1
+            f_cell(T, 0, row_idx, 'Street implied growth', color_text, color_bg, i_textSize)
+            f_cell(T, 1, row_idx, f_gtxt(st_g_lo), color_text, color_bg, i_textSize)
+            f_cell(T, 2, row_idx, f_gtxt(st_g_md), color_text, color_bg, i_textSize)
+            table.cell(T, 3, row_idx, f_gtxt(st_g_hi), text_color = color_text, bgcolor = color_bg, text_size = i_textSize, tooltip = 'Reverse DCF on each street PV. Ours: implied ' + f_gtxt(our_implied_g) + ', model explicit growth ' + f_gtxt(final_growth_rate) + '.')
+            row_idx += 1
+            string pe_tt = 'Target / FY consensus EPS. Percentile in the stock own P/E history: Base ' + (na(st_pe_rank_md) ? 'N/A' : str.tostring(st_pe_rank_md * 100, '#') + 'th') + ', Bull ' + (na(st_pe_rank_hi) ? 'N/A' : str.tostring(st_pe_rank_hi * 100, '#') + 'th') + '.'
+            f_cell(T, 0, row_idx, 'Street implied fwd P/E', color_text, color_bg, i_textSize)
+            f_cell(T, 1, row_idx, f_petxt(st_pe_lo), color_text, color_bg, i_textSize)
+            f_cell(T, 2, row_idx, f_petxt(st_pe_md), not na(st_pe_rank_md) and st_pe_rank_md > 0.9 ? color.red : color_text, color_bg, i_textSize)
+            table.cell(T, 3, row_idx, f_petxt(st_pe_hi), text_color = not na(st_pe_rank_hi) and st_pe_rank_hi > 0.9 ? color.red : color_text, bgcolor = color_bg, text_size = i_textSize, tooltip = pe_tt)
+            row_idx += 1
+        // --- Confidence comparison ---
+        table.cell(T, 0, row_idx, 'Confidence (0-100)', text_color = color_text, bgcolor = color_header, text_size = i_textSize, tooltip = 'Agreement 35% | Depth 20% | Reliability 25% | Quality 20%.\n\nOur reliability is earned: composite log error vs price ' + str.tostring(i_w_horizon) + 'Q later' + (na(our_err) ? ' (not enough history, set to 0.3)' : ' = ' + str.tostring(our_err, '#.##')) + '. The street has no history, so FRESHNESS of the targets stands in.')
+        table.cell(T, 1, row_idx, 'Ours', text_color = color_text, bgcolor = color_header, text_size = i_textSize)
+        table.cell(T, 2, row_idx, 'Street', text_color = color_text, bgcolor = color_header, text_size = i_textSize)
+        table.cell(T, 3, row_idx, 'Verdict', text_color = color_text, bgcolor = color_header, text_size = i_textSize)
+        row_idx += 1
+        color vcol_s = st_verdict == 'High conviction' or str.startswith(st_verdict, 'Agree') ? color_under : st_verdict == 'Real disagreement' or st_verdict == 'Low information' ? color_over : color.new(color.orange, 40)
+        string v_tt = 'Gap ours vs street PV: ' + (na(st_gap) ? 'N/A' : (st_gap > 0 ? '+' : '') + str.tostring(st_gap * 100, '#') + '%') + ' (agree band +/-' + str.tostring(i_conf_gap * 100, '#') + '%).' + (na(rc_score) ? '' : '\nRating score: ' + str.tostring(rc_score, '#.0') + ' (1 strong buy - 5 strong sell), ' + str.tostring(rc_tot, '#') + ' ratings.')
+        f_cell(T, 0, row_idx, 'Score', color_text, color_bg, i_textSize)
+        f_cell(T, 1, row_idx, f_ctxt(our_conf), color.white, f_ccol(our_conf), i_textSize)
+        f_cell(T, 2, row_idx, f_ctxt(st_conf), color.white, f_ccol(st_conf), i_textSize)
+        table.cell(T, 3, row_idx, st_verdict, text_color = color.white, bgcolor = vcol_s, text_size = i_textSize, tooltip = v_tt)
+        row_idx += 1
+        array<string> cl = array.from('Agreement', 'Depth', 'Reliability / Freshness', 'Quality / Conviction')
+        array<float> co = array.from(oc_agree, oc_depth, oc_rel, oc_qual)
+        array<float> cs = array.from(sc_agree, sc_depth, sc_fresh, sc_conv)
+        array<string> ctt = array.from('Ours: model dispersion (stdev / FV). Street: (high - low) / median.', 'Ours: ' + str.tostring(our_n_models) + ' models' + (our_track ? '' : ', no track record (x0.5)') + '. Street: sqrt(analysts) / sqrt(10).', 'Ours: exp(-log error / 0.3). Street: target age ' + (na(st_age_d) ? 'unknown' : str.tostring(st_age_d, '#') + ' days') + '.', 'Ours: data-quality tier less 0.2 per red flag (value trap, M-score, distress). Street: share of ratings in the largest bucket.')
+        for j = 0 to 3
+            table.cell(T, 0, row_idx, '  ' + array.get(cl, j), text_color = color_text, bgcolor = color_bg, text_size = i_textSize, tooltip = array.get(ctt, j))
+            f_cell(T, 1, row_idx, f_stxt(array.get(co, j)), color_text, color_bg, i_textSize)
+            f_cell(T, 2, row_idx, f_stxt(array.get(cs, j)), color_text, color_bg, i_textSize)
+            f_cell(T, 3, row_idx, '', color_text, color_bg, i_textSize)
+            row_idx += 1
+        if not na(cw_fv)
+            table.cell(T, 0, row_idx, 'Confidence-weighted FV', text_color = color_text, bgcolor = color_bg, text_size = i_textSize, tooltip = '(Ours x our score + Street PV x street score) / sum of scores. Display only.')
+            f_cell(T, 1, row_idx, '', color_text, color_bg, i_textSize)
+            f_cell(T, 2, row_idx, str.tostring(math.round(cw_fv)), color.white, f_scen_col(cw_fv, close, true), i_textSize)
+            f_cell(T, 3, row_idx, (close / cw_fv - 1 > 0 ? '+' : '') + str.tostring((close / cw_fv - 1) * 100, '#') + '% vs price', color_text, color_bg, i_textSize)
+            row_idx += 1
     // ================= DIAGNOSTICS ==================
     table.cell(table_id = T, column = 0, row = row_idx, text = 'Diagnostics', text_color = color_text, bgcolor = color_header, text_size = i_textSize)
     table.cell(table_id = T, column = 1, row = row_idx, text = 'Value', text_color = color_text, bgcolor = color_header, text_size = i_textSize)
@@ -2340,8 +2520,8 @@ if barstate.islast
     bool is_crazy_exit = implied_exit_multiple > 30.0
     f_cell(T, 3, row_idx, is_crazy_exit ? 'High' : 'Safe', is_crazy_exit ? color.red : color.green, color_bg, i_textSize)
     row_idx := row_idx + 1
-    float growth_benchmark = nz(fwd_eps_growth, i_analyst_growth)
-    string growth_src = na(fwd_eps_growth) ? 'Manual Est.' : 'Consensus Est.'
+    float growth_benchmark = fwd_growth_leg
+    string growth_src = fwd_growth_src
     bool expensive_growth = implied_market_growth > growth_benchmark
     f_cell(T, 0, row_idx, 'Market Implied Growth', color_text, color_header, i_textSize)
     f_cell(T, 1, row_idx, str.tostring(math.round(implied_market_growth * 100, 1)) + '%', color_text, color_value, i_textSize)
