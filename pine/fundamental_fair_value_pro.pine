@@ -2065,86 +2065,10 @@ f_pct_rank(array<float> a, float x) =>
             below += array.get(a, i) < x ? 1 : 0
         r := below / float(n)
     r
-float st_lo_raw = syminfo.target_price_low
-float st_hi_raw = syminfo.target_price_high
-float st_md_raw = nz(syminfo.target_price_median, syminfo.target_price_average)
-float st_n = nz(syminfo.target_price_estimates, 0)
-bool st_has = not na(st_md_raw) and st_md_raw > 0
-float st_lo_t = st_has ? nz(st_lo_raw, st_md_raw) : na
-float st_hi_t = st_has ? nz(st_hi_raw, st_md_raw) : na
-// 12-month targets -> today: discount at CoE less the dividend carry.
-float st_disc = 1 + math.max(cost_of_equity - nz(div_yield, 0), 0.0)
-float st_lo = st_has ? st_lo_t / st_disc : na
-float st_md = st_has ? st_md_raw / st_disc : na
-float st_hi = st_has ? st_hi_t / st_disc : na
-// Implied growth (reverse DCF on each PV) and implied forward P/E.
 f_st_growth(float pv) =>
     barstate.islast and not na(pv) and pv > 0 ? f_calculate_reverse_dcf(pv, dcf_input_fcf_total_rev, shares_out_latest, math.max(final_discount_rate, 0.01), final_terminal_growth, 10) : na
-float st_g_lo = f_st_growth(st_lo)
-float st_g_md = f_st_growth(st_md)
-float st_g_hi = f_st_growth(st_hi)
-float our_implied_g = f_st_growth(finalFairValue)
 f_st_pe(float t) =>
     not na(t) and not na(eps_est_ttm) and eps_est_ttm > 0 ? t / eps_est_ttm : na
-float st_pe_lo = f_st_pe(st_lo_t)
-float st_pe_md = f_st_pe(st_md_raw)
-float st_pe_hi = f_st_pe(st_hi_t)
-float st_pe_rank_hi = barstate.islast ? f_pct_rank(M_PE.hist, st_pe_hi) : na
-float st_pe_rank_md = barstate.islast ? f_pct_rank(M_PE.hist, st_pe_md) : na
-// Range overlap (ours Bear-Bull vs street Bear-Bull), 0..1.
-float our_lo_r = nz(compositeLo, finalFairValue)
-float our_hi_r = nz(compositeHi, finalFairValue)
-float rng_union = st_has and not na(finalFairValue) ? math.max(our_hi_r, st_hi) - math.min(our_lo_r, st_lo) : na
-float rng_overlap = na(rng_union) ? na : rng_union <= 0 ? 1.0 : math.max(math.min(our_hi_r, st_hi) - math.max(our_lo_r, st_lo), 0.0) / rng_union
-// --- OUR confidence ---
-int our_n_models = 0
-bool our_track = false
-if omni_active
-    our_n_models := omni_n
-    our_track := omni_w_sum > 0
-else
-    for i = 0 to 14
-        float b_i = array.get(blend_bv, i)
-        if not na(b_i) and b_i > 0 and array.get(blend_w, i) > 0
-            our_n_models += 1
-    our_track := not blend_eq
-float oc_agree = not na(finalFairValue) and finalFairValue > 0 ? f_clamp01(1 - (nz(fv_stddev, finalFairValue * 0.15) / finalFairValue) / 0.5) : na
-float oc_depth = f_clamp01(our_n_models / 8.0) * (our_track ? 1.0 : 0.5)
-float our_err = barstate.islast ? f_log_rmse(hist_iv_comp, hist_px_tracker, i_w_horizon) : na
-float oc_rel = na(our_err) ? 0.3 : math.exp(-our_err / 0.3)
-float oc_tier = (f_tier_q(t_eps) + f_tier_q(t_rev) + f_tier_q(t_ocf) + f_tier_q(t_equity) + f_tier_q(t_ebit)) / 5.0
-float oc_flags = (is_rkv_value_trap ? 0.2 : 0.0) + (i_useBeneishCheck and is_manipulator ? 0.2 : 0.0) + (not na(altman_z) and altman_z < z_safe_cut ? 0.2 : 0.0)
-float oc_qual = f_clamp01(oc_tier - oc_flags)
-float our_conf = na(oc_agree) ? na : 100 * (0.35 * oc_agree + 0.20 * oc_depth + 0.25 * oc_rel + 0.20 * oc_qual)
-// --- STREET confidence ---
-float sc_agree = st_has ? f_clamp01(1 - ((st_hi_t - st_lo_t) / st_md_raw) / 0.8) : na
-float sc_depth = st_has ? f_clamp01(math.sqrt(math.max(st_n, 1)) / math.sqrt(10)) : na
-float st_age_d = st_has and not na(syminfo.target_price_date) ? (timenow - syminfo.target_price_date) / 86400000.0 : na
-float sc_fresh = na(st_age_d) ? (st_has ? 0.5 : na) : st_age_d <= 30 ? 1.0 : math.max(1.0 - (st_age_d - 30) / 150 * 0.8, 0.2)
-float rc_buy = nz(syminfo.recommendations_buy, 0) + nz(syminfo.recommendations_buy_strong, 0)
-float rc_hold = nz(syminfo.recommendations_hold, 0)
-float rc_sell = nz(syminfo.recommendations_sell, 0) + nz(syminfo.recommendations_sell_strong, 0)
-float rc_tot = rc_buy + rc_hold + rc_sell
-float sc_conv = st_has ? (rc_tot > 0 ? math.max(rc_buy, rc_hold, rc_sell) / rc_tot : 0.5) : na
-float st_conf = st_has ? 100 * (0.35 * sc_agree + 0.20 * sc_depth + 0.25 * sc_fresh + 0.20 * sc_conv) : na
-// 1 = strong buy ... 5 = strong sell
-float rc_score = rc_tot > 0 ? (1 * nz(syminfo.recommendations_buy_strong, 0) + 2 * nz(syminfo.recommendations_buy, 0) + 3 * rc_hold + 4 * nz(syminfo.recommendations_sell, 0) + 5 * nz(syminfo.recommendations_sell_strong, 0)) / rc_tot : na
-// --- Verdict + confidence-weighted value ---
-float st_gap = st_has and not na(finalFairValue) ? finalFairValue / st_md - 1 : na
-string st_verdict = 'No coverage'
-if st_has and not na(our_conf)
-    bool agree_v = math.abs(st_gap) <= i_conf_gap
-    if our_conf >= 60 and st_conf >= 60
-        st_verdict := agree_v ? 'High conviction' : 'Real disagreement'
-    else if our_conf < 40 and st_conf < 40
-        st_verdict := 'Low information'
-    else if our_conf - st_conf >= 20
-        st_verdict := agree_v ? 'Agree (ours stronger)' : 'Trust ours'
-    else if st_conf - our_conf >= 20
-        st_verdict := agree_v ? 'Agree (street stronger)' : 'Trust street'
-    else
-        st_verdict := agree_v ? 'Agree' : 'Mixed'
-float cw_fv = st_has and not na(our_conf) and our_conf + st_conf > 0 ? (finalFairValue * our_conf + st_md * st_conf) / (our_conf + st_conf) : na
 // ==============================================================
 // ⚙️ QUANTITATIVE QUALITY & MANAGEMENT RATIOS
 // ==============================================================
@@ -2209,7 +2133,84 @@ f_petxt(float pe) => na(pe) ? '-' : str.tostring(pe, '#.#') + 'x'
 f_ctxt(float c) => na(c) ? '-' : str.tostring(c, '#')
 f_ccol(float c) => na(c) ? color_bg : c >= 60 ? color_under : c >= 40 ? color.new(color.orange, 40) : color_over
 f_stxt(float c) => na(c) ? '-' : str.tostring(c, '#.00')
-if barstate.islast
+f_main_table() =>
+    // Street consensus inputs (display only, computed here on the last bar).
+    float st_lo_raw = syminfo.target_price_low
+    float st_hi_raw = syminfo.target_price_high
+    float st_md_raw = nz(syminfo.target_price_median, syminfo.target_price_average)
+    float st_n = nz(syminfo.target_price_estimates, 0)
+    bool st_has = not na(st_md_raw) and st_md_raw > 0
+    float st_lo_t = st_has ? nz(st_lo_raw, st_md_raw) : na
+    float st_hi_t = st_has ? nz(st_hi_raw, st_md_raw) : na
+    // 12-month targets -> today: discount at CoE less the dividend carry.
+    float st_disc = 1 + math.max(cost_of_equity - nz(div_yield, 0), 0.0)
+    float st_lo = st_has ? st_lo_t / st_disc : na
+    float st_md = st_has ? st_md_raw / st_disc : na
+    float st_hi = st_has ? st_hi_t / st_disc : na
+    // Implied growth (reverse DCF on each PV) and implied forward P/E.
+    float st_g_lo = f_st_growth(st_lo)
+    float st_g_md = f_st_growth(st_md)
+    float st_g_hi = f_st_growth(st_hi)
+    float our_implied_g = f_st_growth(finalFairValue)
+    float st_pe_lo = f_st_pe(st_lo_t)
+    float st_pe_md = f_st_pe(st_md_raw)
+    float st_pe_hi = f_st_pe(st_hi_t)
+    float st_pe_rank_hi = barstate.islast ? f_pct_rank(M_PE.hist, st_pe_hi) : na
+    float st_pe_rank_md = barstate.islast ? f_pct_rank(M_PE.hist, st_pe_md) : na
+    // Range overlap (ours Bear-Bull vs street Bear-Bull), 0..1.
+    float our_lo_r = nz(compositeLo, finalFairValue)
+    float our_hi_r = nz(compositeHi, finalFairValue)
+    float rng_union = st_has and not na(finalFairValue) ? math.max(our_hi_r, st_hi) - math.min(our_lo_r, st_lo) : na
+    float rng_overlap = na(rng_union) ? na : rng_union <= 0 ? 1.0 : math.max(math.min(our_hi_r, st_hi) - math.max(our_lo_r, st_lo), 0.0) / rng_union
+    // --- OUR confidence ---
+    int our_n_models = 0
+    bool our_track = false
+    if omni_active
+        our_n_models := omni_n
+        our_track := omni_w_sum > 0
+    else
+        for i = 0 to 14
+            float b_i = array.get(blend_bv, i)
+            if not na(b_i) and b_i > 0 and array.get(blend_w, i) > 0
+                our_n_models += 1
+        our_track := not blend_eq
+    float oc_agree = not na(finalFairValue) and finalFairValue > 0 ? f_clamp01(1 - (nz(fv_stddev, finalFairValue * 0.15) / finalFairValue) / 0.5) : na
+    float oc_depth = f_clamp01(our_n_models / 8.0) * (our_track ? 1.0 : 0.5)
+    float our_err = barstate.islast ? f_log_rmse(hist_iv_comp, hist_px_tracker, i_w_horizon) : na
+    float oc_rel = na(our_err) ? 0.3 : math.exp(-our_err / 0.3)
+    float oc_tier = (f_tier_q(t_eps) + f_tier_q(t_rev) + f_tier_q(t_ocf) + f_tier_q(t_equity) + f_tier_q(t_ebit)) / 5.0
+    float oc_flags = (is_rkv_value_trap ? 0.2 : 0.0) + (i_useBeneishCheck and is_manipulator ? 0.2 : 0.0) + (not na(altman_z) and altman_z < z_safe_cut ? 0.2 : 0.0)
+    float oc_qual = f_clamp01(oc_tier - oc_flags)
+    float our_conf = na(oc_agree) ? na : 100 * (0.35 * oc_agree + 0.20 * oc_depth + 0.25 * oc_rel + 0.20 * oc_qual)
+    // --- STREET confidence ---
+    float sc_agree = st_has ? f_clamp01(1 - ((st_hi_t - st_lo_t) / st_md_raw) / 0.8) : na
+    float sc_depth = st_has ? f_clamp01(math.sqrt(math.max(st_n, 1)) / math.sqrt(10)) : na
+    float st_age_d = st_has and not na(syminfo.target_price_date) ? (timenow - syminfo.target_price_date) / 86400000.0 : na
+    float sc_fresh = na(st_age_d) ? (st_has ? 0.5 : na) : st_age_d <= 30 ? 1.0 : math.max(1.0 - (st_age_d - 30) / 150 * 0.8, 0.2)
+    float rc_buy = nz(syminfo.recommendations_buy, 0) + nz(syminfo.recommendations_buy_strong, 0)
+    float rc_hold = nz(syminfo.recommendations_hold, 0)
+    float rc_sell = nz(syminfo.recommendations_sell, 0) + nz(syminfo.recommendations_sell_strong, 0)
+    float rc_tot = rc_buy + rc_hold + rc_sell
+    float sc_conv = st_has ? (rc_tot > 0 ? math.max(rc_buy, rc_hold, rc_sell) / rc_tot : 0.5) : na
+    float st_conf = st_has ? 100 * (0.35 * sc_agree + 0.20 * sc_depth + 0.25 * sc_fresh + 0.20 * sc_conv) : na
+    // 1 = strong buy ... 5 = strong sell
+    float rc_score = rc_tot > 0 ? (1 * nz(syminfo.recommendations_buy_strong, 0) + 2 * nz(syminfo.recommendations_buy, 0) + 3 * rc_hold + 4 * nz(syminfo.recommendations_sell, 0) + 5 * nz(syminfo.recommendations_sell_strong, 0)) / rc_tot : na
+    // --- Verdict + confidence-weighted value ---
+    float st_gap = st_has and not na(finalFairValue) ? finalFairValue / st_md - 1 : na
+    string st_verdict = 'No coverage'
+    if st_has and not na(our_conf)
+        bool agree_v = math.abs(st_gap) <= i_conf_gap
+        if our_conf >= 60 and st_conf >= 60
+            st_verdict := agree_v ? 'High conviction' : 'Real disagreement'
+        else if our_conf < 40 and st_conf < 40
+            st_verdict := 'Low information'
+        else if our_conf - st_conf >= 20
+            st_verdict := agree_v ? 'Agree (ours stronger)' : 'Trust ours'
+        else if st_conf - our_conf >= 20
+            st_verdict := agree_v ? 'Agree (street stronger)' : 'Trust street'
+        else
+            st_verdict := agree_v ? 'Agree' : 'Mixed'
+    float cw_fv = st_has and not na(our_conf) and our_conf + st_conf > 0 ? (finalFairValue * our_conf + st_md * st_conf) / (our_conf + st_conf) : na
     var table T = table.new(position.top_right, 4, 80, border_width = 1)
     table.set_position(T, i_tablePos == 'top_right' ? position.top_right : i_tablePos == 'middle_right' ? position.middle_right : position.bottom_right)
     table.clear(T, start_column = 0, start_row = 0, end_column = 3, end_row = 79)
@@ -2580,6 +2581,9 @@ if barstate.islast
             f_cell(T, 2, row_idx, '< 5%', color_text, color_bg, i_textSize)
             f_cell(T, 3, row_idx, pass_ag ? 'PASS' : 'EMPIRE BLDR', color.white, pass_ag ? color_under : color_over, i_textSize)
             row_idx := row_idx + 1
+    true
+if barstate.islast
+    f_main_table()
 // ==========================================
 // 7. PLOTTING (MARGIN OF SAFETY ZONES)
 // ==========================================
@@ -2925,7 +2929,7 @@ f_bt_row(tbl, row, name, ModelStats m, ModelStats b) =>
         f_fill_focus_row(tbl, row, name, m, which)
 // --- DASHBOARD RENDERER ---
 var table bt_tbl = table.new(position.bottom_left, 9, 32, border_width = 1)
-if barstate.islast and i_show_bt
+f_bt_table() =>
     color th_bg = color.new(color.blue, 20)
     color th_txt = color.white
     table.clear(bt_tbl, 0, 0, 8, 31)
@@ -2970,3 +2974,6 @@ if barstate.islast and i_show_bt
     table.cell(bt_tbl, 1, btrowidx, " ", bgcolor = color.new(color.black, 100), text_color = color.new(color.white, 100))
     table.cell(bt_tbl, 2, btrowidx, " ", bgcolor = color.new(color.black, 100), text_color = color.new(color.white, 100))
     table.cell(bt_tbl, 3, btrowidx, " ", bgcolor = color.new(color.black, 100), text_color = color.new(color.white, 100))
+    true
+if barstate.islast and i_show_bt
+    f_bt_table()
