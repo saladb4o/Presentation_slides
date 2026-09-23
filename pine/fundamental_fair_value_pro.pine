@@ -335,7 +335,8 @@ f_set3(Model m, int s, float v) =>
     else
         m.hi := v
 // Model families: models that share a driver move together, so no family may hold more
-// than max(40%, 1 / families present) of a blend. 0 Composite | 1 earnings / returns |
+// than 40% of a blend once 3+ families are present (with 2, a cap would force 50/50 and
+// erase the track-record weights, so they only normalise). 0 Composite | 1 earnings / returns |
 // 2 sales | 3 cash flow | 4 book | 5 EBIT(DA) | 6 dividends. (P/AFFO reads the FCF
 // figure: no AFFO field exists, so it is a cash-flow model like P/FCF.)
 var array<int> FAM = array.from(0, 1, 2, 3, 4, 4, 5, 3, 3, 3, 3, 3, 3, 3, 1, 6, 3, 1, 1, 1, 2, 5, 3)
@@ -361,7 +362,7 @@ f_fam_cap(array<float> w) =>
             for y in fs
                 over += math.max(y - cap, 0.0)
                 room += y < cap - 1e-12 ? y : 0.0
-            if over > 1e-9 and room > 0
+            if nf >= 3 and over > 1e-9 and room > 0
                 for i = 0 to 22
                     float fx = array.get(fs, array.get(FAM, i))
                     array.set(w, i, array.get(w, i) * (fx >= cap - 1e-12 ? cap / fx : 1 + over / room))
@@ -2093,8 +2094,7 @@ f_det_models(int r0) =>
         if m.on and ((k >= 16 and k != 21) or not na(m.fv))
             string lbl = k == 20 ? (super_stock ? '🌟 Rule of 65 (Super Stock)' : 'Rule of 40 Value') : k == 21 ? "Acquirer's Mult (" + str.tostring(i_acquirer_mult) + "x EBIT)" : m.name
             string tt = switch k
-                20 => super_stock ? 'Rule of 65 Score: ' + str.tostring(rx_score, '#.#') + '%\n(Hyper-Growth Premium Unlocked!)' : 'Rule of 40 Score: ' + str.tostring(r40_score, '#.#') + '%'
-                     + '\n\nASSUMPTION: fixed EV/Sales rule -- 12x + 0.3x per point above 65, else 1x + 0.25x the Rule-of-40 score (1.5x under 10), capped at 25x.'
+                20 => (super_stock ? 'Rule of 65 Score: ' + str.tostring(rx_score, '#.#') + '%\n(Hyper-Growth Premium Unlocked!)' : 'Rule of 40 Score: ' + str.tostring(r40_score, '#.#') + '%') + '\n\nASSUMPTION: fixed EV/Sales rule -- 12x + 0.3x per point above 65, else 1x + 0.25x the Rule-of-40 score (1.5x under 10), capped at 25x.'
                 19 => 'Needs positive EPS. Growth capped at 15%; the 4.4/Y bond-yield factor is capped at 1.0.'
                 21 => 'Bear/Bull shift the EBIT multiple by +/-' + str.tostring(i_scen_acq_delta) + 'x.'
                 9 => 'ASSUMPTION (not fitted, no trial-outcome data): pipeline = 5x annual R&D, 15% risk-adjusted, added to a value-driver DCF.'
@@ -2379,6 +2379,10 @@ f_period_metrics(PeriodStats stats) =>
     float med_ret = f_arr_median(stats.closed_returns)
     float avg_hold = array.size(stats.closed_holds) > 0 ? array.avg(stats.closed_holds) : na
     PMetrics.new(n, wr, expectancy, mae, ic, med_ret, avg_hold, f_calc_vacagr(stats))
+// Median trade annualised over the average hold (floor 3 months), in %: comparable across
+// holding periods, unlike a raw median (scales with hold) or VACAGR (short holds dominate).
+f_med_ann(PMetrics p) =>
+    na(p.med_ret) ? na : (math.pow(1 + math.max(p.med_ret, -0.999), 1 / math.max(nz(p.avg_hold, 1.0), 0.25)) - 1) * 100
 f_conf_col(int n) =>
     n == 0 ? color.new(color.gray, 85) : n < i_bt_min_n ? color.new(color.gray, 75) : color(na)
 // Period 1 = in-sample, 2 = out-of-sample, 3 = forward.
@@ -2389,8 +2393,8 @@ f_format_period(PeriodStats stats) =>
     if p.n == 0
         ["N/A", "No trades in this period.", color.new(color.gray, 80), color.gray]
     else
-        float md = nz(p.med_ret) * 100
-        string main_txt = str.tostring(md, "#.0") + "% (" + str.tostring(p.wr, "#.0") + "%) n=" + str.tostring(p.n)
+        float md = nz(f_med_ann(p))
+        string main_txt = str.tostring(md, "#.0") + "%/y (" + str.tostring(p.wr, "#.0") + "%) n=" + str.tostring(p.n)
         string tt = "Trades: " + str.tostring(p.n) +
              "\nIC (Alpha): " + (not na(p.ic) ? str.tostring(p.ic, "#.00") : "N/A") +
              "\nExpectancy: " + (not na(p.expectancy) ? str.tostring(p.expectancy * 100, "#.0") + "%" : "N/A") +
@@ -2399,7 +2403,7 @@ f_format_period(PeriodStats stats) =>
              "\nVACAGR: " + (not na(p.vacagr) ? str.tostring(p.vacagr, "#.0") + "%" : "N/A") +
              "\nAvg hold: " + (not na(p.avg_hold) ? str.tostring(p.avg_hold, "#.0") + "y" : "N/A") +
              "\nMAE (per-trade): " + (not na(p.mae) ? str.tostring(p.mae, "#.0") + "%" : "N/A") +
-             "\n\nHeadline = median trade return after fees, dividends accrued. VACAGR annualizes each trade with a 1-month floor, so short holds dominate it."
+             "\n\nHeadline = median trade (after fees, dividends accrued) annualised over the average hold. VACAGR annualizes each trade with a 1-month floor, so short holds dominate it."
         color dim_col = f_conf_col(p.n)
         color bg_col = not na(dim_col) ? dim_col : md >= 15.0 ? color.new(color.yellow, 0) : md > 0 ? color.new(color.green, 70) : color.new(color.red, 70)
         color txt_col = not na(dim_col) ? color.silver : md >= 15.0 ? color.black : color.white
@@ -2440,9 +2444,9 @@ f_fill_robust_row(int row, string name, ModelStats m, ModelStats b) =>
     for w = 1 to 3
         PMetrics p = f_period_metrics(f_ps(m, w))
         // [FIX BASELINE] "Stable" also requires beating simply being invested.
-        // Median trade return (%), the same headline as the matrix.
-        float q = nz(f_period_metrics(f_ps(b, w)).med_ret) * 100
-        float pv = p.med_ret * 100
+        // Annualised median trade (%/y), the same headline as the matrix.
+        float q = nz(f_med_ann(f_period_metrics(f_ps(b, w))))
+        float pv = f_med_ann(p)
         array.push(v, pv)
         array.push(n, p.n)
         edge_sum += nz(pv) - q
@@ -2508,7 +2512,7 @@ f_bt_table() =>
     bool v_rb = i_bt_view == 'Robustness verdict'
     array<string> hd = v_mx ? array.from('Valuation Model Matrix', 'Period 1\n(In-Sample)', 'Period 2\n(Out-of-Sample)', 'Period 3\n(Forward)') : v_rb ? array.from('Robustness', 'P1', 'P2', 'P3', 'Spread', 'Verdict', 'vs Base') : array.from(i_bt_view, 'n', 'IC', 'Expect', 'Median', 'Win%', 'Hold', 'MAE', 'VACAGR')
     for c = 0 to array.size(hd) - 1
-        string tt = c == 0 ? 'The inputs were chosen after seeing this whole history, so for the SETTINGS every period is in-sample. Read P2/P3 as a stability check, not proof of an edge.' : v_mx ? 'Median trade % (Win%) n=trades' : v_rb ? (c == 6 ? 'Average median-trade edge over the always-in baseline across the three periods.' : '') : c == 2 ? 'Discount-to-return correlation: does a bigger discount predict a bigger return?' : c == 7 ? 'Per-trade maximum adverse excursion, NOT portfolio drawdown.' : ''
+        string tt = c == 0 ? 'The inputs were chosen after seeing this whole history, so for the SETTINGS every period is in-sample. Read P2/P3 as a stability check, not proof of an edge.' : v_mx ? 'Median trade, annualised over the average hold (%/y) (Win%) n=trades' : v_rb ? (c == 6 ? 'Average median-trade edge over the always-in baseline across the three periods.' : '') : c == 2 ? 'Discount-to-return correlation: does a bigger discount predict a bigger return?' : c == 7 ? 'Per-trade maximum adverse excursion, NOT portfolio drawdown.' : ''
         f_btc(c, 0, array.get(hd, c) + (c == 0 ? mode_tag : ''), c == 0 ? color.new(color.purple, 30) : color.new(color.blue, 20), c == 0 ? color.yellow : color.white, tt)
     // A dot marks a model the current framework does NOT allocate. Compact view (default):
     // the Composite, the allocated models and the Baseline. Sector models (9-15) stay
