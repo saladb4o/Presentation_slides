@@ -2133,7 +2133,117 @@ f_petxt(float pe) => na(pe) ? '-' : str.tostring(pe, '#.#') + 'x'
 f_ctxt(float c) => na(c) ? '-' : str.tostring(c, '#')
 f_ccol(float c) => na(c) ? color_bg : c >= 60 ? color_under : c >= 40 ? color.new(color.orange, 40) : color_over
 f_stxt(float c) => na(c) ? '-' : str.tostring(c, '#.00')
-f_main_table() =>
+var table T = table.new(position.top_right, 4, 80, border_width = 1)
+f_tbl_a1() =>
+    table.set_position(T, i_tablePos == 'top_right' ? position.top_right : i_tablePos == 'middle_right' ? position.middle_right : position.bottom_right)
+    table.clear(T, start_column = 0, start_row = 0, end_column = 3, end_row = 79)
+    table.cell(table_id = T, column = 0, row = 0, text = active_model_desc + ' [REAL-TIME]', text_color = color.white, bgcolor = color.new(color.purple, 20), text_size = i_textSize)
+    table.cell(table_id = T, column = 1, row = 0, text = '', text_color = color.white, bgcolor = color.new(color.purple, 20), text_size = i_textSize)
+    table.cell(table_id = T, column = 2, row = 0, text = '', text_color = color.white, bgcolor = color.new(color.purple, 20), text_size = i_textSize)
+    table.cell(table_id = T, column = 3, row = 0, text = '', text_color = color.white, bgcolor = color.new(color.purple, 20), text_size = i_textSize)
+    array<float> cur_mult = array.new_float(0)
+    for k = 0 to 7
+        Mult m = array.get(MULTS, k)
+        array.push(cur_mult, m.drv > 0 ? (m.is_ev ? ev_latest : close) / m.drv : na)
+    int row_idx = 1
+    if i_tableMode == 'Full'
+        table.cell(T, 0, row_idx, 'Relative Valuation', text_color = color_text, bgcolor = color_header, text_size = i_textSize)
+        table.cell(T, 1, row_idx, 'Bear', text_color = color_text, bgcolor = color_header, text_size = i_textSize)
+        table.cell(T, 2, row_idx, 'Base', text_color = color_text, bgcolor = color_header, text_size = i_textSize)
+        table.cell(T, 3, row_idx, 'Bull', text_color = color_text, bgcolor = color_header, text_size = i_textSize)
+        row_idx := row_idx + 1
+        for k = 0 to 7
+            Mult m = array.get(MULTS, k)
+            if m.on and not na(m.fv) and m.fv > 0
+                f_model_row(T, row_idx, m.name + (m.syn ? ' *' : '') + f_wt_lbl(array.get(blend_w, k)), m.lo, m.fv, m.hi, (m.syn ? 'SYNTHETIC: fewer than 4 quarters of history, so the base multiple is a default, not observed.\n\n' : '') + f_mult_tt(m.avg, array.get(cur_mult, k), m.plo, m.phi))
+                row_idx := row_idx + 1
+    table.cell(table_id = T, column = 0, row = row_idx, text = 'Intrinsic Models', text_color = color_text, bgcolor = color_header, text_size = i_textSize)
+    table.cell(table_id = T, column = 1, row = row_idx, text = 'Bear', text_color = color_text, bgcolor = color_header, text_size = i_textSize)
+    table.cell(table_id = T, column = 2, row = row_idx, text = 'Base', text_color = color_text, bgcolor = color_header, text_size = i_textSize)
+    table.cell(table_id = T, column = 3, row = row_idx, text = 'Bull', text_color = color_text, bgcolor = color_header, text_size = i_textSize)
+    row_idx := row_idx + 1
+    if use_paper_ivm
+        f_model_row(T, row_idx, 'Intrinsic Value (RIM)', iv_paper_lo, iv_paper, iv_paper_hi, '')
+        row_idx := row_idx + 1
+    if use_rule40
+        float r40_score = not na(rev_growth) and not na(true_fcf_margin_ttm) ? (rev_growth + true_fcf_margin_ttm) * 100 : 0.0
+        float rule_x_display_score = not na(rev_growth) and not na(true_fcf_margin_ttm) ? ((rev_growth * 2.0) + true_fcf_margin_ttm) * 100 : 0.0
+        bool is_super_stock = rule_x_display_score >= 65
+        string label_text = is_super_stock ? '🌟 Rule of 65 (Super Stock)' : 'Rule of 40 Value'
+        string label_tooltip = is_super_stock ? 'Rule of 65 Score: ' + str.tostring(rule_x_display_score, '#.#') + '%\n(Hyper-Growth Premium Unlocked!)' : 'Rule of 40 Score: ' + str.tostring(r40_score, '#.#') + '%'
+        f_model_row(T, row_idx, label_text, iv_r40_lo, iv_rule40, iv_r40_hi, label_tooltip)
+        row_idx := row_idx + 1
+    if use_graham
+        f_model_row(T, row_idx, 'Graham', iv_graham_lo, iv_graham, iv_graham_hi, 'Needs positive EPS. Growth capped at 15%; the 4.4/Y bond-yield factor is capped at 1.0.')
+        row_idx := row_idx + 1
+    if use_acquirer and not na(iv_acquirer)
+        f_model_row(T, row_idx, "Acquirer's Mult (" + str.tostring(i_acquirer_mult) + "x EBIT)", iv_acq_lo, iv_acquirer, iv_acq_hi, 'Bear/Bull shift the EBIT multiple by +/-' + str.tostring(i_scen_acq_delta) + 'x.')
+        row_idx := row_idx + 1
+    if use_dcf
+        f_model_row(T, row_idx, 'DCF (McKinsey/ROIC)', iv_dcf_lo, iv_buffett_dcf, iv_dcf_hi, 'Bear/Bull move the discount rate, terminal growth AND stage-1 growth.')
+        row_idx := row_idx + 1
+    if use_epv
+        f_model_row(T, row_idx, 'EPV (Greenwald)', iv_epv_lo, iv_epv, iv_epv_hi, '')
+        row_idx := row_idx + 1
+    if use_rnpv and not na(fv_rnpv)
+        f_model_row(T, row_idx, 'rNPV (Risk-Adj)' + f_wt_lbl(array.get(blend_w, 8)), fv_rnpv_lo, fv_rnpv, fv_rnpv_hi, '')
+        row_idx := row_idx + 1
+    if use_ecf and not na(fv_ecf)
+        f_model_row(T, row_idx, 'Equity Cash Flow' + f_wt_lbl(array.get(blend_w, 9)), fv_ecf_lo, fv_ecf, fv_ecf_hi, 'Two-stage FCFE: NI + D&A - CapEx + net borrowing.')
+        row_idx := row_idx + 1
+    if use_affo_dcf and not na(fv_affo_dcf)
+        f_model_row(T, row_idx, 'AFFO DCF' + f_wt_lbl(array.get(blend_w, 10)), fv_affo_lo, fv_affo_dcf, fv_affo_hi, '')
+        row_idx := row_idx + 1
+    if use_unbundled and not na(fv_unbundled)
+        f_model_row(T, row_idx, 'Unbundled (SOTP)' + f_wt_lbl(array.get(blend_w, 11)), fv_unb_lo, fv_unbundled, fv_unb_hi, '')
+        row_idx := row_idx + 1
+    if use_apv and not na(fv_apv)
+        f_model_row(T, row_idx, 'Adjusted PV (APV)' + f_wt_lbl(array.get(blend_w, 12)), fv_apv_lo, fv_apv, fv_apv_hi, 'Steady-state APV at terminal growth, plus tax shield, less debt, plus cash.')
+        row_idx := row_idx + 1
+    if use_eva and not na(fv_eva)
+        f_model_row(T, row_idx, 'Economic Value Added' + f_wt_lbl(array.get(blend_w, 13)), fv_eva_lo, fv_eva, fv_eva_hi, 'Invested capital + PV(EVA) - net debt.')
+        row_idx := row_idx + 1
+    if use_ddm and not na(fv_ddm)
+        float ddm_yield = close > 0 and not na(div_per_share_ttm) ? div_per_share_ttm / close * 100 : na
+        string ddm_tt = 'Gordon growth on the trailing dividend.\nDPS: ' + str.tostring(div_per_share_ttm, '#.##') + '\nYield: ' + (na(ddm_yield) ? 'N/A' : str.tostring(ddm_yield, '#.##') + '%') + '\nCost of equity: ' + str.tostring(cost_of_equity * 100, '#.#') + '%\nTerminal growth: ' + str.tostring(final_terminal_growth * 100, '#.#') + '%'
+        f_model_row(T, row_idx, 'Dividend Discount (DDM)' + f_wt_lbl(array.get(blend_w, 14)), fv_ddm_lo, fv_ddm, fv_ddm_hi, ddm_tt)
+        row_idx := row_idx + 1
+    row_idx
+f_tbl_a2(int r0) =>
+    int row_idx = r0
+    table.cell(table_id = T, column = 0, row = row_idx, text = 'Composite', text_color = color_text, bgcolor = color_header, text_size = i_textSize)
+    table.cell(table_id = T, column = 1, row = row_idx, text = 'Bear', text_color = color_text, bgcolor = color_header, text_size = i_textSize)
+    table.cell(table_id = T, column = 2, row = row_idx, text = 'Base', text_color = color_text, bgcolor = color_header, text_size = i_textSize)
+    table.cell(table_id = T, column = 3, row = row_idx, text = 'Bull', text_color = color_text, bgcolor = color_header, text_size = i_textSize)
+    row_idx := row_idx + 1
+    string composite_label = omni_active ? 'Omnibus FV (' + str.tostring(omni_n) + '/23 models)' : is_omnibus ? 'Standard FV (Omnibus unavailable)' : (selected_industry == 'General/Diversified' ? 'Overall Relative Value' : 'Industry Relative Value')
+    color valuation_color = valuation_status == 'Overvalued' or valuation_status == 'Very Overvalued' ? color_over : valuation_status == 'Undervalued' or valuation_status == 'Very Undervalued' ? color_under : color_bg
+    float variance_pct = na(finalFairValue) ? na : (close / finalFairValue - 1) * 100
+    string comp_tt = (blend_eq ? 'No model has a predictive track record yet, so the blend is EQUAL-WEIGHTED (x data-quality tier).\n\n' : 'Weights = inverse error of each model fair value against the price ' + str.tostring(i_w_horizon) + ' quarters later, x data-quality tier.\n\n') + 'Bear/Bull are the same weights applied to each model own bear and bull case.' + (na(variance_pct) ? '' : '\n\nPrice vs Base: ' + (variance_pct > 0 ? '+' : '') + str.tostring(math.round(variance_pct)) + '%')
+    f_model_row(T, row_idx, composite_label, compositeLo, finalFairValue, compositeHi, comp_tt)
+    row_idx := row_idx + 1
+    float band_w = not na(compositeLo) and not na(compositeHi) and not na(finalFairValue) and finalFairValue > 0 ? (compositeHi - compositeLo) / finalFairValue * 100 : na
+    f_cell(T, 0, row_idx, 'Price vs Fair Value', color_text, color_header, i_textSize)
+    f_cell(T, 1, row_idx, na(variance_pct) ? 'N/A' : (variance_pct > 0 ? '+' : '') + str.tostring(math.round(variance_pct)) + '%', na(variance_pct) ? color_text : variance_pct > 0 ? color.red : color.green, color_bg, i_textSize)
+    f_cell(T, 2, row_idx, valuation_status, color_text, valuation_color, i_textSize)
+    f_cell(T, 3, row_idx, na(band_w) ? 'N/A' : 'Width ' + str.tostring(math.round(band_w)) + '%', na(band_w) ? color_text : band_w < 30 ? color.green : band_w < 60 ? color.orange : color.red, color_bg, i_textSize)
+    row_idx := row_idx + 1
+    if is_omnibus
+        string omni_tt = omni_n == 0 ? 'No member survived gating, so the row above is the Standard composite, not an Omnibus value.' : (omni_w_sum > 0 ? 'Share of the blend. Weight = inverse prediction error against price ' + str.tostring(i_w_horizon) + ' quarters later, x data-quality tier.\n\n' : 'No member has 4+ paired quarters yet, so this is a plain equal-weight mean.\n\n')
+        if omni_dupe
+            omni_tt += 'WARNING: the Standard Composite is in the blend alongside ' + str.tostring(omni_sub) + ' of the models it already contains. Those are counted twice.\n\n'
+        for k = 0 to 22
+            Omni o = array.get(OMNI, k)
+            if o.on
+                omni_tt += o.name + '  ' + str.tostring(omni_w_sum > 0 ? o.w / omni_w_sum * 100 : 100.0 / omni_n, '#.#') + '%\n'
+        f_cell(T, 0, row_idx, 'Omnibus Members', color_text, color_header, i_textSize)
+        table.cell(T, 1, row_idx, str.tostring(omni_n) + ' / 23', text_color = omni_dupe ? color.orange : omni_n >= 3 ? color.green : omni_n > 0 ? color.orange : color.red, bgcolor = color_bg, text_size = i_textSize, tooltip = omni_tt)
+        f_cell(T, 2, row_idx, omni_manual ? (i_omni_strict ? 'Manual (strict)' : 'Manual') : 'Auto', color_text, color_bg, i_textSize)
+        f_cell(T, 3, row_idx, omni_n == 0 ? 'INACTIVE' : omni_dupe ? 'DOUBLE-COUNT' : omni_w_sum > 0 ? 'Weighted' : 'Equal wt', omni_n == 0 ? color.red : omni_dupe ? color.orange : color_text, color_bg, i_textSize)
+        row_idx := row_idx + 1
+    row_idx
+f_tbl_b(int r0) =>
+    int row_idx = r0
     // Street consensus inputs (display only, computed here on the last bar).
     float st_lo_raw = syminfo.target_price_low
     float st_hi_raw = syminfo.target_price_high
@@ -2211,110 +2321,6 @@ f_main_table() =>
         else
             st_verdict := agree_v ? 'Agree' : 'Mixed'
     float cw_fv = st_has and not na(our_conf) and our_conf + st_conf > 0 ? (finalFairValue * our_conf + st_md * st_conf) / (our_conf + st_conf) : na
-    var table T = table.new(position.top_right, 4, 80, border_width = 1)
-    table.set_position(T, i_tablePos == 'top_right' ? position.top_right : i_tablePos == 'middle_right' ? position.middle_right : position.bottom_right)
-    table.clear(T, start_column = 0, start_row = 0, end_column = 3, end_row = 79)
-    table.cell(table_id = T, column = 0, row = 0, text = active_model_desc + ' [REAL-TIME]', text_color = color.white, bgcolor = color.new(color.purple, 20), text_size = i_textSize)
-    table.cell(table_id = T, column = 1, row = 0, text = '', text_color = color.white, bgcolor = color.new(color.purple, 20), text_size = i_textSize)
-    table.cell(table_id = T, column = 2, row = 0, text = '', text_color = color.white, bgcolor = color.new(color.purple, 20), text_size = i_textSize)
-    table.cell(table_id = T, column = 3, row = 0, text = '', text_color = color.white, bgcolor = color.new(color.purple, 20), text_size = i_textSize)
-    array<float> cur_mult = array.new_float(0)
-    for k = 0 to 7
-        Mult m = array.get(MULTS, k)
-        array.push(cur_mult, m.drv > 0 ? (m.is_ev ? ev_latest : close) / m.drv : na)
-    int row_idx = 1
-    if i_tableMode == 'Full'
-        table.cell(T, 0, row_idx, 'Relative Valuation', text_color = color_text, bgcolor = color_header, text_size = i_textSize)
-        table.cell(T, 1, row_idx, 'Bear', text_color = color_text, bgcolor = color_header, text_size = i_textSize)
-        table.cell(T, 2, row_idx, 'Base', text_color = color_text, bgcolor = color_header, text_size = i_textSize)
-        table.cell(T, 3, row_idx, 'Bull', text_color = color_text, bgcolor = color_header, text_size = i_textSize)
-        row_idx := row_idx + 1
-        for k = 0 to 7
-            Mult m = array.get(MULTS, k)
-            if m.on and not na(m.fv) and m.fv > 0
-                f_model_row(T, row_idx, m.name + (m.syn ? ' *' : '') + f_wt_lbl(array.get(blend_w, k)), m.lo, m.fv, m.hi, (m.syn ? 'SYNTHETIC: fewer than 4 quarters of history, so the base multiple is a default, not observed.\n\n' : '') + f_mult_tt(m.avg, array.get(cur_mult, k), m.plo, m.phi))
-                row_idx := row_idx + 1
-    table.cell(table_id = T, column = 0, row = row_idx, text = 'Intrinsic Models', text_color = color_text, bgcolor = color_header, text_size = i_textSize)
-    table.cell(table_id = T, column = 1, row = row_idx, text = 'Bear', text_color = color_text, bgcolor = color_header, text_size = i_textSize)
-    table.cell(table_id = T, column = 2, row = row_idx, text = 'Base', text_color = color_text, bgcolor = color_header, text_size = i_textSize)
-    table.cell(table_id = T, column = 3, row = row_idx, text = 'Bull', text_color = color_text, bgcolor = color_header, text_size = i_textSize)
-    row_idx := row_idx + 1
-    if use_paper_ivm
-        f_model_row(T, row_idx, 'Intrinsic Value (RIM)', iv_paper_lo, iv_paper, iv_paper_hi, '')
-        row_idx := row_idx + 1
-    if use_rule40
-        float r40_score = not na(rev_growth) and not na(true_fcf_margin_ttm) ? (rev_growth + true_fcf_margin_ttm) * 100 : 0.0
-        float rule_x_display_score = not na(rev_growth) and not na(true_fcf_margin_ttm) ? ((rev_growth * 2.0) + true_fcf_margin_ttm) * 100 : 0.0
-        bool is_super_stock = rule_x_display_score >= 65
-        string label_text = is_super_stock ? '🌟 Rule of 65 (Super Stock)' : 'Rule of 40 Value'
-        string label_tooltip = is_super_stock ? 'Rule of 65 Score: ' + str.tostring(rule_x_display_score, '#.#') + '%\n(Hyper-Growth Premium Unlocked!)' : 'Rule of 40 Score: ' + str.tostring(r40_score, '#.#') + '%'
-        f_model_row(T, row_idx, label_text, iv_r40_lo, iv_rule40, iv_r40_hi, label_tooltip)
-        row_idx := row_idx + 1
-    if use_graham
-        f_model_row(T, row_idx, 'Graham', iv_graham_lo, iv_graham, iv_graham_hi, 'Needs positive EPS. Growth capped at 15%; the 4.4/Y bond-yield factor is capped at 1.0.')
-        row_idx := row_idx + 1
-    if use_acquirer and not na(iv_acquirer)
-        f_model_row(T, row_idx, "Acquirer's Mult (" + str.tostring(i_acquirer_mult) + "x EBIT)", iv_acq_lo, iv_acquirer, iv_acq_hi, 'Bear/Bull shift the EBIT multiple by +/-' + str.tostring(i_scen_acq_delta) + 'x.')
-        row_idx := row_idx + 1
-    if use_dcf
-        f_model_row(T, row_idx, 'DCF (McKinsey/ROIC)', iv_dcf_lo, iv_buffett_dcf, iv_dcf_hi, 'Bear/Bull move the discount rate, terminal growth AND stage-1 growth.')
-        row_idx := row_idx + 1
-    if use_epv
-        f_model_row(T, row_idx, 'EPV (Greenwald)', iv_epv_lo, iv_epv, iv_epv_hi, '')
-        row_idx := row_idx + 1
-    if use_rnpv and not na(fv_rnpv)
-        f_model_row(T, row_idx, 'rNPV (Risk-Adj)' + f_wt_lbl(array.get(blend_w, 8)), fv_rnpv_lo, fv_rnpv, fv_rnpv_hi, '')
-        row_idx := row_idx + 1
-    if use_ecf and not na(fv_ecf)
-        f_model_row(T, row_idx, 'Equity Cash Flow' + f_wt_lbl(array.get(blend_w, 9)), fv_ecf_lo, fv_ecf, fv_ecf_hi, 'Two-stage FCFE: NI + D&A - CapEx + net borrowing.')
-        row_idx := row_idx + 1
-    if use_affo_dcf and not na(fv_affo_dcf)
-        f_model_row(T, row_idx, 'AFFO DCF' + f_wt_lbl(array.get(blend_w, 10)), fv_affo_lo, fv_affo_dcf, fv_affo_hi, '')
-        row_idx := row_idx + 1
-    if use_unbundled and not na(fv_unbundled)
-        f_model_row(T, row_idx, 'Unbundled (SOTP)' + f_wt_lbl(array.get(blend_w, 11)), fv_unb_lo, fv_unbundled, fv_unb_hi, '')
-        row_idx := row_idx + 1
-    if use_apv and not na(fv_apv)
-        f_model_row(T, row_idx, 'Adjusted PV (APV)' + f_wt_lbl(array.get(blend_w, 12)), fv_apv_lo, fv_apv, fv_apv_hi, 'Steady-state APV at terminal growth, plus tax shield, less debt, plus cash.')
-        row_idx := row_idx + 1
-    if use_eva and not na(fv_eva)
-        f_model_row(T, row_idx, 'Economic Value Added' + f_wt_lbl(array.get(blend_w, 13)), fv_eva_lo, fv_eva, fv_eva_hi, 'Invested capital + PV(EVA) - net debt.')
-        row_idx := row_idx + 1
-    if use_ddm and not na(fv_ddm)
-        float ddm_yield = close > 0 and not na(div_per_share_ttm) ? div_per_share_ttm / close * 100 : na
-        string ddm_tt = 'Gordon growth on the trailing dividend.\nDPS: ' + str.tostring(div_per_share_ttm, '#.##') + '\nYield: ' + (na(ddm_yield) ? 'N/A' : str.tostring(ddm_yield, '#.##') + '%') + '\nCost of equity: ' + str.tostring(cost_of_equity * 100, '#.#') + '%\nTerminal growth: ' + str.tostring(final_terminal_growth * 100, '#.#') + '%'
-        f_model_row(T, row_idx, 'Dividend Discount (DDM)' + f_wt_lbl(array.get(blend_w, 14)), fv_ddm_lo, fv_ddm, fv_ddm_hi, ddm_tt)
-        row_idx := row_idx + 1
-    table.cell(table_id = T, column = 0, row = row_idx, text = 'Composite', text_color = color_text, bgcolor = color_header, text_size = i_textSize)
-    table.cell(table_id = T, column = 1, row = row_idx, text = 'Bear', text_color = color_text, bgcolor = color_header, text_size = i_textSize)
-    table.cell(table_id = T, column = 2, row = row_idx, text = 'Base', text_color = color_text, bgcolor = color_header, text_size = i_textSize)
-    table.cell(table_id = T, column = 3, row = row_idx, text = 'Bull', text_color = color_text, bgcolor = color_header, text_size = i_textSize)
-    row_idx := row_idx + 1
-    string composite_label = omni_active ? 'Omnibus FV (' + str.tostring(omni_n) + '/23 models)' : is_omnibus ? 'Standard FV (Omnibus unavailable)' : (selected_industry == 'General/Diversified' ? 'Overall Relative Value' : 'Industry Relative Value')
-    color valuation_color = valuation_status == 'Overvalued' or valuation_status == 'Very Overvalued' ? color_over : valuation_status == 'Undervalued' or valuation_status == 'Very Undervalued' ? color_under : color_bg
-    float variance_pct = na(finalFairValue) ? na : (close / finalFairValue - 1) * 100
-    string comp_tt = (blend_eq ? 'No model has a predictive track record yet, so the blend is EQUAL-WEIGHTED (x data-quality tier).\n\n' : 'Weights = inverse error of each model fair value against the price ' + str.tostring(i_w_horizon) + ' quarters later, x data-quality tier.\n\n') + 'Bear/Bull are the same weights applied to each model own bear and bull case.' + (na(variance_pct) ? '' : '\n\nPrice vs Base: ' + (variance_pct > 0 ? '+' : '') + str.tostring(math.round(variance_pct)) + '%')
-    f_model_row(T, row_idx, composite_label, compositeLo, finalFairValue, compositeHi, comp_tt)
-    row_idx := row_idx + 1
-    float band_w = not na(compositeLo) and not na(compositeHi) and not na(finalFairValue) and finalFairValue > 0 ? (compositeHi - compositeLo) / finalFairValue * 100 : na
-    f_cell(T, 0, row_idx, 'Price vs Fair Value', color_text, color_header, i_textSize)
-    f_cell(T, 1, row_idx, na(variance_pct) ? 'N/A' : (variance_pct > 0 ? '+' : '') + str.tostring(math.round(variance_pct)) + '%', na(variance_pct) ? color_text : variance_pct > 0 ? color.red : color.green, color_bg, i_textSize)
-    f_cell(T, 2, row_idx, valuation_status, color_text, valuation_color, i_textSize)
-    f_cell(T, 3, row_idx, na(band_w) ? 'N/A' : 'Width ' + str.tostring(math.round(band_w)) + '%', na(band_w) ? color_text : band_w < 30 ? color.green : band_w < 60 ? color.orange : color.red, color_bg, i_textSize)
-    row_idx := row_idx + 1
-    if is_omnibus
-        string omni_tt = omni_n == 0 ? 'No member survived gating, so the row above is the Standard composite, not an Omnibus value.' : (omni_w_sum > 0 ? 'Share of the blend. Weight = inverse prediction error against price ' + str.tostring(i_w_horizon) + ' quarters later, x data-quality tier.\n\n' : 'No member has 4+ paired quarters yet, so this is a plain equal-weight mean.\n\n')
-        if omni_dupe
-            omni_tt += 'WARNING: the Standard Composite is in the blend alongside ' + str.tostring(omni_sub) + ' of the models it already contains. Those are counted twice.\n\n'
-        for k = 0 to 22
-            Omni o = array.get(OMNI, k)
-            if o.on
-                omni_tt += o.name + '  ' + str.tostring(omni_w_sum > 0 ? o.w / omni_w_sum * 100 : 100.0 / omni_n, '#.#') + '%\n'
-        f_cell(T, 0, row_idx, 'Omnibus Members', color_text, color_header, i_textSize)
-        table.cell(T, 1, row_idx, str.tostring(omni_n) + ' / 23', text_color = omni_dupe ? color.orange : omni_n >= 3 ? color.green : omni_n > 0 ? color.orange : color.red, bgcolor = color_bg, text_size = i_textSize, tooltip = omni_tt)
-        f_cell(T, 2, row_idx, omni_manual ? (i_omni_strict ? 'Manual (strict)' : 'Manual') : 'Auto', color_text, color_bg, i_textSize)
-        f_cell(T, 3, row_idx, omni_n == 0 ? 'INACTIVE' : omni_dupe ? 'DOUBLE-COUNT' : omni_w_sum > 0 ? 'Weighted' : 'Equal wt', omni_n == 0 ? color.red : omni_dupe ? color.orange : color_text, color_bg, i_textSize)
-        row_idx := row_idx + 1
     // ================= STREET CONSENSUS ==================
     if i_show_street
         table.cell(T, 0, row_idx, 'Street Consensus' + (st_has ? ' (' + str.tostring(st_n, '#') + ' analysts)' : ''), text_color = color_text, bgcolor = color_header, text_size = i_textSize, tooltip = 'Analyst targets are 12-month-forward prices. "PV" rows discount them to today at CoE less dividend yield, so they compare with our fair value. Display only.')
@@ -2372,6 +2378,9 @@ f_main_table() =>
             f_cell(T, 2, row_idx, str.tostring(math.round(cw_fv)), color.white, f_scen_col(cw_fv, close, true), i_textSize)
             f_cell(T, 3, row_idx, (close / cw_fv - 1 > 0 ? '+' : '') + str.tostring((close / cw_fv - 1) * 100, '#') + '% price vs FV', color_text, color_bg, i_textSize)
             row_idx += 1
+    row_idx
+f_tbl_c1(int r0) =>
+    int row_idx = r0
     // ================= DIAGNOSTICS ==================
     table.cell(table_id = T, column = 0, row = row_idx, text = 'Diagnostics', text_color = color_text, bgcolor = color_header, text_size = i_textSize)
     table.cell(table_id = T, column = 1, row = row_idx, text = 'Value', text_color = color_text, bgcolor = color_header, text_size = i_textSize)
@@ -2474,6 +2483,9 @@ f_main_table() =>
         f_cell(T, 2, row_idx, 'RKV Diagnosis', color_text, color_bg, i_textSize)
         table.cell(table_id = T, column = 3, row = row_idx, text = rkv_status_txt, text_color = color_text, bgcolor = rkv_status_col, text_size = i_textSize, tooltip = rkv_tt)
         row_idx := row_idx + 1
+    row_idx
+f_tbl_c2(int r0) =>
+    int row_idx = r0
     string wacc_tt = 'CAPM Beta: ' + str.tostring(beta_mkt, '#.##') +
          '\nDownside Beta: ' + (na(downside_beta) ? 'N/A' : str.tostring(downside_beta, '#.##')) +
          '\nRisk-free base: ' + i_rf_base + ' = ' + str.tostring(base_rf_for_calc * 100, '#.##') + '%' +
@@ -2581,9 +2593,13 @@ f_main_table() =>
             f_cell(T, 2, row_idx, '< 5%', color_text, color_bg, i_textSize)
             f_cell(T, 3, row_idx, pass_ag ? 'PASS' : 'EMPIRE BLDR', color.white, pass_ag ? color_under : color_over, i_textSize)
             row_idx := row_idx + 1
-    true
+    row_idx
 if barstate.islast
-    f_main_table()
+    int r_ = f_tbl_a1()
+    r_ := f_tbl_a2(r_)
+    r_ := f_tbl_b(r_)
+    r_ := f_tbl_c1(r_)
+    r_ := f_tbl_c2(r_)
 // ==========================================
 // 7. PLOTTING (MARGIN OF SAFETY ZONES)
 // ==========================================
