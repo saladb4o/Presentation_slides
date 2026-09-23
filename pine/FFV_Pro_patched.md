@@ -136,7 +136,9 @@ f_calculate_reverse_dcf(current_price, fcf_total, shares, discount_rate, term_gr
     float low = -0.50
     float high = 1.00
     float solved_g = na
-    if fcf_total > 0 and current_price > 0
+    // Terminal growth stays 1pt under the discount rate or the perpetuity diverges.
+    float tg = math.min(term_growth, discount_rate - 0.01)
+    if fcf_total > 0 and current_price > 0 and shares > 0
         for i = 0 to 14 by 1
             float mid = (low + high) / 2
             float pv = 0.0
@@ -144,7 +146,7 @@ f_calculate_reverse_dcf(current_price, fcf_total, shares, discount_rate, term_gr
             for y = 1 to years by 1
                 curr_fcf := curr_fcf * (1 + mid)
                 pv := pv + curr_fcf / math.pow(1 + discount_rate, y)
-            float term_val = curr_fcf * (1 + term_growth) / (discount_rate - term_growth)
+            float term_val = curr_fcf * (1 + tg) / (discount_rate - tg)
             float pv_term = term_val / math.pow(1 + discount_rate, years)
             float model_price = (pv + pv_term) / shares
             if model_price > current_price
@@ -1083,7 +1085,7 @@ if is_new_quarter
     float op_val = not na(ebit_ttm[1]) and not na(total_equity_latest[1]) and total_equity_latest[1] > 0 ? ebit_ttm[1] / total_equity_latest[1] : na
     // --- RHODES-KROPF (RKV) HISTORICAL FILTER --- (P/B row only, via m.rkv)
     float hist_coe_proxy = (not na(us10y_true_raw[1]) ? us10y_true_raw[1] / 100 : 0.04) + 0.05
-    bool rkv_trip = i_use_rkv and not na(roe_avg) and roe_avg < hist_coe_proxy
+    bool rkv_trip = i_use_rkv and not na(roe_avg[1]) and roe_avg[1] < hist_coe_proxy
     array<float> hdrv = array.from(eps_ttm[1], sales_ps_ttm[1], fcf_ps_ttm[1], bvps_ttm[1], tbvps_ttm[1], na, ocf_ps_ttm[1], affo_ps_ttm[1])
     for k = 1 to 8
         Model m = array.get(MD, k)
@@ -1233,9 +1235,9 @@ if i_use_factors
         else if amihud_90d > 0.1
             illiq_penalty := i_liq_prem * (amihud_90d / 0.5)
     float spec_penalty = 0.0
+    // ta.sma runs on every bar: inside the share-count condition it averaged only qualifying bars.
+    float avg_turnover_12m = ta.sma(shares_out_latest > 0 ? nz(volume) / shares_out_latest : na, 252)
     if not na(volume) and shares_out_latest > 0
-        float daily_turnover = volume / shares_out_latest
-        float avg_turnover_12m = ta.sma(daily_turnover, 252)
         if avg_turnover_12m > 0.01
             spec_penalty := i_liq_prem * math.min((avg_turnover_12m - 0.01) / 0.01, 1.0)
     microstructure_premium := math.max(illiq_penalty, spec_penalty)
@@ -1578,6 +1580,11 @@ upperBound := upperBound > 0 ? upperBound : na
 lowerBound := lowerBound > 0 ? lowerBound : na
 float fv_band = math.max(nz(finalFairValue, 0) * 0.03, 0.0)
 string valuation_status = na(finalFairValue) ? 'N/A' : close > upperBound ? 'Very Overvalued' : close > finalFairValue + fv_band ? 'Overvalued' : close < lowerBound ? 'Very Undervalued' : close < finalFairValue - fv_band ? 'Undervalued' : 'Fairly Valued'
+// Track record of the value actually shown (Omnibus or Standard), aligned with hist_px:
+// the confidence score grades this, not the Standard composite alone.
+var array<float> hist_final = array.new_float(0)
+if is_new_quarter
+    f_push(hist_final, finalFairValue[1], 20, 999999, true)
 // Reverse DCF: the 10-year growth the current price implies. Table only -> last bar only.
 float implied_market_growth = na
 if barstate.islast
@@ -1792,7 +1799,7 @@ f_street_calc() =>
             our_n_models += m.fv > 0 and m.w > 0 ? 1 : 0
     float oc_agree = finalFairValue > 0 ? f_clamp01(1 - (nz(fv_stddev, finalFairValue * 0.15) / finalFairValue) / 0.5) : na
     float oc_depth = f_clamp01(our_n_models / 8.0) * (our_track ? 1.0 : 0.5)
-    float our_err = f_log_rmse(M_COMP.fvh, hist_px, i_w_horizon)
+    float our_err = f_log_rmse(hist_final, hist_px, i_w_horizon)
     float oc_rel = na(our_err) ? 0.3 : math.exp(-our_err / 0.3)
     float oc_tier = (f_tier_q(t_eps) + f_tier_q(t_rev) + f_tier_q(t_ocf) + f_tier_q(t_equity) + f_tier_q(t_ebit)) / 5.0
     float oc_flags = (is_rkv_value_trap ? 0.2 : 0.0) + (i_useBeneishCheck and is_manipulator ? 0.2 : 0.0) + (altman_z < z_safe_cut ? 0.2 : 0.0) + (data_suspect ? 0.2 : 0.0)
