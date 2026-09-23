@@ -549,12 +549,12 @@ int bpy = current_tf_sec < 86400 ? math.max(1, int(math.round(trading_days * ses
 // ---------------------------------------------------------------------
 // 3.2 MACRO FETCH — TUPLE-PACKED (2 security slots)
 // ---------------------------------------------------------------------
-// >>> SECURITY SLOT 1/4 : US risk-free curve
+// >>> SECURITY SLOT 1/6 : US risk-free curve
 [us_spot_r, us_sm_r, us_1y_r] = request.security('TVC:US10Y', 'D', [close, ta.sma(close, 90), close[252]], ignore_invalid_symbol = true)
 float us10y_true_raw = f_locf(us_spot_r)
 float us10y_smooth = f_locf(us_sm_r)
 float us10y_1y_ago = f_locf(us_1y_r)
-// >>> SECURITY SLOT 2/4 : Local risk-free curve
+// >>> SECURITY SLOT 2/6 : Local risk-free curve
 [rf_spot_r, rf_sm_r, rf_1y_r] = request.security(final_rf_ticker, 'D', [close, ta.sma(close, 90), close[252]], ignore_invalid_symbol = true)
 float local_rf_raw = f_locf(rf_spot_r)
 float us10y_yield = f_locf(rf_sm_r) // NOTE: 90d avg of the LOCAL yield; name kept for compatibility
@@ -1113,7 +1113,7 @@ string final_mkt_bench = (curr == 'VND') ? 'HOSE:VNINDEX' : i_mkt_bench
 string beta_tf = timeframe.in_seconds(i_beta_tf) <= timeframe.in_seconds(timeframe.period) ? timeframe.period : i_beta_tf
 bool beta_sample = ta.change(time(beta_tf)) != 0
 float asset_p = f_locf(close[1])
-// >>> SECURITY SLOT 3/4 : benchmark, non-repainting (close[1] + lookahead_on)
+// >>> SECURITY SLOT 3/6 : benchmark, non-repainting (close[1] + lookahead_on)
 float bench_c = request.security(final_mkt_bench, beta_tf, close[1], lookahead = barmerge.lookahead_on, ignore_invalid_symbol = true)
 float mkt_bench_p = f_locf(bench_c)
 max_bars_back(asset_p, 5000)
@@ -1176,7 +1176,7 @@ f_get_cagr_optimized(current_price_series, bars_back_5y) =>
 int bars_in_5y = math.min(5 * bpy, 4900)
 cagr_mkt = f_get_cagr_optimized(mkt_bench_p, bars_in_5y)
 string auto_small_etf = (curr == 'VND') ? 'HOSE:VNSML' : i_small_etf
-// >>> SECURITY SLOT 4/4 : size factor
+// >>> SECURITY SLOT 4/6 : size factor
 float small_c = request.security(auto_small_etf, i_beta_tf, close, ignore_invalid_symbol = true)
 float small_p = f_locf(small_c)
 max_bars_back(small_p, 5000)
@@ -1186,6 +1186,7 @@ live_smb_spread := math.max(math.min(live_smb_spread, 0.05), -0.02)
 // [FIX HML] HML from the value and growth ETFs (the old line reused the SMB
 // spread). Value-vs-market is roughly half the value-vs-growth spread.
 // No VN value/growth proxy exists, so VND uses the 1.5% long-run default.
+// >>> SECURITY SLOTS 5-6/6 : value and growth ETFs
 float value_c = curr == 'VND' ? na : request.security(i_value_etf, i_beta_tf, close, ignore_invalid_symbol = true)
 float growth_c = curr == 'VND' ? na : request.security(i_growth_etf, i_beta_tf, close, ignore_invalid_symbol = true)
 float value_p = f_locf(value_c)
@@ -2037,7 +2038,8 @@ else
 // ==============================================================
 // === STREET CONSENSUS: BEAR / BASE / BULL + CONFIDENCE =========
 // ==============================================================
-// Snapshot data (same value on every bar). Display only.
+// Snapshot data (same value on every bar). Display only: the loops below
+// (reverse DCF, percentile rank, error) run on the last bar only.
 f_clamp01(float x) =>
     na(x) ? na : math.max(math.min(x, 1.0), 0.0)
 // Log RMS error of stored fair values vs price `horizon` quarters later.
@@ -2077,7 +2079,7 @@ float st_md = st_has ? st_md_raw / st_disc : na
 float st_hi = st_has ? st_hi_t / st_disc : na
 // Implied growth (reverse DCF on each PV) and implied forward P/E.
 f_st_growth(float pv) =>
-    not na(pv) and pv > 0 ? f_calculate_reverse_dcf(pv, dcf_input_fcf_total_rev, shares_out_latest, math.max(final_discount_rate, 0.01), final_terminal_growth, 10) : na
+    barstate.islast and not na(pv) and pv > 0 ? f_calculate_reverse_dcf(pv, dcf_input_fcf_total_rev, shares_out_latest, math.max(final_discount_rate, 0.01), final_terminal_growth, 10) : na
 float st_g_lo = f_st_growth(st_lo)
 float st_g_md = f_st_growth(st_md)
 float st_g_hi = f_st_growth(st_hi)
@@ -2087,8 +2089,8 @@ f_st_pe(float t) =>
 float st_pe_lo = f_st_pe(st_lo_t)
 float st_pe_md = f_st_pe(st_md_raw)
 float st_pe_hi = f_st_pe(st_hi_t)
-float st_pe_rank_hi = f_pct_rank(M_PE.hist, st_pe_hi)
-float st_pe_rank_md = f_pct_rank(M_PE.hist, st_pe_md)
+float st_pe_rank_hi = barstate.islast ? f_pct_rank(M_PE.hist, st_pe_hi) : na
+float st_pe_rank_md = barstate.islast ? f_pct_rank(M_PE.hist, st_pe_md) : na
 // Range overlap (ours Bear-Bull vs street Bear-Bull), 0..1.
 float our_lo_r = nz(compositeLo, finalFairValue)
 float our_hi_r = nz(compositeHi, finalFairValue)
@@ -2108,7 +2110,7 @@ else
     our_track := not blend_eq
 float oc_agree = not na(finalFairValue) and finalFairValue > 0 ? f_clamp01(1 - (nz(fv_stddev, finalFairValue * 0.15) / finalFairValue) / 0.5) : na
 float oc_depth = f_clamp01(our_n_models / 8.0) * (our_track ? 1.0 : 0.5)
-float our_err = f_log_rmse(hist_iv_comp, hist_px_tracker, i_w_horizon)
+float our_err = barstate.islast ? f_log_rmse(hist_iv_comp, hist_px_tracker, i_w_horizon) : na
 float oc_rel = na(our_err) ? 0.3 : math.exp(-our_err / 0.3)
 float oc_tier = (f_tier_q(t_eps) + f_tier_q(t_rev) + f_tier_q(t_ocf) + f_tier_q(t_equity) + f_tier_q(t_ebit)) / 5.0
 float oc_flags = (is_rkv_value_trap ? 0.2 : 0.0) + (i_useBeneishCheck and is_manipulator ? 0.2 : 0.0) + (not na(altman_z) and altman_z < z_safe_cut ? 0.2 : 0.0)
@@ -2367,7 +2369,7 @@ if barstate.islast
             table.cell(T, 0, row_idx, 'Confidence-weighted FV', text_color = color_text, bgcolor = color_bg, text_size = i_textSize, tooltip = '(Ours x our score + Street PV x street score) / sum of scores. Display only.')
             f_cell(T, 1, row_idx, '', color_text, color_bg, i_textSize)
             f_cell(T, 2, row_idx, str.tostring(math.round(cw_fv)), color.white, f_scen_col(cw_fv, close, true), i_textSize)
-            f_cell(T, 3, row_idx, (close / cw_fv - 1 > 0 ? '+' : '') + str.tostring((close / cw_fv - 1) * 100, '#') + '% vs price', color_text, color_bg, i_textSize)
+            f_cell(T, 3, row_idx, (close / cw_fv - 1 > 0 ? '+' : '') + str.tostring((close / cw_fv - 1) * 100, '#') + '% price vs FV', color_text, color_bg, i_textSize)
             row_idx += 1
     // ================= DIAGNOSTICS ==================
     table.cell(table_id = T, column = 0, row = row_idx, text = 'Diagnostics', text_color = color_text, bgcolor = color_header, text_size = i_textSize)
