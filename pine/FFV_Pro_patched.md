@@ -461,8 +461,7 @@ group_display = 'Display Options'
 i_detail = input.string('None', 'Table detail (below the summary)', options = ['None', 'Models', 'Street', 'Health', 'Everything'], group = group_display, tooltip = 'The summary card is always shown. Pick one section to add below it.\n\nModels: every relative and intrinsic model.\nStreet: analyst targets, implied growth and P/E, ratings, confidence parts.\nHealth: every diagnostic and quality filter.\n\nEverything can run off a short chart.')
 i_tablePos = input.string('top_right', 'Table Position', options = ['top_right', 'middle_right', 'bottom_right'], group = group_display)
 i_textSize = input.string('normal', 'Text Size', options = ['auto', 'tiny', 'small', 'normal', 'large', 'huge'], group = group_display)
-i_theme = input.string('Dark', 'Theme', options = ['Dark', 'Light', 'Light (navy)'], group = group_display)
-i_show_label = input.bool(true, 'Price label on the last bar', group = group_display, tooltip = 'Zone, fair value, upside and the buy / sell lines.')
+i_theme = input.string('Dark', 'Theme', options = ['Dark', 'Light'], group = group_display)
 group_bt = 'Win Rate Backtester (No-Repaint)'
 i_show_bt = input.bool(true, 'Show Backtest Dashboard', group = group_bt)
 i_bt_all = input.bool(false, 'Show all models', group = group_bt, tooltip = 'Off: only the Composite, the models the current framework uses, and the always-in Baseline. On: every model, including the ones marked with a dot (not in the blend).')
@@ -2102,20 +2101,14 @@ f_st_pe(float t) =>
 // ==============================================================
 float raw_shares_prev = ta.valuewhen(is_new_quarter, calc_shares, 4)
 float raw_debt_prev = ta.valuewhen(is_new_quarter, calc_debt, 4)
-float raw_assets_prev = ta.valuewhen(is_new_quarter, calc_assets, 4)
 float safe_shares_prev = not na(raw_shares_prev) ? raw_shares_prev : calc_shares
 float safe_debt_prev = not na(raw_debt_prev) ? raw_debt_prev : nz(calc_debt, 0)
-float safe_assets_prev = not na(raw_assets_prev) and raw_assets_prev > 0 ? raw_assets_prev : calc_assets
 float gpa_ratio = not na(calc_assets) and calc_assets > 0 ? nz(calc_gp, 0) / calc_assets : na
 float roic_wacc_spread = not na(roic_adj) and not na(final_discount_rate) ? roic_adj - final_discount_rate : na
-float croic_val = not na(invested_capital_adj) and invested_capital_adj > 0 ? nz(true_fcf, 0) / invested_capital_adj : na
 float sloan_ratio = not na(calc_assets) and calc_assets > 0 ? (nz(calc_ni, 0) - nz(calc_ocf, 0)) / calc_assets : na
 float buyback_yield = safe_shares_prev > 0 ? (safe_shares_prev - calc_shares) / safe_shares_prev : 0.0
 float debt_paydown_yield = not na(current_mc) and current_mc > 0 ? (safe_debt_prev - nz(calc_debt, 0)) / current_mc : 0.0
 float shareholder_yield = nz(div_yield, 0.0) + math.max(buyback_yield, 0.0) + math.max(debt_paydown_yield, 0.0)
-float safe_asset_growth = safe_assets_prev > 0 ? (calc_assets - safe_assets_prev) / safe_assets_prev : 0.0
-bool show_croic = false
-bool show_asset_growth = false
 // ==========================================
 // PASS/FAIL SCREENER (every bar, for the alert)
 // ==========================================
@@ -2152,12 +2145,9 @@ var array<string> SCR_NAMES = array.from('Revenue growth', 'Profit growth', 'Gro
 var int bt_first_data_bar = na
 if na(bt_first_data_bar) and has_any_real_fundamental and not na(finalFairValue)
     bt_first_data_bar := bar_index
-bool th_navy = i_theme == 'Light (navy)'
-color color_bg = i_theme == 'Dark' ? color.new(#1e222d, 0) : th_navy ? color.white : color.new(#f0f3fa, 0)
+color color_bg = i_theme == 'Dark' ? color.new(#1e222d, 0) : color.new(#f0f3fa, 0)
 color color_text = i_theme == 'Dark' ? color.white : color.black
-color color_header = i_theme == 'Dark' ? color.new(color.gray, 50) : th_navy ? color.new(#1f3864, 0) : color.new(color.gray, 80)
-color color_hdr_text = th_navy ? color.white : color_text
-color color_title = th_navy ? color.new(#0b1f44, 0) : color.new(color.purple, 20)
+color color_header = i_theme == 'Dark' ? color.new(color.gray, 50) : color.new(color.gray, 80)
 color color_value = color.new(color.orange, 20)
 color color_over = color.new(color.red, 40)
 color color_under = color.new(color.green, 40)
@@ -2270,10 +2260,10 @@ type HealthView
 var table T = table.new(position.top_right, 4, 100, border_width = 1)
 // Section header: four grey cells, tooltip on the first.
 f_hdr(int row, string a, string b, string c, string d, string tt) =>
-    table.cell(T, 0, row, a, text_color = color_hdr_text, bgcolor = color_header, text_size = i_textSize, tooltip = tt)
-    table.cell(T, 1, row, b, text_color = color_hdr_text, bgcolor = color_header, text_size = i_textSize)
-    table.cell(T, 2, row, c, text_color = color_hdr_text, bgcolor = color_header, text_size = i_textSize)
-    table.cell(T, 3, row, d, text_color = color_hdr_text, bgcolor = color_header, text_size = i_textSize)
+    table.cell(T, 0, row, a, text_color = color_text, bgcolor = color_header, text_size = i_textSize, tooltip = tt)
+    table.cell(T, 1, row, b, text_color = color_text, bgcolor = color_header, text_size = i_textSize)
+    table.cell(T, 2, row, c, text_color = color_text, bgcolor = color_header, text_size = i_textSize)
+    table.cell(T, 3, row, d, text_color = color_text, bgcolor = color_header, text_size = i_textSize)
 // Label + three cells; tooltips on the label and on the status cell.
 f_row4(int row, string lbl, string ltt, string v1, color c1, color b1, string v2, color c2, color b2, string v3, color c3, color b3, string stt) =>
     table.cell(T, 0, row, lbl, text_color = color_text, bgcolor = color_bg, text_size = i_textSize, tooltip = ltt)
@@ -2423,10 +2413,6 @@ f_health_calc() =>
         q_tot += 1
         q_pass += roic_wacc_spread > 0.05 ? 1 : 0
         q_tt += '\nROIC - WACC ' + f_gtxt(roic_wacc_spread) + ' (> +5%): ' + (roic_wacc_spread > 0.05 ? 'PASS' : 'FAIL')
-    if show_croic
-        q_tot += 1
-        q_pass += croic_val > 0.15 ? 1 : 0
-        q_tt += '\nCash ROIC ' + f_gtxt(croic_val) + ' (> 15%): ' + (croic_val > 0.15 ? 'PASS' : 'FAIL')
     if show_sloan
         q_tot += 1
         q_pass += sloan_ratio < 0 ? 1 : 0
@@ -2435,10 +2421,6 @@ f_health_calc() =>
         q_tot += 1
         q_pass += shareholder_yield > 0.05 ? 1 : 0
         q_tt += '\nShareholder yield ' + f_gtxt(shareholder_yield) + ' (> 5%): ' + (shareholder_yield > 0.05 ? 'PASS' : 'FAIL')
-    if show_asset_growth
-        q_tot += 1
-        q_pass += safe_asset_growth < 0.05 ? 1 : 0
-        q_tt += '\nAsset growth ' + f_gtxt(safe_asset_growth) + ' (< 5%): ' + (safe_asset_growth < 0.05 ? 'PASS' : 'EMPIRE BUILDER')
     // Red flags: one list, short names for the cell, full text for the tooltip.
     array<string> fl = array.new_string(0)
     string flags_tt = ''
@@ -2479,12 +2461,11 @@ f_health_calc() =>
 f_tbl_head() =>
     table.set_position(T, i_tablePos == 'top_right' ? position.top_right : i_tablePos == 'middle_right' ? position.middle_right : position.bottom_right)
     table.clear(T, 0, 0, 3, 99)
-    color hc = color_title
+    color hc = color.new(color.purple, 20)
     table.cell(T, 0, 0, active_model_desc, text_color = color.white, bgcolor = hc, text_size = i_textSize, tooltip = 'Valuation framework in use (Industry-Specific Valuation). Values are live on the last bar.\n\nScenario cells: green = price below that case, amber = within +/-' + str.tostring(i_scen_fair_band * 100, '#') + '%, red = price above it.\n\nMore rows: Display Options > Table detail.')
     table.cell(T, 1, 0, 'Price', text_color = color.white, bgcolor = hc, text_size = i_textSize)
     table.cell(T, 2, 0, f_px(close), text_color = color.white, bgcolor = hc, text_size = i_textSize)
-    string cap_tt = 'Live on the last bar.\n\nMarket cap: ' + f_money(market_cap_latest) + '\nEnterprise value: ' + f_money(ev_latest) + '\nRevenue TTM: ' + f_money(total_revenue_ttm) + '\nNet profit TTM: ' + f_money(net_income_ttm) + '\nEquity: ' + f_money(total_equity_latest) + '\nNet debt: ' + f_money(net_debt_robust) + '\n\nChart price unit: ' + (px_unit == 1000 ? 'thousands (financials / 1,000)' : 'full')
-    table.cell(T, 3, 0, 'Cap ' + f_money(market_cap_latest), text_color = color.white, bgcolor = hc, text_size = i_textSize, tooltip = cap_tt)
+    table.cell(T, 3, 0, 'Cap ' + f_money(market_cap_latest), text_color = color.white, bgcolor = hc, text_size = i_textSize, tooltip = 'Market cap. Chart price unit: ' + (px_unit == 1000 ? 'thousands (financials / 1,000).' : 'full.'))
     1
 // Members of the live blend (base value, weight) for the "Ours" tooltip.
 f_members_tt() =>
@@ -2641,7 +2622,7 @@ f_det_omni(int r0) =>
             Omni o = array.get(OMNI, k)
             if o.on
                 omni_tt += o.name + '  ' + str.tostring(omni_w_sum > 0 ? o.w / omni_w_sum * 100 : 100.0 / omni_n, '#.#') + '%\n'
-        f_cell(T, 0, row_idx, 'Omnibus Members', color_hdr_text, color_header, i_textSize)
+        f_cell(T, 0, row_idx, 'Omnibus Members', color_text, color_header, i_textSize)
         table.cell(T, 1, row_idx, str.tostring(omni_n) + ' / 23', text_color = omni_dupe ? color.orange : omni_n >= 3 ? color.green : omni_n > 0 ? color.orange : color.red, bgcolor = color_bg, text_size = i_textSize, tooltip = omni_tt)
         f_cell(T, 2, row_idx, omni_manual ? (i_omni_strict ? 'Manual (strict)' : 'Manual') : 'Auto', color_text, color_bg, i_textSize)
         f_cell(T, 3, row_idx, omni_n == 0 ? 'INACTIVE' : omni_dupe ? 'DOUBLE-COUNT' : omni_w_sum > 0 ? 'Weighted' : 'Equal wt', omni_n == 0 ? color.red : omni_dupe ? color.orange : color_text, color_bg, i_textSize)
@@ -2667,13 +2648,6 @@ f_det_street(StreetView s, int r0) =>
         f_row4(row_idx, 'Ratings', rt_tt, 'Buy ' + str.tostring(s.rc_buy, '#'), color_text, color_bg, 'Hold ' + str.tostring(s.rc_hold, '#'), color_text, color_bg, 'Sell ' + str.tostring(s.rc_sell, '#'), color_text, color_bg, rt_tt)
         row_idx += 1
         f_row4(row_idx, 'Target age / overlap', 'Age of the latest target (freshness drives street reliability). Overlap = the shared part of our Bear-Bull range and the street range; near 0% means we disagree on the whole distribution.', na(s.age_d) ? 'Age -' : str.tostring(s.age_d, '#') + ' days', color_text, color_bg, 'Overlap ' + (na(s.overlap) ? '-' : str.tostring(s.overlap * 100, '#') + '%'), color_text, color_bg, '', color_text, color_bg, '')
-        row_idx += 1
-    f_hdr(row_idx, 'Confidence parts', 'Ours', 'Street', 'Weight', s.conf_tt)
-    row_idx += 1
-    array<string> cl = array.from('Agreement', 'Depth', 'Reliability / Freshness', 'Quality / Conviction')
-    array<string> cwt = array.from('35%', '20%', '25%', '20%')
-    for j = 0 to 3
-        f_row4(row_idx, array.get(cl, j), array.get(s.ctt, j), f_stxt(array.get(s.co, j)), color_text, color_bg, f_stxt(array.get(s.cs, j)), color_text, color_bg, array.get(cwt, j), color_text, color_bg, '')
         row_idx += 1
     row_idx
 f_det_health1(HealthView h, int r0) =>
@@ -2719,10 +2693,6 @@ f_det_health2(HealthView h, int r0) =>
         bool pass_spread = roic_wacc_spread > 0.05
         f_row4(row_idx, 'ROIC vs WACC Spread', '', (roic_wacc_spread > 0 ? '+' : '') + f_gtxt(roic_wacc_spread), pass_spread ? color.green : color.red, color_bg, '> +5%', color_text, color_bg, pass_spread ? 'PASS' : 'FAIL', color.white, pass_spread ? color_under : color_over, '')
         row_idx += 1
-    if show_croic
-        bool pass_croic = croic_val > 0.15
-        f_row4(row_idx, 'Cash ROIC (CROIC)', '', f_gtxt(croic_val), pass_croic ? color.green : color.red, color_bg, '> 15%', color_text, color_bg, pass_croic ? 'PASS' : 'FAIL', color.white, pass_croic ? color_under : color_over, '')
-        row_idx += 1
     if show_sloan
         bool pass_sloan = sloan_ratio < 0
         f_row4(row_idx, 'Sloan Accrual Ratio', '(Net Income - Operating Cash Flow) / Total Assets.\n\nSloan (1996) is a RETURNS anomaly, not a fraud test. Beneish M-Score in the Z+M row is the manipulation model.', f_gtxt(sloan_ratio), pass_sloan ? color.green : color.red, color_bg, '< 0%', color_text, color_bg, pass_sloan ? 'SAFE' : 'HIGH ACCRUALS', color.white, pass_sloan ? color_under : color_over, '')
@@ -2730,10 +2700,6 @@ f_det_health2(HealthView h, int r0) =>
     if show_shareholder
         bool pass_shy = shareholder_yield > 0.05
         f_row4(row_idx, 'True Shareholder Yield', '', f_gtxt(shareholder_yield), pass_shy ? color.green : color_text, color_bg, '> 5%', color_text, color_bg, pass_shy ? 'PASS' : 'FAIL', color.white, pass_shy ? color_under : color_over, '')
-        row_idx += 1
-    if show_asset_growth
-        bool pass_ag = safe_asset_growth < 0.05
-        f_row4(row_idx, 'Asset Growth YoY', '', f_gtxt(safe_asset_growth), pass_ag ? color.green : color.red, color_bg, '< 5%', color_text, color_bg, pass_ag ? 'PASS' : 'EMPIRE BLDR', color.white, pass_ag ? color_under : color_over, '')
         row_idx += 1
     row_idx
 f_scr_val(int k, float v) =>
@@ -2795,17 +2761,6 @@ fill(p_fv, p_sell, color = color.new(color.red, 90), title = 'Overvaluation Clou
 fill(p_fv, p_buy, color = color.new(color.green, 90), title = 'Margin of Safety Cloud')
 bool is_screaming_buy = close < buy_zone_line
 bool is_screaming_sell = close > sell_zone_line
-f_last_label() =>
-    var label lb = na
-    label.delete(lb)
-    if i_show_label and not na(finalFairValue) and finalFairValue > 0
-        float up = (finalFairValue / close - 1) * 100
-        string zone = close < buy_zone_line ? 'BUY ZONE' : close > sell_zone_line ? 'SELL ZONE' : close < finalFairValue ? 'Below fair value' : 'Above fair value'
-        color zc = close < buy_zone_line ? color.new(color.green, 10) : close > sell_zone_line ? color.new(color.red, 10) : color.new(color.gray, 20)
-        lb := label.new(bar_index, close, zone + '\nFV ' + f_px(finalFairValue) + '  (' + (up > 0 ? '+' : '') + str.tostring(up, '#') + '%)\nBuy < ' + f_px(buy_zone_line) + ' | Sell > ' + f_px(sell_zone_line), style = label.style_label_left, color = zc, textcolor = color.white, size = size.small)
-    0
-if barstate.islast
-    f_last_label()
 alertcondition(ta.crossunder(close, buy_zone_line), 'Price below buy line', '{{ticker}}: price {{close}} fell below the buy line (fair value less the margin of safety).')
 alertcondition(ta.crossover(close, sell_zone_line), 'Price above sell line', '{{ticker}}: price {{close}} rose above the sell line (fair value plus the exit premium).')
 alertcondition(scr_all_pass and not scr_all_pass[1], 'Screener fully passed', '{{ticker}}: every Pass/Fail Screener test with data now passes.')
