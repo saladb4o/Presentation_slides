@@ -502,14 +502,6 @@ f_fresh(float v) =>
 // publication bar (1 slot). The fixed lag stays as the fallback cap.
 float earn_raw = request.earnings(syminfo.tickerid, earnings.actual, ignore_invalid_symbol = true)
 bool report_bar = f_fresh(earn_raw)
-// [FIX UNIT] Chart quoted in thousands (24.50 for 24,500 VND)? Quarterly P/E under 0.5
-// is impossible, so price / reported EPS decides once. Before the first EPS: VND + tick < 1.
-// Then shares count x1000 and per-share money /1000: per-share values match the price, totals stay in VND.
-var float px_unit = syminfo.currency == 'VND' and syminfo.mintick < 1 ? 1000.0 : 1.0
-var bool px_unit_set = false
-if not px_unit_set and not na(earn_raw) and earn_raw != 0 and close > 0
-    px_unit := close / math.abs(earn_raw) < 0.5 ? 1000.0 : 1.0
-    px_unit_set := true
 f_fin(simple string id, simple string per) =>
     float raw = request.financial(syminfo.tickerid, id, per, ignore_invalid_symbol = true, currency = syminfo.currency)
     var float pending = na
@@ -609,12 +601,12 @@ float cogs_fq = f_fin('COST_OF_GOODS', flow_per) // 2
 float ebit_fq = f_fin('EBIT', flow_per) // 3
 float pretax_fq = f_fin('PRETAX_INCOME', flow_per) // 4
 float inc_tax_fq = f_fin('INCOME_TAX', flow_per) // 5
-float eps_fq = f_fin('EARNINGS_PER_SHARE_DILUTED', flow_per) / px_unit // 6
+float eps_fq = f_fin('EARNINGS_PER_SHARE_DILUTED', flow_per) // 6
 // Interest, R&D and preferred dividends have no TTM field: always FQ + vault.
 float interest_fq = f_fin('INTEREST_EXPENSE_ON_DEBT', 'FQ') // 7
 float rnd_fq = f_fin('RESEARCH_AND_DEV', 'FQ') // 8
 float pref_div_fq = f_fin('PREFERRED_DIVIDENDS', 'FQ') // 9
-float div_ps_fq = f_fin('DPS_COMMON_STOCK_PRIM_ISSUE', flow_per) / px_unit // 10
+float div_ps_fq = f_fin('DPS_COMMON_STOCK_PRIM_ISSUE', flow_per) // 10
 float minority_fq = f_fin('MINORITY_INTEREST', 'FQ') // 11
 // --- CASH FLOW (4) ---
 float ocf_fq = f_fin('CASH_F_OPERATING_ACTIVITIES', flow_per) // 12
@@ -640,7 +632,7 @@ float noncurr_assets_fq = f_fin('TOTAL_NON_CURRENT_ASSETS', 'FQ') // 29
 float intangibles_fq = f_fin('INTANGIBLES_NET', 'FQ') // 30 (includes goodwill)
 // --- FORWARD-LOOKING (1) ---
 // [FIX EST] Fiscal-year consensus, not a sum of four quarterly estimates.
-float eps_est_fq = f_fin('EARNINGS_ESTIMATE', 'FY') / px_unit // 31
+float eps_est_fq = f_fin('EARNINGS_ESTIMATE', 'FY') // 31
 // ---------------------------------------------------------------------
 // 3.4 QUARTER TRIGGER — DEBOUNCED MULTI-WITNESS
 // ---------------------------------------------------------------------
@@ -700,20 +692,18 @@ float eps_est_ttm = f_locf(eps_est_fq)
 // =====================================================================
 // 3.6 DERIVATION BLOCK — THE RETIRED REQUESTS, REBUILT
 // =====================================================================
-// (a) GROSS PROFIT = Revenue - COGS
-float gp_ttm = not na(total_revenue_ttm) and not na(cogs_ttm) ? total_revenue_ttm - cogs_ttm : na
+// Gross profit, total equity and EBITDA are built by the engine's identity solver.
+float gp_ttm = na
 // (b) SHARES then NET INCOME
 // Larger of period-end and weighted diluted count: the weighted average lags new issues.
 float shares_out_latest = math.max(nz(shares_dil_fq), nz(shares_basic_fq))
-shares_out_latest := shares_out_latest > 0 ? shares_out_latest * px_unit : na
+shares_out_latest := shares_out_latest > 0 ? shares_out_latest : na
 // Reported NI (after minority interest) first; pretax - tax includes the minority share.
 float net_income_ttm = not na(ni_rep_ttm) ? ni_rep_ttm : not na(pretax_income_ttm) and not na(income_tax_ttm) ? pretax_income_ttm - income_tax_ttm : na
 // NI tier: 3 reported; pretax - tax is exact only without minority interest (2), else 1.
 int ni_src_t = not na(ni_rep_ttm) ? 3 : nz(minority_fq) == 0 ? 2 : 1
-// (c) TOTAL EQUITY = Assets - Liabilities [exact identity]
-float total_equity_latest = not na(total_assets_fq) and not na(total_liab_fq) ? total_assets_fq - total_liab_fq : na
-// (d) EBITDA = EBIT + D&A
-float ebitda_ttm = not na(ebit_ttm) and not na(depr_amort_ttm_raw) ? ebit_ttm + depr_amort_ttm_raw : na
+float total_equity_latest = na
+float ebitda_ttm = na
 // (e) DIVIDEND YIELD = DPS_ttm / price
 float div_yield = close > 0 and not na(div_per_share_ttm) ? div_per_share_ttm / close : na
 div_yield := f_locf(div_yield)
@@ -1392,7 +1382,7 @@ if i_use_factors and not na(px_1m_ago) and not na(px_12m_ago) and px_12m_ago > 0
 float microstructure_premium = 0.0
 if i_use_factors
     float safe_vol = nz(volume, 1.0)
-    float dollar_vol_usd = (close * px_unit * safe_vol) / fx_rate
+    float dollar_vol_usd = (close * safe_vol) / fx_rate
     float daily_ret_abs = math.abs(ta.change(close) / nz(close[1], close))
     float amihud_raw = dollar_vol_usd > 0 ? (daily_ret_abs / dollar_vol_usd) * 1e6 : 0.0
     float amihud_90d = ta.sma(amihud_raw, 90)
@@ -1404,7 +1394,7 @@ if i_use_factors
             illiq_penalty := i_liq_prem * (amihud_90d / 0.5)
     float spec_penalty = 0.0
     if not na(volume) and shares_out_latest > 0
-        float daily_turnover = volume * px_unit / shares_out_latest
+        float daily_turnover = volume / shares_out_latest
         float avg_turnover_12m = ta.sma(daily_turnover, 252)
         if avg_turnover_12m > 0.01
             spec_penalty := i_liq_prem * math.min((avg_turnover_12m - 0.01) / 0.01, 1.0)
