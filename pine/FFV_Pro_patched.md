@@ -1,3 +1,8 @@
+# Fundamental Fair Value Pro: full patched script (phases 0–6)
+
+Copy everything inside the code block into the Pine Editor and replace the whole script.
+
+```pine
 //@version=6
 indicator('Fundamental Fair Value Pro (FF4 + McKinsey/Rev DCF) [Real-Time + Backtest]', shorttitle = 'FFV Pro (Real)', overlay = true, max_lines_count = 50, dynamic_requests = true)
 // ==========================================
@@ -2776,3 +2781,4 @@ if barstate.islast and i_show_bt
     table.cell(bt_tbl, 1, btrowidx, " ", bgcolor = color.new(color.black, 100), text_color = color.new(color.white, 100))
     table.cell(bt_tbl, 2, btrowidx, " ", bgcolor = color.new(color.black, 100), text_color = color.new(color.white, 100))
     table.cell(bt_tbl, 3, btrowidx, " ", bgcolor = color.new(color.black, 100), text_color = color.new(color.white, 100))
+```
