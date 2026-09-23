@@ -830,7 +830,8 @@ for st = 0 to 4
     if st == 3 and not na(calc_shares) and has_any_real_fundamental
         for k = 0 to 9
             int i = array.get(lf_i, k)
-            f_put(i, f_g(array.get(lf_b, k)) * array.get(lf_k, k), 0)
+            // Capex = D&A is the standard maintenance-capex assumption on the firm's own D&A: tier 1, not a guess.
+            f_put(i, f_g(array.get(lf_b, k)) * array.get(lf_k, k), i == iCX ? math.min(f_tg(iDA), 1) : 0)
             if i == iAS
                 f_put(iEQ, f_g(iAS) - nz(f_g(iLI), nz(f_g(iDB))), 0)
     for p = 0 to 2
