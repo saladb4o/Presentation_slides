@@ -456,7 +456,7 @@ i_bt_margin = input.float(15.0, 'Margin of Safety %', minval = 0, tooltip = 'Buy
 i_bt_exit_premium = input.float(20.0, 'Exit when Price > FV + %', minval = 0, group = group_bt) / 100
 i_bt_fees = input.float(0.5, 'Round-trip Fees & Slippage %', group = group_bt, tooltip = 'Deducted from every trade (e.g., 0.5%).') / 100
 i_bt_win_threshold = input.float(0.0, 'Min Profit % to count as Win', group = group_bt, tooltip = 'Set to > 0 if you want to ignore tiny gains (e.g., 2%).') / 100
-i_report_lag = input.int(45, 'Report lag (days)', minval = 0, maxval = 120, group = group_bt, tooltip = "request.financial returns a quarter's numbers from the START of the next period -- weeks before they were published. Each new value is held back this many days before the script may use it. 0 restores the old (look-ahead) behaviour. The latest value is always released on the last bar.")
+i_report_lag = input.int(45, 'Report lag (days)', minval = 0, maxval = 120, group = group_bt, tooltip = "request.financial returns a quarter's numbers from the START of the next period -- weeks before they were published. Each new value is released on the next earnings report date, or after this many days at most. 0 restores the old (look-ahead) behaviour. The latest value is always released on the last bar.")
 i_acquirer_mult = input.float(10.0, "Acquirer's Multiple Target (EV/EBIT)", group = group_iv, tooltip = "Tobias Carlisle's standard is 10x. Raise this to 15x or 20x for large-cap/growth stocks.")
 group_oos = 'Walk-Forward Matrix (IS / OOS / FWD)'
 i_is_start = input.time(timestamp("2015-01-01"), "In-Sample Start", group = group_oos)
@@ -498,6 +498,10 @@ f_fresh(float v) =>
 // Single wrapper for every fundamental pull: 1 request slot per CALL SITE.
 // [FIX LOOKAHEAD] A new value is only "known" i_report_lag days after it first
 // appears. Stateful per call site (var), so every f_fin() call gates on its own.
+// [FIX RDQ] Release on the actual report date: request.earnings prints on the
+// publication bar (1 slot). The fixed lag stays as the fallback cap.
+float earn_raw = request.earnings(syminfo.tickerid, earnings.actual, ignore_invalid_symbol = true)
+bool report_bar = f_fresh(earn_raw)
 f_fin(simple string id, simple string per) =>
     float raw = request.financial(syminfo.tickerid, id, per, ignore_invalid_symbol = true, currency = syminfo.currency)
     var float pending = na
@@ -506,7 +510,7 @@ f_fin(simple string id, simple string per) =>
     if not na(raw) and (na(pending) or raw != pending)
         pending := raw
         seen_t := time
-    if not na(pending) and (time - seen_t >= i_report_lag * 86400000 or barstate.islast)
+    if not na(pending) and (time - seen_t >= i_report_lag * 86400000 or barstate.islast or (report_bar and time > seen_t))
         known := pending
     known
 f_cagr_gen(float now_v, float old_v, float yrs) =>
@@ -648,7 +652,10 @@ f_ttm_vault(float fq_val, bool trigger) =>
     if not na(fq_val)
         last_valid_val := fq_val
     if trigger or barstate.isfirst
-        float val_to_push = not na(fq_val) ? fq_val : last_valid_val
+        // [FIX SEASONAL] Missing (or unchanged, i.e. carried) quarter -> same quarter last year.
+        int n0 = array.size(a)
+        bool gap = na(fq_val) or (n0 > 0 and fq_val == array.get(a, 0))
+        float val_to_push = gap and n0 >= 4 ? array.get(a, 3) : not na(fq_val) ? fq_val : last_valid_val
         if not na(val_to_push)
             array.unshift(a, val_to_push)
             if array.size(a) > 4
@@ -871,7 +878,7 @@ t_rev := f_tg(iRV)
 t_ni := f_tg(iNI)
 t_ebit := f_tg(iEB)
 t_ebitda := f_tg(iED)
-t_ocf := f_tg(iOC)
+t_ocf := na(f_g(iCX)) ? f_tg(iOC) : math.min(f_tg(iOC), f_tg(iCX)) // FCF models: the weaker of OCF and capex
 t_eps := math.min(not na(eps_ttm) ? 3 : math.min(math.min(t_ni, t_shares), 2), stale_cap)
 shares_out_latest := calc_shares
 total_revenue_ttm := calc_rev
