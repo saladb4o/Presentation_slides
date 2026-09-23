@@ -764,18 +764,6 @@ f_put(int i, float x, int tier) =>
     if na(f_g(i)) and not na(x)
         array.set(eng_v, i, x)
         array.set(eng_t, i, tier)
-f_solve() =>
-    for p = 0 to 2
-        for k = 0 to 5
-            int a = array.get(id3, 3 * k), int b = array.get(id3, 3 * k + 1), int c = array.get(id3, 3 * k + 2)
-            float va = f_g(a), float vb = f_g(b), float vc = f_g(c)
-            if (na(va) ? 1 : 0) + (na(vb) ? 1 : 0) + (na(vc) ? 1 : 0) == 1
-                if na(va)
-                    f_put(a, vb + vc, math.min(f_tg(b), f_tg(c)))
-                else if na(vb)
-                    f_put(b, va - vc, math.min(f_tg(a), f_tg(c)))
-                else
-                    f_put(c, va - vb, math.min(f_tg(a), f_tg(b)))
 // --- 1. SHARES (period-end/diluted -> NI / EPS -> memory) ---
 int t_shares = 0, int t_rev = 0, int t_ni = 0, int t_eps = 0
 int t_ebit = 0, int t_ebitda = 0, int t_ocf = 0, int t_assets = 0, int t_equity = 0
@@ -817,43 +805,43 @@ bool ni_eps_gap = not na(ni_rep_ttm) and not na(eps_ttm) and not na(calc_shares)
 bool data_suspect = jump_rv or jump_as or ni_eps_gap
 if na(f_g(iNI)) and not na(eps_ttm) and not na(calc_shares)
     f_put(iNI, eps_ttm * calc_shares, math.min(t_shares, 2))
-f_solve()
-// --- 3. NEAR-EXACT RULES ---
-float pn_1y = ta.valuewhen(is_new_quarter, f_g(iPN), 4)
-f_rules(bool rough) =>
-    f_put(iEB, nz(pretax_income_ttm, f_g(iNI) + nz(income_tax_ttm)) + nz(interest_expense_ttm), not na(pretax_income_ttm) ? 1 : math.min(f_tg(iNI), 1))
-    f_put(iCX, -math.max(f_g(iPN) - pn_1y + f_g(iDA), 0), math.min(math.min(f_tg(iPN), f_tg(iDA)), 1))
-    if rough
-        f_put(iDA, math.max(f_g(iOC) - f_g(iNI), 0), math.min(math.min(f_tg(iOC), f_tg(iNI)), 1))
-        f_put(iOC, f_g(iNI) + f_g(iDA), math.min(math.min(f_tg(iNI), f_tg(iDA)), 1))
-f_rules(false)
-// --- 4. FIRM'S OWN LAST RATIOS (revenue first carried if missing) ---
-f_put(iRV, array.get(eng_mem, iRV), 1)
-for i = 0 to 20
-    int b = array.get(fill_base, i)
-    if b >= 0
-        f_put(i, f_g(b) * array.get(eng_ratio, i), math.min(f_tg(b), 1))
-// --- 5. ROUGH RULES, 6. LAST LATCHED VALUE ---
-f_rules(true)
-for i = 0 to 20
-    f_put(i, array.get(eng_mem, i), 1)
-f_solve()
-// --- 7. TERMINAL LIFELINE (tier 0) -- gated by the firebreak ---
+// --- 3-7. FILL STAGES, one pass each: 0 identities only, 1 firm's own last ratios
+// (revenue carried first), 2 last latched value, 3 generic constants behind the firebreak
+// (tier 0), 4 final solve. Every stage then re-solves the identities and runs the rules:
+// near-exact EBIT ~ pretax + interest, capex ~ 1y change in net PPE + D&A; from stage 1
+// also rough D&A ~ OCF - NI and OCF ~ NI + D&A. All rule output is tier <= 1.
+float pn_1y = ta.valuewhen(is_new_quarter, ppe_gross_fq - math.abs(accum_dep_fq), 4)
 bool has_any_real_fundamental = not na(total_assets_fq) or not na(rev_fq) or not na(eps_fq) or not na(ocf_fq)
-if not na(calc_shares) and has_any_real_fundamental
-    f_put(iAS, f_g(iRV) * 1.5, 0)
-    f_put(iRV, f_g(iAS) * 0.5, 0)
-    f_put(iEQ, f_g(iAS) - nz(f_g(iLI), nz(f_g(iDB))), 0)
-    f_put(iCS, f_g(iAS) * 0.05, 0)
-    f_put(iPG, f_g(iAS) * 0.3, 0)
-    f_put(iPN, f_g(iPG) * 0.8, 0)
-    f_put(iRC, f_g(iRV) * 0.1, 0)
-    f_put(iCA, f_g(iAS) * 0.40, 0)
-    f_put(iNI, f_g(iRV) * 0.05, 0)
-    f_put(iDA, f_g(iRV) * 0.05, 0)
-    f_rules(true)
-    f_put(iCX, -f_g(iDA), 0)
-    f_solve()
+// Lifeline triples: item = base x k
+var array<int> lf_i = array.from(iAS, iRV, iCS, iPG, iPN, iRC, iCA, iNI, iDA, iCX)
+var array<int> lf_b = array.from(iRV, iAS, iAS, iAS, iPG, iRV, iAS, iRV, iRV, iDA)
+var array<float> lf_k = array.from(1.5, 0.5, 0.05, 0.3, 0.8, 0.1, 0.4, 0.05, 0.05, -1.0)
+for st = 0 to 4
+    if st == 1 or st == 2
+        f_put(iRV, array.get(eng_mem, iRV), 1)
+        for i = 0 to 20
+            int b = array.get(fill_base, i)
+            f_put(i, st == 2 ? array.get(eng_mem, i) : b >= 0 ? f_g(b) * array.get(eng_ratio, i) : na, st == 2 or b < 0 ? 1 : math.min(f_tg(b), 1))
+    if st == 3 and not na(calc_shares) and has_any_real_fundamental
+        for k = 0 to 9
+            int i = array.get(lf_i, k)
+            f_put(i, f_g(array.get(lf_b, k)) * array.get(lf_k, k), 0)
+            if i == iAS
+                f_put(iEQ, f_g(iAS) - nz(f_g(iLI), nz(f_g(iDB))), 0)
+    for p = 0 to 2
+        for k = 0 to 5
+            int a = array.get(id3, 3 * k), int b = array.get(id3, 3 * k + 1), int c = array.get(id3, 3 * k + 2)
+            float va = f_g(a), float vb = f_g(b), float vc = f_g(c)
+            if (na(va) ? 1 : 0) + (na(vb) ? 1 : 0) + (na(vc) ? 1 : 0) == 1
+                int j = na(va) ? a : na(vb) ? b : c
+                array.set(eng_v, j, na(va) ? vb + vc : na(vb) ? va - vc : va - vb)
+                array.set(eng_t, j, math.min(j == a ? f_tg(b) : f_tg(a), j == c ? f_tg(b) : f_tg(c)))
+    if st < 4
+        f_put(iEB, nz(pretax_income_ttm, f_g(iNI) + nz(income_tax_ttm)) + nz(interest_expense_ttm), not na(pretax_income_ttm) ? 1 : math.min(f_tg(iNI), 1))
+        f_put(iCX, -math.max(f_g(iPN) - pn_1y + f_g(iDA), 0), math.min(math.min(f_tg(iPN), f_tg(iDA)), 1))
+        if st > 0
+            f_put(iDA, math.max(f_g(iOC) - f_g(iNI), 0), math.min(math.min(f_tg(iOC), f_tg(iNI)), 1))
+            f_put(iOC, f_g(iNI) + f_g(iDA), math.min(math.min(f_tg(iNI), f_tg(iDA)), 1))
 // --- 8. STALENESS: no new report for 2+ quarters -> tier 1, 4+ quarters -> tier 0 ---
 var int bars_since_real = 0
 float qtrs_stale = bars_since_real / float(math.max(1, int(bpy / 4)))
