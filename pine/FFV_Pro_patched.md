@@ -436,12 +436,23 @@ i_useBeneishCheck = input.bool(true, '🕵️ Apply Beneish M-Score (Fraud Check
 i_use_rkv = input.bool(true, '💎 Apply Rhodes-Kropf (RKV) M/B Decomposition', group = group_calc, tooltip = 'Decomposes M/B into Mispricing and Growth Options. Drops value-trap quarters from the historical P/B average and flags current value traps.')
 i_sbc_proxy = input.bool(false, 'Subtract Non-cash items as SBC proxy', group = group_calc, tooltip = 'Pine has no stock-based-compensation field. NON_CASH_ITEMS also holds impairments, deferred tax, FX and fair-value moves, so subtracting it from FCF is a guess. Off by default.')
 i_flow_ttm = input.bool(true, 'Request flows as TTM', group = group_calc, tooltip = 'Income and cash-flow items are requested as TTM directly instead of summing four FQ values. If a financial ID errors on TTM for your market, switch this off.')
+i_px_unit = input.string('Auto', 'Chart price unit', options = ['Auto', 'Thousands (24.50)', 'Full (24,500)'], group = group_calc, tooltip = 'Some VN charts quote 24.50 for 24,500 VND while the financial data comes in full VND. Every money figure from the financials is divided by 1,000 on such charts so it matches the price.\n\nAuto: VND symbol with a tick size under 1 = thousands, else full. The header tooltip shows which unit is in use.')
 group_iv = 'Intrinsic Value Models (Automated)'
 i_growth_src = input.string('Auto (Consensus EPS -> Sales CAGR)', 'Forward growth source', options = ['Auto (Consensus EPS -> Sales CAGR)', 'Manual'], group = group_iv, tooltip = 'Auto: FY consensus EPS growth (EARNINGS_ESTIMATE, has history and passes the report-lag gate), else 3y sales CAGR, else the manual value.\n\nAnalyst PRICE targets are never used here: they exist only for today, so they would leak into the backtest and make the street comparison circular.')
 i_analyst_growth = input.float(10.0, 'Manual forward growth %', group = group_iv, tooltip = 'Used when the source is Manual, or as the last fallback in Auto.') / 100
 group_street = 'Street Consensus (analyst targets)'
 i_show_street = input.bool(true, 'Show street comparison', group = group_street, tooltip = 'Uses syminfo.target_price_* and syminfo.recommendations_* (0 request slots). Display only: never enters the blend, the plot or the backtest.')
 i_conf_gap = input.float(15.0, 'Agreement band: ours vs street PV (%)', minval = 1, maxval = 50, group = group_street) / 100
+group_scr = 'Pass/Fail Screener'
+i_scr_on = input.bool(true, 'Add screener tests to Quality', group = group_scr, tooltip = 'Nine pass/fail tests. They join the Quality filter count in the summary and get their own section under Table detail > Health. A test with no data is left out of the count. No extra data requests.')
+i_scr_g = input.float(10, 'Revenue & profit growth > %', group = group_scr, tooltip = 'TTM vs the TTM four quarters earlier.') / 100
+i_scr_gm = input.float(25, 'Gross margin > %', group = group_scr) / 100
+i_scr_em = input.float(10, 'EBITDA margin > %', group = group_scr) / 100
+i_scr_nm = input.float(10, 'Net margin > %', group = group_scr) / 100
+i_scr_roe = input.float(20, 'ROE > % (average equity)', group = group_scr) / 100
+i_scr_pe = input.float(15, 'P/E <', step = 0.5, group = group_scr)
+i_scr_de = input.float(1.0, 'Debt / equity <', step = 0.1, group = group_scr, tooltip = 'Interest-bearing debt / equity.')
+i_scr_ocf = input.float(60, 'Operating cash flow / net profit > %', step = 5, group = group_scr) / 100
 i_iv_projection_period = input.int(10, 'RIM Projection Period (Years)', group = group_iv, minval = 5, maxval = 20)
 i_cagr_years = input.int(3, 'CAGR Lookback Years', group = group_iv, minval = 1, maxval = 10)
 i_dcf_stage1_yrs = input.int(10, 'DCF: High-Growth Years (Stage 1)', group = group_iv, minval = 1, maxval = 15, tooltip = 'Used by every DCF-type model: main DCF, rNPV, AFFO DCF, Unbundled ServeCo and ECF.')
@@ -450,7 +461,8 @@ group_display = 'Display Options'
 i_detail = input.string('None', 'Table detail (below the summary)', options = ['None', 'Models', 'Street', 'Health', 'Everything'], group = group_display, tooltip = 'The summary card is always shown. Pick one section to add below it.\n\nModels: every relative and intrinsic model.\nStreet: analyst targets, implied growth and P/E, ratings, confidence parts.\nHealth: every diagnostic and quality filter.\n\nEverything can run off a short chart.')
 i_tablePos = input.string('top_right', 'Table Position', options = ['top_right', 'middle_right', 'bottom_right'], group = group_display)
 i_textSize = input.string('normal', 'Text Size', options = ['auto', 'tiny', 'small', 'normal', 'large', 'huge'], group = group_display)
-i_theme = input.string('Dark', 'Theme', options = ['Dark', 'Light'], group = group_display)
+i_theme = input.string('Dark', 'Theme', options = ['Dark', 'Light', 'Light (navy)'], group = group_display)
+i_show_label = input.bool(true, 'Price label on the last bar', group = group_display, tooltip = 'Zone, fair value, upside and the buy / sell lines.')
 group_bt = 'Win Rate Backtester (No-Repaint)'
 i_show_bt = input.bool(true, 'Show Backtest Dashboard', group = group_bt)
 i_bt_all = input.bool(false, 'Show all models', group = group_bt, tooltip = 'Off: only the Composite, the models the current framework uses, and the always-in Baseline. On: every model, including the ones marked with a dot (not in the blend).')
@@ -504,6 +516,8 @@ f_fresh(float v) =>
 // Single wrapper for every fundamental pull: 1 request slot per CALL SITE.
 // [FIX LOOKAHEAD] A new value is only "known" i_report_lag days after it first
 // appears. Stateful per call site (var), so every f_fin() call gates on its own.
+// Currency units per chart price unit (1000 when the chart quotes in thousands).
+float px_unit = i_px_unit == 'Thousands (24.50)' ? 1000.0 : i_px_unit == 'Full (24,500)' ? 1.0 : syminfo.currency == 'VND' and syminfo.mintick < 1 ? 1000.0 : 1.0
 f_fin(simple string id, simple string per) =>
     float raw = request.financial(syminfo.tickerid, id, per, ignore_invalid_symbol = true, currency = syminfo.currency)
     var float pending = na
@@ -514,7 +528,8 @@ f_fin(simple string id, simple string per) =>
         seen_t := time
     if not na(pending) and (time - seen_t >= i_report_lag * 86400000 or barstate.islast)
         known := pending
-    known
+    // Money in chart price units; share counts untouched.
+    id == 'DILUTED_SHARES_OUTSTANDING' or id == 'TOTAL_SHARES_OUTSTANDING' ? known : known / px_unit
 f_cagr_gen(float now_v, float old_v, float yrs) =>
     float r = na
     if not na(now_v) and not na(old_v) and old_v > 0 and now_v > 0
@@ -1237,6 +1252,12 @@ var array<Mult> MULTS = array.from(
      Mult.new('P/CF', 10.0, false, false, array.new_float(0), array.new_float(0)),
      Mult.new('P/AFFO', 12.0, false, false, array.new_float(0), array.new_float(0)))
 var array<float> hist_fcf_margins = array.new_float(0)
+// ROE on AVERAGE equity (now and four quarters earlier).
+f_roe_avg() =>
+    float eq_1y = ta.valuewhen(is_new_quarter, total_equity_latest, 4)
+    float avg_eq = not na(eq_1y) and eq_1y > 0 and total_equity_latest > 0 ? (total_equity_latest + eq_1y) / 2 : total_equity_latest
+    not na(net_income_ttm) and avg_eq > 0 ? net_income_ttm / avg_eq : na
+float roe_avg = f_roe_avg()
 var array<float> hist_roe = array.new_float(0)
 var array<float> hist_op = array.new_float(0)
 var int last_ratio_push_bar = -1
@@ -1247,7 +1268,7 @@ if can_push_ratios
     price_at_period_end = close[1]
     ev_hist = price_at_period_end * shares_out_latest[1] + net_debt_robust[1]
     fcf_margin = not na(total_revenue_ttm) and total_revenue_ttm > 0 ? true_fcf / total_revenue_ttm : na
-    roe_val = not na(net_income_ttm) and not na(total_equity_latest) and total_equity_latest > 0 ? net_income_ttm / total_equity_latest : na
+    roe_val = roe_avg
     op_val = not na(ebit_ttm[1]) and not na(total_equity_latest[1]) and total_equity_latest[1] > 0 ? ebit_ttm[1] / total_equity_latest[1] : na
     // --- RHODES-KROPF (RKV) HISTORICAL FILTER --- (P/B row only, via m.rkv)
     float hist_coe_proxy = (not na(us10y_true_raw[1]) ? us10y_true_raw[1] / 100 : 0.04) + 0.05
@@ -1454,7 +1475,7 @@ float standard_capm_coe = base_rf_for_calc + (beta_mkt * calc_erp) + calc_crp
 // fx_rate = local currency units per 1 USD.
 float fx_to_usd = request.currency_rate(curr, 'USD', ignore_invalid_currency = true)
 float fx_rate = not na(fx_to_usd) and fx_to_usd > 0 ? 1.0 / fx_to_usd : ((curr == 'VND') ? 25000.0 : (curr == 'EUR' ? 0.93 : (curr == 'GBP' ? 0.79 : 1.0)))
-float mc_usd_billions = not na(market_cap_latest) ? (market_cap_latest / fx_rate) / 1e9 : 100.0
+float mc_usd_billions = not na(market_cap_latest) ? (market_cap_latest * px_unit / fx_rate) / 1e9 : 100.0
 float size_premium = 0.0
 if i_use_factors
     if mc_usd_billions < 1.0
@@ -1478,7 +1499,7 @@ if i_use_factors and not na(px_1m_ago) and not na(px_12m_ago) and px_12m_ago > 0
 float microstructure_premium = 0.0
 if i_use_factors
     float safe_vol = nz(volume, 1.0)
-    float dollar_vol_usd = (close * safe_vol) / fx_rate
+    float dollar_vol_usd = (close * px_unit * safe_vol) / fx_rate
     float daily_ret_abs = math.abs(ta.change(close) / nz(close[1], close))
     float amihud_raw = dollar_vol_usd > 0 ? (daily_ret_abs / dollar_vol_usd) * 1e6 : 0.0
     float amihud_90d = ta.sma(amihud_raw, 90)
@@ -2096,21 +2117,58 @@ float safe_asset_growth = safe_assets_prev > 0 ? (calc_assets - safe_assets_prev
 bool show_croic = false
 bool show_asset_growth = false
 // ==========================================
+// PASS/FAIL SCREENER (every bar, for the alert)
+// ==========================================
+type ScreenView
+    array<float> v
+    array<float> t
+    array<int> r
+    int n_pass = 0
+    int n_tot = 0
+// 1 pass | 0 fail | -1 no data. Index 6 (P/E) and 7 (D/E) pass BELOW the target.
+f_screen() =>
+    float ni_prev = ta.valuewhen(is_new_quarter, net_income_ttm, 4)
+    float rv = total_revenue_ttm
+    float pe = na(eps_ttm) ? na : eps_ttm > 0 ? close / eps_ttm : 1e9
+    array<float> v = array.from(total_revenue_ttm_prev > 0 ? rv / total_revenue_ttm_prev - 1 : na, ni_prev > 0 ? net_income_ttm / ni_prev - 1 : na, rv > 0 ? gp_ttm / rv : na, rv > 0 ? ebitda_ttm / rv : na, rv > 0 ? net_income_ttm / rv : na, roe_avg, pe, total_equity_latest > 0 ? total_debt_latest / total_equity_latest : na, net_income_ttm > 0 ? ocf_ttm / net_income_ttm : na)
+    array<float> t = array.from(i_scr_g, i_scr_g, i_scr_gm, i_scr_em, i_scr_nm, i_scr_roe, i_scr_pe, i_scr_de, i_scr_ocf)
+    array<int> r = array.new_int(0)
+    int np = 0
+    int nt = 0
+    for k = 0 to 8
+        float x = array.get(v, k)
+        int res = na(x) ? -1 : (k == 6 or k == 7 ? x < array.get(t, k) : x > array.get(t, k)) ? 1 : 0
+        array.push(r, res)
+        np += res == 1 ? 1 : 0
+        nt += res >= 0 ? 1 : 0
+    ScreenView.new(v, t, r, np, nt)
+ScreenView scr = f_screen()
+bool scr_all_pass = scr.n_tot >= 6 and scr.n_pass == scr.n_tot
+var array<string> SCR_NAMES = array.from('Revenue growth', 'Profit growth', 'Gross margin', 'EBITDA margin', 'Net margin', 'ROE (avg equity)', 'P/E', 'Debt / equity', 'OCF / net profit')
+// ==========================================
 // TABLE DISPLAY
 // ==========================================
 // [FIX FPT-3] Auto-split anchored to the first bar with USABLE data.
 var int bt_first_data_bar = na
 if na(bt_first_data_bar) and has_any_real_fundamental and not na(finalFairValue)
     bt_first_data_bar := bar_index
-color color_bg = i_theme == 'Dark' ? color.new(#1e222d, 0) : color.new(#f0f3fa, 0)
+bool th_navy = i_theme == 'Light (navy)'
+color color_bg = i_theme == 'Dark' ? color.new(#1e222d, 0) : th_navy ? color.white : color.new(#f0f3fa, 0)
 color color_text = i_theme == 'Dark' ? color.white : color.black
-color color_header = i_theme == 'Dark' ? color.new(color.gray, 50) : color.new(color.gray, 80)
+color color_header = i_theme == 'Dark' ? color.new(color.gray, 50) : th_navy ? color.new(#1f3864, 0) : color.new(color.gray, 80)
+color color_hdr_text = th_navy ? color.white : color_text
+color color_title = th_navy ? color.new(#0b1f44, 0) : color.new(color.purple, 20)
 color color_value = color.new(color.orange, 20)
 color color_over = color.new(color.red, 40)
 color color_under = color.new(color.green, 40)
 // 88,601 | 123 | 4.56
 f_px(float v) =>
     na(v) ? '-' : math.abs(v) >= 1000 ? str.tostring(math.round(v), '#,###') : math.abs(v) >= 100 ? str.tostring(math.round(v)) : str.tostring(v, '#.##')
+// Money (chart units) -> VND in ty (1e9), others in B / M.
+f_money(float v) =>
+    float x = v * px_unit
+    float ty = x / 1e9
+    na(x) ? '-' : curr == 'VND' ? (math.abs(ty) >= 100 ? str.tostring(math.round(ty), '#,###') : str.tostring(ty, '#,###.#')) + ' tỷ' : math.abs(x) >= 1e9 ? str.tostring(ty, '#,###.#') + 'B' : str.tostring(x / 1e6, '#,###.#') + 'M'
 f_scen_txt(float v) =>
     na(v) or v <= 0 ? '-' : f_px(v)
 // GREEN price below this case | AMBER within the band | RED price above it.
@@ -2209,13 +2267,13 @@ type HealthView
     bool severe = false
     string flag1 = ''
     string flags_tt = ''
-var table T = table.new(position.top_right, 4, 80, border_width = 1)
+var table T = table.new(position.top_right, 4, 100, border_width = 1)
 // Section header: four grey cells, tooltip on the first.
 f_hdr(int row, string a, string b, string c, string d, string tt) =>
-    table.cell(T, 0, row, a, text_color = color_text, bgcolor = color_header, text_size = i_textSize, tooltip = tt)
-    table.cell(T, 1, row, b, text_color = color_text, bgcolor = color_header, text_size = i_textSize)
-    table.cell(T, 2, row, c, text_color = color_text, bgcolor = color_header, text_size = i_textSize)
-    table.cell(T, 3, row, d, text_color = color_text, bgcolor = color_header, text_size = i_textSize)
+    table.cell(T, 0, row, a, text_color = color_hdr_text, bgcolor = color_header, text_size = i_textSize, tooltip = tt)
+    table.cell(T, 1, row, b, text_color = color_hdr_text, bgcolor = color_header, text_size = i_textSize)
+    table.cell(T, 2, row, c, text_color = color_hdr_text, bgcolor = color_header, text_size = i_textSize)
+    table.cell(T, 3, row, d, text_color = color_hdr_text, bgcolor = color_header, text_size = i_textSize)
 // Label + three cells; tooltips on the label and on the status cell.
 f_row4(int row, string lbl, string ltt, string v1, color c1, color b1, string v2, color c2, color b2, string v3, color c3, color b3, string stt) =>
     table.cell(T, 0, row, lbl, text_color = color_text, bgcolor = color_bg, text_size = i_textSize, tooltip = ltt)
@@ -2420,12 +2478,13 @@ f_health_calc() =>
 // ---------- summary card ----------
 f_tbl_head() =>
     table.set_position(T, i_tablePos == 'top_right' ? position.top_right : i_tablePos == 'middle_right' ? position.middle_right : position.bottom_right)
-    table.clear(T, 0, 0, 3, 79)
-    color hc = color.new(color.purple, 20)
+    table.clear(T, 0, 0, 3, 99)
+    color hc = color_title
     table.cell(T, 0, 0, active_model_desc, text_color = color.white, bgcolor = hc, text_size = i_textSize, tooltip = 'Valuation framework in use (Industry-Specific Valuation). Values are live on the last bar.\n\nScenario cells: green = price below that case, amber = within +/-' + str.tostring(i_scen_fair_band * 100, '#') + '%, red = price above it.\n\nMore rows: Display Options > Table detail.')
     table.cell(T, 1, 0, 'Price', text_color = color.white, bgcolor = hc, text_size = i_textSize)
     table.cell(T, 2, 0, f_px(close), text_color = color.white, bgcolor = hc, text_size = i_textSize)
-    table.cell(T, 3, 0, 'REAL-TIME', text_color = color.white, bgcolor = hc, text_size = i_textSize)
+    string cap_tt = 'Live on the last bar.\n\nMarket cap: ' + f_money(market_cap_latest) + '\nEnterprise value: ' + f_money(ev_latest) + '\nRevenue TTM: ' + f_money(total_revenue_ttm) + '\nNet profit TTM: ' + f_money(net_income_ttm) + '\nEquity: ' + f_money(total_equity_latest) + '\nNet debt: ' + f_money(net_debt_robust) + '\n\nChart price unit: ' + (px_unit == 1000 ? 'thousands (financials / 1,000)' : 'full')
+    table.cell(T, 3, 0, 'Cap ' + f_money(market_cap_latest), text_color = color.white, bgcolor = hc, text_size = i_textSize, tooltip = cap_tt)
     1
 // Members of the live blend (base value, weight) for the "Ours" tooltip.
 f_members_tt() =>
@@ -2582,7 +2641,7 @@ f_det_omni(int r0) =>
             Omni o = array.get(OMNI, k)
             if o.on
                 omni_tt += o.name + '  ' + str.tostring(omni_w_sum > 0 ? o.w / omni_w_sum * 100 : 100.0 / omni_n, '#.#') + '%\n'
-        f_cell(T, 0, row_idx, 'Omnibus Members', color_text, color_header, i_textSize)
+        f_cell(T, 0, row_idx, 'Omnibus Members', color_hdr_text, color_header, i_textSize)
         table.cell(T, 1, row_idx, str.tostring(omni_n) + ' / 23', text_color = omni_dupe ? color.orange : omni_n >= 3 ? color.green : omni_n > 0 ? color.orange : color.red, bgcolor = color_bg, text_size = i_textSize, tooltip = omni_tt)
         f_cell(T, 2, row_idx, omni_manual ? (i_omni_strict ? 'Manual (strict)' : 'Manual') : 'Auto', color_text, color_bg, i_textSize)
         f_cell(T, 3, row_idx, omni_n == 0 ? 'INACTIVE' : omni_dupe ? 'DOUBLE-COUNT' : omni_w_sum > 0 ? 'Weighted' : 'Equal wt', omni_n == 0 ? color.red : omni_dupe ? color.orange : color_text, color_bg, i_textSize)
@@ -2677,11 +2736,37 @@ f_det_health2(HealthView h, int r0) =>
         f_row4(row_idx, 'Asset Growth YoY', '', f_gtxt(safe_asset_growth), pass_ag ? color.green : color.red, color_bg, '< 5%', color_text, color_bg, pass_ag ? 'PASS' : 'EMPIRE BLDR', color.white, pass_ag ? color_under : color_over, '')
         row_idx += 1
     row_idx
+f_scr_val(int k, float v) =>
+    na(v) ? '-' : k == 6 ? (v >= 1e8 ? 'Loss' : f_petxt(v)) : k == 7 ? str.tostring(v, '#.##') + 'x' : f_gtxt(v)
+f_scr_tgt(int k, float t) =>
+    k == 6 or k == 7 ? '< ' + str.tostring(t, '#.##') + 'x' : '> ' + str.tostring(t * 100, '#') + '%'
+f_scr_res(int r) =>
+    r == 1 ? 'PASS' : r == 0 ? 'FAIL' : 'N/A'
+f_scr_merge(HealthView h) =>
+    if i_scr_on
+        h.q_pass := h.q_pass + scr.n_pass
+        h.q_tot := h.q_tot + scr.n_tot
+        string t = '\n\nScreener ' + str.tostring(scr.n_pass) + '/' + str.tostring(scr.n_tot) + ':'
+        for k = 0 to 8
+            t += '\n' + array.get(SCR_NAMES, k) + ' ' + f_scr_val(k, array.get(scr.v, k)) + ' (' + f_scr_tgt(k, array.get(scr.t, k)) + '): ' + f_scr_res(array.get(scr.r, k))
+        h.q_tt := h.q_tt + t
+    0
+f_det_screen(int r0) =>
+    int row_idx = r0
+    if i_scr_on
+        f_hdr(row_idx, 'Screener ' + str.tostring(scr.n_pass) + '/' + str.tostring(scr.n_tot), 'Value', 'Target', 'Result', 'Thresholds: Pass/Fail Screener inputs. N/A = no data, left out of the count. Growth is TTM vs TTM a year earlier.')
+        row_idx += 1
+        for k = 0 to 8
+            int r = array.get(scr.r, k)
+            f_row4(row_idx, array.get(SCR_NAMES, k), '', f_scr_val(k, array.get(scr.v, k)), r == 1 ? color.green : r == 0 ? color.red : color_text, color_bg, f_scr_tgt(k, array.get(scr.t, k)), color_text, color_bg, f_scr_res(r), r < 0 ? color_text : color.white, r == 1 ? color_under : r == 0 ? color_over : color_bg, '')
+            row_idx += 1
+    row_idx
 if barstate.islast
     StreetView sv = StreetView.new()
     if i_show_street
         sv := f_street_calc()
     HealthView hv = f_health_calc()
+    f_scr_merge(hv)
     int r_ = f_tbl_head()
     r_ := f_sum_val(sv, r_)
     r_ := f_sum_health(hv, r_)
@@ -2694,6 +2779,7 @@ if barstate.islast
     if all_ or i_detail == 'Health'
         r_ := f_det_health1(hv, r_)
         r_ := f_det_health2(hv, r_)
+        r_ := f_det_screen(r_)
 // ==========================================
 // 7. PLOTTING (MARGIN OF SAFETY ZONES)
 // ==========================================
@@ -2709,6 +2795,20 @@ fill(p_fv, p_sell, color = color.new(color.red, 90), title = 'Overvaluation Clou
 fill(p_fv, p_buy, color = color.new(color.green, 90), title = 'Margin of Safety Cloud')
 bool is_screaming_buy = close < buy_zone_line
 bool is_screaming_sell = close > sell_zone_line
+f_last_label() =>
+    var label lb = na
+    label.delete(lb)
+    if i_show_label and not na(finalFairValue) and finalFairValue > 0
+        float up = (finalFairValue / close - 1) * 100
+        string zone = close < buy_zone_line ? 'BUY ZONE' : close > sell_zone_line ? 'SELL ZONE' : close < finalFairValue ? 'Below fair value' : 'Above fair value'
+        color zc = close < buy_zone_line ? color.new(color.green, 10) : close > sell_zone_line ? color.new(color.red, 10) : color.new(color.gray, 20)
+        lb := label.new(bar_index, close, zone + '\nFV ' + f_px(finalFairValue) + '  (' + (up > 0 ? '+' : '') + str.tostring(up, '#') + '%)\nBuy < ' + f_px(buy_zone_line) + ' | Sell > ' + f_px(sell_zone_line), style = label.style_label_left, color = zc, textcolor = color.white, size = size.small)
+    0
+if barstate.islast
+    f_last_label()
+alertcondition(ta.crossunder(close, buy_zone_line), 'Price below buy line', '{{ticker}}: price {{close}} fell below the buy line (fair value less the margin of safety).')
+alertcondition(ta.crossover(close, sell_zone_line), 'Price above sell line', '{{ticker}}: price {{close}} rose above the sell line (fair value plus the exit premium).')
+alertcondition(scr_all_pass and not scr_all_pass[1], 'Screener fully passed', '{{ticker}}: every Pass/Fail Screener test with data now passes.')
 barcolor(is_screaming_buy ? color.new(color.green, 0) : is_screaming_sell ? color.new(color.red, 0) : na, title = "Zone Bar Highlights")
 // ==========================================
 // 8. TRUE ROLLING BACKTESTER
