@@ -519,13 +519,8 @@ f_cagr_gen(float now_v, float old_v, float yrs) =>
     if not na(now_v) and not na(old_v) and old_v > 0 and now_v > 0
         r := math.pow(now_v / old_v, 1.0 / yrs) - 1.0
     r
-// [FIX 2.4] Provenance tiers: 3 = reported, 2 = exact identity, 1 = carried,
-// 0 = heuristic guess (NOT valuation-grade).
-f_latch(float mem_in, float val, int tier) =>
-    tier >= 2 and not na(val) ? val : mem_in
-// Tier of a value before carry-forward: 3 if requested, 2 if an identity filled it.
-f_tier(float raw, float v) =>
-    not na(raw) ? 3 : not na(v) ? 2 : 0
+// [FIX 2.4] Provenance tiers: 3 = reported (or exact identity of reported values),
+// 2 = near-exact, 1 = carried or approximated, 0 = heuristic guess (NOT valuation-grade).
 // ---------------------------------------------------------------------
 // 3.1 MACRO TICKER ROUTING
 // ---------------------------------------------------------------------
@@ -703,8 +698,8 @@ float shares_out_latest = math.max(nz(shares_dil_fq), nz(shares_basic_fq))
 shares_out_latest := shares_out_latest > 0 ? shares_out_latest : na
 // Reported NI (after minority interest) first; pretax - tax includes the minority share.
 float net_income_ttm = not na(ni_rep_ttm) ? ni_rep_ttm : not na(pretax_income_ttm) and not na(income_tax_ttm) ? pretax_income_ttm - income_tax_ttm : na
-if na(net_income_ttm) and not na(eps_ttm) and not na(shares_out_latest)
-    net_income_ttm := eps_ttm * shares_out_latest
+// NI tier: 3 reported; pretax - tax is exact only without minority interest (2), else 1.
+int ni_src_t = not na(ni_rep_ttm) ? 3 : nz(minority_fq) == 0 ? 2 : 1
 // (c) TOTAL EQUITY = Assets - Liabilities [exact identity]
 float total_equity_latest = not na(total_assets_fq) and not na(total_liab_fq) ? total_assets_fq - total_liab_fq : na
 // (d) EBITDA = EBIT + D&A
@@ -736,257 +731,158 @@ max_bars_back(cogs_ttm, 4000)
 max_bars_back(total_equity_latest, 4000)
 max_bars_back(net_income_ttm, 4000)
 // ==========================================
-// THE QUANT IMPUTATION ENGINE (STRICT ACCOUNTING PIPELINE)
+// THE QUANT IMPUTATION ENGINE (IDENTITY SOLVER + FIRM-RATIO CARRY)
 // ==========================================
-// --- 1. THE POST-ALGEBRA MEMORY BANKS ---
+// Fill order, best first. Tier = worst input tier, so a guess never looks like a fact.
+//   1. Requested value (3). A field frozen for 2+ new quarters counts as missing.
+//   2. Exact identities, solved in any order (tier of the inputs).
+//   3. Near-exact rules: EBIT ~ pretax + interest, capex ~ 1y change in net PPE + D&A (tier <= 1).
+//   4. The firm's own last ratio: flows x revenue, balance items x assets (tier <= 1).
+//   5. Rough rules: D&A ~ OCF - NI, OCF ~ NI + D&A (tier <= 1).
+//   6. Last latched value (tier 1). 7. Generic constants behind the firebreak (tier 0).
+int iAS = 0, int iLI = 1, int iEQ = 2, int iCA = 3, int iNCA = 4, int iRV = 5, int iCG = 6
+int iGP = 7, int iEB = 8, int iDA = 9, int iED = 10, int iOC = 11, int iFC = 12, int iCX = 13
+int iPG = 14, int iAD = 15, int iPN = 16, int iNI = 17, int iCS = 18, int iRC = 19, int iDB = 20
+// Exact identities as triples: x[a] = x[b] + x[c]
+// Assets = Liab + Equity | Assets = Current + Non-current | Revenue = COGS + GP
+// EBITDA = EBIT + D&A | FCF = OCF + Capex (capex < 0) | Gross PPE = Accum. dep. + Net PPE
+var array<int> id3 = array.from(iAS, iLI, iEQ, iAS, iCA, iNCA, iRV, iCG, iGP, iED, iEB, iDA, iFC, iOC, iCX, iPG, iAD, iPN)
+// Ratio base per item: flows scale with revenue, balance items with assets, -1 = none
+var array<int> fill_base = array.from(iRV, iAS, iAS, iAS, iAS, -1, iRV, iRV, iRV, iRV, iRV, iRV, iRV, iRV, iAS, iAS, iAS, iRV, iAS, iAS, iAS)
+var array<float> eng_mem = array.new_float(21, na)
+var array<float> eng_ratio = array.new_float(21, na)
+var array<float> last_raw = array.new_float(21, na)
+var array<int> same_n = array.new_int(21, 0)
 var float mem_shares = na
-var float mem_assets = na
-var float mem_debt = na
-var float mem_equity = na
-var float mem_cash = na
-var float mem_ppe_gross = na
-var float mem_ppe_net = na
-var float mem_rev = na
-var float mem_gp = na
-var float mem_cogs = na
-var float mem_ni = na
-var float mem_pretax = na
-var float mem_tax = na
-var float mem_eps = na
-var float mem_ebit = na
-var float mem_ebitda = na
-var float mem_da = na
-var float mem_ocf = na
-var float mem_capex = na
-var float mem_rec = na
-var float mem_curr_assets = na
-var float mem_total_liab = na
-// --- 2. BASE METRICS (Strict NA Propagation) ---
+var float int_rate = na
+array<float> eng_v = array.new_float(21, na)
+array<int> eng_t = array.new_int(21, 0)
+f_g(int i) =>
+    array.get(eng_v, i)
+f_tg(int i) =>
+    array.get(eng_t, i)
+f_put(int i, float x, int tier) =>
+    if na(f_g(i)) and not na(x)
+        array.set(eng_v, i, x)
+        array.set(eng_t, i, tier)
+f_solve() =>
+    for p = 0 to 2
+        for k = 0 to 5
+            int a = array.get(id3, 3 * k), int b = array.get(id3, 3 * k + 1), int c = array.get(id3, 3 * k + 2)
+            float va = f_g(a), float vb = f_g(b), float vc = f_g(c)
+            if (na(va) ? 1 : 0) + (na(vb) ? 1 : 0) + (na(vc) ? 1 : 0) == 1
+                if na(va)
+                    f_put(a, vb + vc, math.min(f_tg(b), f_tg(c)))
+                else if na(vb)
+                    f_put(b, va - vc, math.min(f_tg(a), f_tg(c)))
+                else
+                    f_put(c, va - vb, math.min(f_tg(a), f_tg(b)))
+// --- 1. SHARES (period-end/diluted -> NI / EPS -> memory) ---
 int t_shares = 0, int t_rev = 0, int t_ni = 0, int t_eps = 0
 int t_ebit = 0, int t_ebitda = 0, int t_ocf = 0, int t_assets = 0, int t_equity = 0
 float calc_shares = shares_out_latest
-t_shares := not na(calc_shares) and calc_shares > 0 ? 3 : 0
-// Witness 2: NI / EPS (independent requests)
-if na(calc_shares) or calc_shares <= 0
-    if not na(net_income_ttm) and not na(eps_ttm) and eps_ttm != 0
-        float s2 = net_income_ttm / eps_ttm
-        if s2 > 0
-            calc_shares := s2
-            t_shares := 2
-// Witness 3: memory
-if na(calc_shares) or calc_shares <= 0
+t_shares := not na(calc_shares) ? 3 : 0
+if na(calc_shares) and not na(net_income_ttm) and not na(eps_ttm) and eps_ttm != 0 and net_income_ttm / eps_ttm > 0
+    calc_shares := net_income_ttm / eps_ttm
+    t_shares := 2
+if na(calc_shares) and not na(mem_shares)
     calc_shares := mem_shares
-    t_shares := not na(calc_shares) ? 1 : 0
-// Genuine halt: nothing can be valued per-share without a share count.
-if na(calc_shares) or calc_shares <= 0
-    calc_shares := na
-    t_shares := 0
+    t_shares := 1
 float safe_close = close > 0 ? close : na
 float current_mc = safe_close * calc_shares
-// --- 3. BALANCE SHEET (Triangles -> Extrapolation -> Lifeline) ---
-float calc_assets = total_assets_fq
-float calc_debt = total_debt_latest
-float calc_equity = total_equity_latest
-float calc_cash = cash_latest
-float calc_ppe_gross = ppe_gross_fq
-float _accum_dep = math.abs(nz(f_locf(accum_dep_fq), na))
-float calc_ppe_net = not na(calc_ppe_gross) and not na(_accum_dep) ? math.max(calc_ppe_gross - _accum_dep, 0.0) : (not na(calc_ppe_gross) ? calc_ppe_gross * 0.8 : na)
-float calc_rec = f_locf(accounts_receivable_fq)
-float calc_curr_assets = curr_assets_fq
-float calc_total_liab = total_liab_fq
-// Triangle 1: Assets = Liabilities + Equity (debt is only part of liabilities, so it has no identity)
-if na(calc_assets) and not na(calc_equity) and not na(calc_total_liab)
-    calc_assets := calc_equity + calc_total_liab
-if na(calc_total_liab) and not na(calc_assets) and not na(calc_equity)
-    calc_total_liab := calc_assets - calc_equity
-// Triangle 1.6: Current Assets = Total Assets - Non-current Assets
-if na(calc_curr_assets) and not na(calc_assets)
-    if not na(noncurr_assets_fq)
-        calc_curr_assets := calc_assets - noncurr_assets_fq
-    else
-        float inferred_lt_assets = nz(calc_ppe_net, 0) + nz(intangibles_latest, 0)
-        if inferred_lt_assets > 0 and inferred_lt_assets < calc_assets
-            calc_curr_assets := calc_assets - inferred_lt_assets
-// [AUDIT FIX A] TIER SNAPSHOT: 3 = requested, 2 = filled by an identity.
-t_assets := f_tier(total_assets_fq, calc_assets)
-t_equity := f_tier(total_equity_latest, calc_equity)
-// Extrapolation (0% Growth for Balance Sheet items)
-if na(calc_assets) and not na(mem_assets)
-    calc_assets := mem_assets
-    t_assets := 1
-if na(calc_debt)
-    calc_debt := nz(mem_debt, 0)
-if na(calc_equity) and not na(mem_equity)
-    calc_equity := mem_equity
-    t_equity := 1
-if na(calc_cash)
-    calc_cash := mem_cash
-if na(calc_ppe_gross)
-    calc_ppe_gross := mem_ppe_gross
-if na(calc_ppe_net)
-    calc_ppe_net := mem_ppe_net
-if na(calc_curr_assets)
-    calc_curr_assets := mem_curr_assets
-if na(calc_total_liab)
-    calc_total_liab := mem_total_liab
-// --- 4. INCOME STATEMENT (Triangles -> Extrapolation -> Lifeline) ---
-float calc_rev = total_revenue_ttm
-float calc_cogs = cogs_ttm
-float calc_gp = gp_ttm
-float calc_ni = net_income_ttm
-float calc_pretax = pretax_income_ttm
-float calc_tax = income_tax_ttm
-float calc_eps = eps_ttm
-float calc_ebit = ebit_ttm
-float calc_ebitda = ebitda_ttm
-float calc_interest = interest_expense_ttm
-// [FIX 2.4-b] THE PRICE-TAUTOLOGY FIREBREAK: seed from market cap ONLY when a
-// real statement item exists.
+// Interest: carry the firm's last interest rate on debt when interest is missing
+if not na(interest_expense_ttm) and nz(total_debt_latest) > 0
+    int_rate := interest_expense_ttm / total_debt_latest
+else if na(interest_expense_ttm) and nz(total_debt_latest) > 0
+    interest_expense_ttm := total_debt_latest * int_rate
+// --- 2. LOAD REQUESTED VALUES (tier 3; NI tier from its source) ---
+array<float> eng_raw = array.from(total_assets_fq, total_liab_fq, float(na), curr_assets_fq, noncurr_assets_fq, total_revenue_ttm, cogs_ttm, float(na), ebit_ttm, depr_amort_ttm_raw, float(na), ocf_ttm, fcf_rep_ttm, float(na), ppe_gross_fq, math.abs(accum_dep_fq), float(na), net_income_ttm, cash_latest, accounts_receivable_ttm, total_debt_latest)
+for i = 0 to 20
+    float x = array.get(eng_raw, i)
+    if is_new_quarter and not na(x)
+        array.set(same_n, i, x == array.get(last_raw, i) ? array.get(same_n, i) + 1 : 0)
+        array.set(last_raw, i, x)
+    if array.get(same_n, i) < 2
+        f_put(i, x, i == iNI ? ni_src_t : 3)
+if na(f_g(iNI)) and not na(eps_ttm) and not na(calc_shares)
+    f_put(iNI, eps_ttm * calc_shares, math.min(t_shares, 2))
+f_solve()
+// --- 3. NEAR-EXACT RULES ---
+float pn_1y = ta.valuewhen(is_new_quarter, f_g(iPN), 4)
+f_rules(bool rough) =>
+    f_put(iEB, nz(pretax_income_ttm, f_g(iNI) + nz(income_tax_ttm)) + nz(interest_expense_ttm), not na(pretax_income_ttm) ? 1 : math.min(f_tg(iNI), 1))
+    f_put(iCX, -math.max(f_g(iPN) - pn_1y + f_g(iDA), 0), math.min(math.min(f_tg(iPN), f_tg(iDA)), 1))
+    if rough
+        f_put(iDA, math.max(f_g(iOC) - f_g(iNI), 0), math.min(math.min(f_tg(iOC), f_tg(iNI)), 1))
+        f_put(iOC, f_g(iNI) + f_g(iDA), math.min(math.min(f_tg(iNI), f_tg(iDA)), 1))
+    f_solve()
+f_rules(false)
+// --- 4. FIRM'S OWN LAST RATIOS (revenue first carried if missing) ---
+f_put(iRV, array.get(eng_mem, iRV), 1)
+for i = 0 to 20
+    int b = array.get(fill_base, i)
+    if b >= 0
+        f_put(i, f_g(b) * array.get(eng_ratio, i), math.min(f_tg(b), 1))
+f_solve()
+// --- 5. ROUGH RULES, 6. LAST LATCHED VALUE ---
+f_rules(true)
+for i = 0 to 20
+    f_put(i, array.get(eng_mem, i), 1)
+f_solve()
+// --- 7. TERMINAL LIFELINE (tier 0) -- gated by the firebreak ---
 bool has_any_real_fundamental = not na(total_assets_fq) or not na(rev_fq) or not na(eps_fq) or not na(ocf_fq)
 if not na(calc_shares) and has_any_real_fundamental
-    if na(calc_assets) and not na(calc_rev)
-        calc_assets := calc_rev * 1.5
-        t_assets := 0
-    if na(calc_equity) and not na(calc_assets)
-        calc_equity := calc_assets - nz(calc_total_liab, nz(calc_debt, 0))
-        t_equity := 2
-    if na(calc_cash) and not na(calc_assets)
-        calc_cash := calc_assets * 0.05
-    if na(calc_ppe_gross) and not na(calc_assets)
-        calc_ppe_gross := calc_assets * 0.3
-    if na(calc_ppe_net) and not na(calc_ppe_gross)
-        calc_ppe_net := calc_ppe_gross * 0.8
-    if na(calc_rec) and not na(calc_rev)
-        calc_rec := calc_rev * 0.1
-    if na(calc_total_liab)
-        calc_total_liab := nz(calc_assets) - nz(calc_equity)
-    if na(calc_curr_assets)
-        calc_curr_assets := nz(calc_assets) * 0.40
-// Triangle 2: Revenue, GP, COGS
-if na(calc_rev) and not na(calc_gp) and not na(calc_cogs)
-    calc_rev := calc_gp + calc_cogs
-if na(calc_gp) and not na(calc_rev) and not na(calc_cogs)
-    calc_gp := calc_rev - calc_cogs
-if na(calc_cogs) and not na(calc_rev) and not na(calc_gp)
-    calc_cogs := calc_rev - calc_gp
-// Triangle 3: NI, Pretax, Tax
-if na(calc_ni) and not na(calc_pretax) and not na(calc_tax)
-    calc_ni := calc_pretax - calc_tax
-if na(calc_pretax) and not na(calc_ni) and not na(calc_tax)
-    calc_pretax := calc_ni + calc_tax
-if na(calc_tax) and not na(calc_pretax) and not na(calc_ni)
-    calc_tax := calc_pretax - calc_ni
-// Triangle 4: NI, EPS, Shares
-if na(calc_ni) and not na(calc_eps) and not na(calc_shares)
-    calc_ni := calc_eps * calc_shares
-if na(calc_eps) and not na(calc_ni) and not na(calc_shares)
-    calc_eps := calc_ni / calc_shares
-// Triangle 5: EBIT, NI, Tax, Interest
-if na(calc_ebit) and not na(calc_ni)
-    calc_ebit := calc_ni + nz(calc_tax, 0) + nz(calc_interest, 0)
-if na(calc_ni) and not na(calc_ebit)
-    calc_ni := calc_ebit - nz(calc_tax, 0) - nz(calc_interest, 0)
-// [AUDIT FIX B] TIER SNAPSHOT: 3 = requested, 2 = filled by an identity.
-t_rev := f_tier(total_revenue_ttm, calc_rev)
-t_ni := f_tier(net_income_ttm, calc_ni)
-t_eps := f_tier(eps_ttm, calc_eps)
-t_ebit := f_tier(ebit_ttm, calc_ebit)
-// [FIX 1.3] QUARTER-GATED EXTRAPOLATION (+1% per stale quarter, max 8).
+    f_put(iAS, f_g(iRV) * 1.5, 0)
+    f_put(iRV, f_g(iAS) * 0.5, 0)
+    f_put(iEQ, f_g(iAS) - nz(f_g(iLI), nz(f_g(iDB))), 0)
+    f_put(iCS, f_g(iAS) * 0.05, 0)
+    f_put(iPG, f_g(iAS) * 0.3, 0)
+    f_put(iPN, f_g(iPG) * 0.8, 0)
+    f_put(iRC, f_g(iRV) * 0.1, 0)
+    f_put(iCA, f_g(iAS) * 0.40, 0)
+    f_put(iNI, f_g(iRV) * 0.05, 0)
+    f_put(iDA, f_g(iRV) * 0.05, 0)
+    f_rules(true)
+    f_put(iCX, -f_g(iDA), 0)
+    f_solve()
+// --- 8. STALENESS: no new report for 2+ quarters -> tier 1, 4+ quarters -> tier 0 ---
 var int bars_since_real = 0
-int bars_per_qtr = math.max(1, int(bpy / 4))
-float qtrs_stale = bars_since_real / float(bars_per_qtr)
-float stale_mult = math.pow(1.01, math.min(qtrs_stale, 8.0))
-if is_new_quarter
-    bars_since_real := 0
-else
-    bars_since_real += 1
-float ext_growth = stale_mult
-if na(calc_rev)
-    calc_rev := mem_rev * ext_growth
-    t_rev := 1
-if na(calc_ni)
-    calc_ni := mem_ni * ext_growth
-    t_ni := 1
-if na(calc_eps) and not na(calc_shares)
-    calc_eps := calc_ni / calc_shares
-    t_eps := math.min(t_ni, 2)
-if na(calc_ebit)
-    calc_ebit := mem_ebit * ext_growth
-    t_ebit := 1
-// Terminal Lifeline -- gated by the firebreak
-if not na(calc_shares) and has_any_real_fundamental
-    if na(calc_rev)
-        calc_rev := nz(calc_assets) * 0.5
-        t_rev := 0
-    if na(calc_ni)
-        calc_ni := nz(calc_rev) * 0.05
-        t_ni := 0
-    if na(calc_eps)
-        calc_eps := nz(calc_ni) / calc_shares
-        t_eps := 0
-    if na(calc_ebit)
-        calc_ebit := nz(calc_ni) + nz(calc_tax, calc_ni * 0.2) + nz(calc_interest, nz(calc_debt) * 0.05)
-        t_ebit := 0
-// --- 5. CASH FLOW & D&A (Triangles -> Extrapolation -> Lifeline) ---
-float calc_ocf = ocf_ttm
-float calc_capex = capex_ttm
-float calc_da = depr_amort_ttm_raw
-float ppe_net_1y = ta.valuewhen(is_new_quarter, calc_ppe_net, 4)
-// Triangle 6: D&A ~ OCF - NI, only when D&A itself is missing (includes working-capital swings)
-bool da_rough = false
-if na(calc_da) and not na(calc_ocf) and not na(calc_ni)
-    calc_da := math.max(calc_ocf - calc_ni, 0)
-    da_rough := true
-// Triangle 7: EBITDA from D&A
-if na(calc_ebitda) and not na(calc_ebit) and not na(calc_da)
-    calc_ebitda := calc_ebit + calc_da
-// Triangle 8: OCF ~ NI + D&A (ignores working capital)
-if na(calc_ocf) and not na(calc_ni) and not na(calc_da)
-    calc_ocf := calc_ni + calc_da
-// Triangle 9: CapEx = one-year change in net PPE + D&A
-if na(calc_capex) and not na(calc_ppe_net) and not na(ppe_net_1y) and not na(calc_da)
-    calc_capex := -math.max(calc_ppe_net - ppe_net_1y + calc_da, 0)
-// [AUDIT FIX C] TIER SNAPSHOT: approximations are tier 1 and never latch.
-t_ocf := not na(ocf_ttm) ? 3 : not na(calc_ocf) ? 1 : 0
-t_ebitda := not na(ebitda_ttm) ? 3 : not na(calc_ebitda) ? math.min(t_ebit, da_rough ? 1 : 2) : 0
-// Extrapolation
-if na(calc_da)
-    calc_da := mem_da
-if na(calc_ebitda)
-    calc_ebitda := mem_ebitda * ext_growth
-    t_ebitda := 1
-if na(calc_ocf)
-    calc_ocf := mem_ocf * ext_growth
-    t_ocf := 1
-if na(calc_capex)
-    calc_capex := mem_capex
-// Terminal Lifeline -- gated by the firebreak
-if not na(calc_shares) and has_any_real_fundamental
-    if na(calc_ebitda)
-        calc_ebitda := nz(calc_ebit) + (nz(calc_rev) * 0.05)
-    if na(calc_da)
-        calc_da := nz(calc_ebitda) - nz(calc_ebit)
-    if na(calc_ocf)
-        calc_ocf := nz(calc_ni) + nz(calc_da)
-    if na(calc_capex)
-        calc_capex := -nz(calc_da)
-// [FIX STALE] No new report for 2+ quarters: data counts as carried (tier 1); 4+ quarters: a guess (tier 0).
+float qtrs_stale = bars_since_real / float(math.max(1, int(bpy / 4)))
+bars_since_real := is_new_quarter ? 0 : bars_since_real + 1
 int stale_cap = qtrs_stale > 4 ? 0 : qtrs_stale > 2 ? 1 : 3
+for i = 0 to 20
+    array.set(eng_t, i, math.min(f_tg(i), stale_cap))
 t_shares := math.min(t_shares, stale_cap)
-t_rev := math.min(t_rev, stale_cap)
-t_ni := math.min(t_ni, stale_cap)
-t_eps := math.min(t_eps, stale_cap)
-t_ebit := math.min(t_ebit, stale_cap)
-t_ebitda := math.min(t_ebitda, stale_cap)
-t_ocf := math.min(t_ocf, stale_cap)
-t_assets := math.min(t_assets, stale_cap)
-t_equity := math.min(t_equity, stale_cap)
-// --- 6. OVERRIDE ORIGINAL VARIABLES FOR DOWNSTREAM ---
+// --- 9. OUTPUTS ---
+float calc_assets = f_g(iAS)
+float calc_total_liab = f_g(iLI)
+float calc_equity = f_g(iEQ)
+float calc_curr_assets = f_g(iCA)
+float calc_rev = f_g(iRV)
+float calc_gp = f_g(iGP)
+float calc_ebit = f_g(iEB)
+float calc_da = f_g(iDA)
+float calc_ebitda = f_g(iED)
+float calc_ocf = f_g(iOC)
+float calc_capex = f_g(iCX)
+float calc_ni = f_g(iNI)
+float calc_cash = f_g(iCS)
+float calc_debt = nz(f_g(iDB))
+float calc_ppe_net = f_g(iPN)
+float calc_eps = nz(eps_ttm, calc_ni / calc_shares)
+t_assets := f_tg(iAS)
+t_equity := f_tg(iEQ)
+t_rev := f_tg(iRV)
+t_ni := f_tg(iNI)
+t_ebit := f_tg(iEB)
+t_ebitda := f_tg(iED)
+t_ocf := f_tg(iOC)
+t_eps := math.min(not na(eps_ttm) ? 3 : math.min(math.min(t_ni, t_shares), 2), stale_cap)
 shares_out_latest := calc_shares
 total_revenue_ttm := calc_rev
 gp_ttm := calc_gp
-cogs_ttm := calc_cogs
-accounts_receivable_ttm := calc_rec
+cogs_ttm := f_g(iCG)
+accounts_receivable_ttm := f_g(iRC)
 // [AUDIT FIX D] Income attributable to common when strict capital structure is on.
 net_income_ttm := i_strict_cap ? (calc_ni - nz(pref_div_ttm, 0)) : calc_ni
 eps_ttm := calc_eps
@@ -998,36 +894,21 @@ total_equity_latest := calc_equity
 total_debt_latest := calc_debt
 cash_latest := calc_cash
 total_assets_fq := calc_assets
-ppe_gross_fq := calc_ppe_gross
+ppe_gross_fq := f_g(iPG)
 float ppe_net_fq = calc_ppe_net
 float true_fcf = calc_ocf - math.abs(calc_capex)
-float fcf_ttm = calc_ocf - math.abs(calc_capex)
-float safe_affo = calc_ocf - math.abs(calc_capex)
+float fcf_ttm = true_fcf
+float safe_affo = true_fcf
 float net_debt_robust = calc_debt - nz(calc_cash, 0)
-// --- 7. UPDATE POST-ALGEBRA MEMORY BANKS ---
-// [FIX 2.4-c] Only observed or algebraically exact values (tier >= 2) latch.
-mem_shares := f_latch(mem_shares, calc_shares, t_shares)
-mem_rev := f_latch(mem_rev, calc_rev, t_rev)
-mem_ni := f_latch(mem_ni, calc_ni, t_ni)
-mem_eps := f_latch(mem_eps, calc_eps, t_eps)
-mem_ebit := f_latch(mem_ebit, calc_ebit, t_ebit)
-mem_ebitda := f_latch(mem_ebitda, calc_ebitda, t_ebitda)
-mem_ocf := f_latch(mem_ocf, calc_ocf, t_ocf)
-mem_assets := f_latch(mem_assets, calc_assets, t_assets)
-mem_equity := f_latch(mem_equity, calc_equity, t_equity)
-mem_debt := nz(calc_debt, mem_debt)
-mem_cash := nz(calc_cash, mem_cash)
-mem_ppe_gross := nz(calc_ppe_gross, mem_ppe_gross)
-mem_ppe_net := nz(calc_ppe_net, mem_ppe_net)
-mem_gp := nz(calc_gp, mem_gp)
-mem_cogs := nz(calc_cogs, mem_cogs)
-mem_pretax := nz(calc_pretax, mem_pretax)
-mem_tax := nz(calc_tax, mem_tax)
-mem_da := nz(calc_da, mem_da)
-mem_capex := nz(calc_capex, mem_capex)
-mem_rec := nz(calc_rec, mem_rec)
-mem_curr_assets := nz(calc_curr_assets, mem_curr_assets)
-mem_total_liab := nz(calc_total_liab, mem_total_liab)
+// --- 10. MEMORY + RATIOS: only reported or exact values (tier >= 2) latch ---
+if t_shares >= 2
+    mem_shares := calc_shares
+for i = 0 to 20
+    int b = array.get(fill_base, i)
+    if f_tg(i) >= 2
+        array.set(eng_mem, i, f_g(i))
+        if b >= 0 and f_tg(b) >= 2 and f_g(b) > 0
+            array.set(eng_ratio, i, f_g(i) / f_g(b))
 // =====================================================================
 // 3.8 DERIVED SCORES (Altman / Piotroski computed locally)
 // =====================================================================
