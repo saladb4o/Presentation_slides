@@ -504,6 +504,7 @@ float earn_raw = request.earnings(syminfo.tickerid, earnings.actual, ignore_inva
 bool report_bar = f_fresh(earn_raw)
 // [FIX UNIT] Chart quoted in thousands (24.50 for 24,500 VND)? Quarterly P/E under 0.5
 // is impossible, so price / reported EPS decides once. Before the first EPS: VND + tick < 1.
+// Then shares count x1000 and per-share money /1000: per-share values match the price, totals stay in VND.
 var float px_unit = syminfo.currency == 'VND' and syminfo.mintick < 1 ? 1000.0 : 1.0
 var bool px_unit_set = false
 if not px_unit_set and not na(earn_raw) and earn_raw != 0 and close > 0
@@ -519,8 +520,7 @@ f_fin(simple string id, simple string per) =>
         seen_t := time
     if not na(pending) and (time - seen_t >= i_report_lag * 86400000 or barstate.islast or (report_bar and time > seen_t))
         known := pending
-    // Money in chart price units; share counts untouched.
-    str.contains(id, 'SHARES_OUTSTANDING') ? known : known / px_unit
+    known
 f_cagr_gen(float now_v, float old_v, float yrs) =>
     float r = na
     if not na(now_v) and not na(old_v) and old_v > 0 and now_v > 0
@@ -609,12 +609,12 @@ float cogs_fq = f_fin('COST_OF_GOODS', flow_per) // 2
 float ebit_fq = f_fin('EBIT', flow_per) // 3
 float pretax_fq = f_fin('PRETAX_INCOME', flow_per) // 4
 float inc_tax_fq = f_fin('INCOME_TAX', flow_per) // 5
-float eps_fq = f_fin('EARNINGS_PER_SHARE_DILUTED', flow_per) // 6
+float eps_fq = f_fin('EARNINGS_PER_SHARE_DILUTED', flow_per) / px_unit // 6
 // Interest, R&D and preferred dividends have no TTM field: always FQ + vault.
 float interest_fq = f_fin('INTEREST_EXPENSE_ON_DEBT', 'FQ') // 7
 float rnd_fq = f_fin('RESEARCH_AND_DEV', 'FQ') // 8
 float pref_div_fq = f_fin('PREFERRED_DIVIDENDS', 'FQ') // 9
-float div_ps_fq = f_fin('DPS_COMMON_STOCK_PRIM_ISSUE', flow_per) // 10
+float div_ps_fq = f_fin('DPS_COMMON_STOCK_PRIM_ISSUE', flow_per) / px_unit // 10
 float minority_fq = f_fin('MINORITY_INTEREST', 'FQ') // 11
 // --- CASH FLOW (4) ---
 float ocf_fq = f_fin('CASH_F_OPERATING_ACTIVITIES', flow_per) // 12
@@ -640,7 +640,7 @@ float noncurr_assets_fq = f_fin('TOTAL_NON_CURRENT_ASSETS', 'FQ') // 29
 float intangibles_fq = f_fin('INTANGIBLES_NET', 'FQ') // 30 (includes goodwill)
 // --- FORWARD-LOOKING (1) ---
 // [FIX EST] Fiscal-year consensus, not a sum of four quarterly estimates.
-float eps_est_fq = f_fin('EARNINGS_ESTIMATE', 'FY') // 31
+float eps_est_fq = f_fin('EARNINGS_ESTIMATE', 'FY') / px_unit // 31
 // ---------------------------------------------------------------------
 // 3.4 QUARTER TRIGGER — DEBOUNCED MULTI-WITNESS
 // ---------------------------------------------------------------------
@@ -705,7 +705,7 @@ float gp_ttm = not na(total_revenue_ttm) and not na(cogs_ttm) ? total_revenue_tt
 // (b) SHARES then NET INCOME
 // Larger of period-end and weighted diluted count: the weighted average lags new issues.
 float shares_out_latest = math.max(nz(shares_dil_fq), nz(shares_basic_fq))
-shares_out_latest := shares_out_latest > 0 ? shares_out_latest : na
+shares_out_latest := shares_out_latest > 0 ? shares_out_latest * px_unit : na
 // Reported NI (after minority interest) first; pretax - tax includes the minority share.
 float net_income_ttm = not na(ni_rep_ttm) ? ni_rep_ttm : not na(pretax_income_ttm) and not na(income_tax_ttm) ? pretax_income_ttm - income_tax_ttm : na
 // NI tier: 3 reported; pretax - tax is exact only without minority interest (2), else 1.
@@ -722,7 +722,6 @@ float total_debt_latest = total_debt_fq
 float cash_latest = cash_fq
 float accounts_receivable_fq = receiv_fq
 float intangibles_latest = intangibles_fq
-float cpi_series = cpi_raw
 float eps_fy_curr = eps_ttm
 float rev_fy = total_revenue_ttm
 float accounts_receivable_ttm = f_locf(receiv_fq)
@@ -837,7 +836,6 @@ f_rules(bool rough) =>
     if rough
         f_put(iDA, math.max(f_g(iOC) - f_g(iNI), 0), math.min(math.min(f_tg(iOC), f_tg(iNI)), 1))
         f_put(iOC, f_g(iNI) + f_g(iDA), math.min(math.min(f_tg(iNI), f_tg(iDA)), 1))
-    f_solve()
 f_rules(false)
 // --- 4. FIRM'S OWN LAST RATIOS (revenue first carried if missing) ---
 f_put(iRV, array.get(eng_mem, iRV), 1)
@@ -845,7 +843,6 @@ for i = 0 to 20
     int b = array.get(fill_base, i)
     if b >= 0
         f_put(i, f_g(b) * array.get(eng_ratio, i), math.min(f_tg(b), 1))
-f_solve()
 // --- 5. ROUGH RULES, 6. LAST LATCHED VALUE ---
 f_rules(true)
 for i = 0 to 20
@@ -1371,7 +1368,7 @@ float standard_capm_coe = base_rf_for_calc + (beta_mkt * calc_erp) + calc_crp
 // fx_rate = local currency units per 1 USD.
 float fx_to_usd = request.currency_rate(curr, 'USD', ignore_invalid_currency = true)
 float fx_rate = not na(fx_to_usd) and fx_to_usd > 0 ? 1.0 / fx_to_usd : ((curr == 'VND') ? 25000.0 : (curr == 'EUR' ? 0.93 : (curr == 'GBP' ? 0.79 : 1.0)))
-float mc_usd_billions = not na(market_cap_latest) ? (market_cap_latest * px_unit / fx_rate) / 1e9 : 100.0
+float mc_usd_billions = not na(market_cap_latest) ? (market_cap_latest / fx_rate) / 1e9 : 100.0
 float size_premium = 0.0
 if i_use_factors
     if mc_usd_billions < 1.0
@@ -1407,7 +1404,7 @@ if i_use_factors
             illiq_penalty := i_liq_prem * (amihud_90d / 0.5)
     float spec_penalty = 0.0
     if not na(volume) and shares_out_latest > 0
-        float daily_turnover = volume / shares_out_latest
+        float daily_turnover = volume * px_unit / shares_out_latest
         float avg_turnover_12m = ta.sma(daily_turnover, 252)
         if avg_turnover_12m > 0.01
             spec_penalty := i_liq_prem * math.min((avg_turnover_12m - 0.01) / 0.01, 1.0)
@@ -1512,10 +1509,9 @@ Mult M_PE = array.get(MULTS, 0), Mult M_PS = array.get(MULTS, 1)
 Mult M_PFCF = array.get(MULTS, 2), Mult M_PB = array.get(MULTS, 3)
 Mult M_PTBV = array.get(MULTS, 4), Mult M_EV = array.get(MULTS, 5)
 Mult M_PCF = array.get(MULTS, 6), Mult M_PAFFO = array.get(MULTS, 7)
-float blended_fv_pe = M_PE.fv
-float fv_ps = M_PS.fv, float fv_pfcf = M_PFCF.fv, float fv_pb = M_PB.fv
-float fv_ptbv = M_PTBV.fv, float blended_fv_ev_ebitda = M_EV.fv
-float fv_pcf = M_PCF.fv, float fv_paffo = M_PAFFO.fv
+float fv_pfcf = M_PFCF.fv, float fv_pb = M_PB.fv
+float blended_fv_ev_ebitda = M_EV.fv
+float fv_paffo = M_PAFFO.fv
 // ==============================================================
 // === SECTOR-SPECIFIC MODELS ===================================
 // ==============================================================
