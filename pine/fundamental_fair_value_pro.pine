@@ -468,10 +468,10 @@ i_bt_drop_straddle = input.bool(true, 'Exclude trades that straddle a period bou
 // 3. DATA COLLECTION — REQUEST-BUDGET OPTIMIZED FQ VAULT
 // =====================================================================
 // REQUEST LEDGER (hard cap = 40 per script)
-// request.security      : 4  (US10Y, local 10Y, benchmark, small-cap ETF)
+// request.security      : 6  (US10Y, local 10Y, benchmark, small-cap, value, growth ETF)
 // request.currency_rate : 1
 // request.financial     : 31
-// TOTAL                 : 36 -> 4 slots free
+// TOTAL                 : 38 -> 2 slots free
 // (best use of a free slot: request.earnings() for real report dates)
 // RULES
 // R1. request.security() accepts TUPLES -> unlimited series per slot.
@@ -540,7 +540,8 @@ int current_tf_sec = timeframe.in_seconds(timeframe.period) > 0 ? timeframe.in_s
 // A daily stock chart has ~252 bars a year, so "5 years" of 365-bar years
 // was ~7.2 years and a "1 year" hold ~1.45.
 int trading_days = syminfo.type == 'crypto' ? 365 : 252
-int bpy = current_tf_sec < 86400 ? math.max(1, int(math.round(trading_days * 23400.0 / current_tf_sec))) : current_tf_sec < 604800 ? math.max(1, int(math.round(trading_days * 86400.0 / current_tf_sec))) : math.max(1, int(math.round(365.25 * 86400.0 / current_tf_sec)))
+float session_sec = syminfo.type == 'crypto' ? 86400.0 : 23400.0
+int bpy = current_tf_sec < 86400 ? math.max(1, int(math.round(trading_days * session_sec / current_tf_sec))) : current_tf_sec < 604800 ? math.max(1, int(math.round(trading_days * 86400.0 / current_tf_sec))) : math.max(1, int(math.round(365.25 * 86400.0 / current_tf_sec)))
 // ---------------------------------------------------------------------
 // 3.2 MACRO FETCH — TUPLE-PACKED (2 security slots)
 // ---------------------------------------------------------------------
@@ -1109,10 +1110,10 @@ string beta_tf = timeframe.in_seconds(i_beta_tf) <= timeframe.in_seconds(timefra
 bool beta_sample = ta.change(time(beta_tf)) != 0
 float asset_p = f_locf(close[1])
 // >>> SECURITY SLOT 3/4 : benchmark, non-repainting (close[1] + lookahead_on)
-[bench_c] = request.security(final_mkt_bench, beta_tf, [close[1]], lookahead = barmerge.lookahead_on, ignore_invalid_symbol = true)
+float bench_c = request.security(final_mkt_bench, beta_tf, close[1], lookahead = barmerge.lookahead_on, ignore_invalid_symbol = true)
 float mkt_bench_p = f_locf(bench_c)
-max_bars_back(asset_p, 500)
-max_bars_back(mkt_bench_p, 500)
+max_bars_back(asset_p, 5000)
+max_bars_back(mkt_bench_p, 5000)
 // One return pair per beta-timeframe period. i_beta_lookback counts PERIODS.
 var array<float> beta_ra = array.new_float(0)
 var array<float> beta_rb = array.new_float(0)
@@ -1168,17 +1169,28 @@ f_get_cagr_optimized(current_price_series, bars_back_5y) =>
         math.pow(p_now / p_old, 1.0 / 5.0) - 1.0
     else
         0.08
-int bars_in_5y = 5 * bpy
+int bars_in_5y = math.min(5 * bpy, 4900)
 cagr_mkt = f_get_cagr_optimized(mkt_bench_p, bars_in_5y)
 string auto_small_etf = (curr == 'VND') ? 'HOSE:VNSML' : i_small_etf
 // >>> SECURITY SLOT 4/4 : size factor
-[small_c] = request.security(auto_small_etf, i_beta_tf, [close], ignore_invalid_symbol = true)
+float small_c = request.security(auto_small_etf, i_beta_tf, close, ignore_invalid_symbol = true)
 float small_p = f_locf(small_c)
+max_bars_back(small_p, 5000)
 cagr_small = f_get_cagr_optimized(small_p, bars_in_5y)
 float live_smb_spread = not na(cagr_small) and not na(cagr_mkt) ? cagr_small - cagr_mkt : 0.02
 live_smb_spread := math.max(math.min(live_smb_spread, 0.05), -0.02)
-// HML approximation: the value-vs-market spread is roughly half the value-vs-growth spread.
-float live_hml_spread = na(small_p) ? 0.015 : (cagr_small - cagr_mkt) * 0.5 + 0.01
+// [FIX HML] HML from the value and growth ETFs (the old line reused the SMB
+// spread). Value-vs-market is roughly half the value-vs-growth spread.
+// No VN value/growth proxy exists, so VND uses the 1.5% long-run default.
+float value_c = curr == 'VND' ? na : request.security(i_value_etf, i_beta_tf, close, ignore_invalid_symbol = true)
+float growth_c = curr == 'VND' ? na : request.security(i_growth_etf, i_beta_tf, close, ignore_invalid_symbol = true)
+float value_p = f_locf(value_c)
+float growth_p = f_locf(growth_c)
+max_bars_back(value_p, 5000)
+max_bars_back(growth_p, 5000)
+float cagr_value = f_get_cagr_optimized(value_p, bars_in_5y)
+float cagr_growth = f_get_cagr_optimized(growth_p, bars_in_5y)
+float live_hml_spread = na(value_p) or na(growth_p) ? 0.015 : (cagr_value - cagr_growth) * 0.5
 live_hml_spread := math.max(math.min(live_hml_spread, 0.05), -0.02)
 float auto_erp = math.max(cagr_mkt - (us10y_yield / 100), 0.045) // Floor at 4.5%
 yield_local_daily = local_rf_raw
@@ -1441,8 +1453,8 @@ float hml_premium = 0.0
 float current_bm = not na(bvps_ttm) and close > 0 ? bvps_ttm / close : 0.0
 if i_use_factors and current_bm > 0.8
     hml_premium := live_hml_spread * math.min(current_bm, 2.0)
-float px_1m_ago = close[math.max(1, int(bpy / 12))]
-float px_12m_ago = close[bpy]
+float px_1m_ago = close[math.min(math.max(1, int(bpy / 12)), 4900)]
+float px_12m_ago = close[math.min(bpy, 4900)]
 float mom_premium = 0.0
 float mom_hurdle = (curr == 'VND') ? 0.45 : 0.30
 if i_use_factors and not na(px_1m_ago) and not na(px_12m_ago) and px_12m_ago > 0
@@ -1527,18 +1539,16 @@ float cyclically_adjusted_eps = na
 if use_cape
     float total_inflation_adj_eps = 0.0
     int valid_eps_count = 0
-    if array.size(f_series_to_array(cpi_series, 1)) > 0
-        float current_cpi = cpi_series[0]
-        for i = 0 to 9 by 1
-            int offset = i * bpy
-            if offset < bar_index and offset < 2999
-                float historical_eps = eps_fy_curr[offset]
-                float historical_cpi = cpi_series[offset]
-                if not na(historical_eps) and not na(historical_cpi) and historical_cpi > 0
-                    total_inflation_adj_eps := total_inflation_adj_eps + historical_eps * (current_cpi / historical_cpi)
-                    valid_eps_count := valid_eps_count + 1
-        if valid_eps_count > 0
-            cyclically_adjusted_eps := total_inflation_adj_eps / valid_eps_count
+    // Constant-inflation CPI: the ratio CPI(now)/CPI(i years ago) is (1+infl)^i.
+    for i = 0 to 9 by 1
+        int offset = i * bpy
+        if offset < bar_index and offset < 2999
+            float historical_eps = eps_fy_curr[offset]
+            if not na(historical_eps)
+                total_inflation_adj_eps := total_inflation_adj_eps + historical_eps * math.pow(1 + lr_infl, i)
+                valid_eps_count := valid_eps_count + 1
+    if valid_eps_count > 0
+        cyclically_adjusted_eps := total_inflation_adj_eps / valid_eps_count
 // Multiples: one cached, single-sort call per multiple. Bear/Bull come from
 // THIS ticker's own ratio history.
 bool rs_dirty = can_push_ratios or barstate.isfirst
@@ -2003,7 +2013,9 @@ lowerBound := na(finalFairValue) ? na : finalFairValue - nz(fv_stddev, finalFair
 upperBound := upperBound > 0 ? upperBound : na
 lowerBound := lowerBound > 0 ? lowerBound : na
 float fv_band = math.max(nz(finalFairValue, 0) * 0.03, 0.0)
-if close > upperBound and not na(upperBound)
+if na(finalFairValue)
+    valuation_status := 'N/A'
+else if close > upperBound and not na(upperBound)
     valuation_status := 'Very Overvalued'
 else if close > finalFairValue + fv_band
     valuation_status := 'Overvalued'
@@ -2155,7 +2167,7 @@ if barstate.islast
     string composite_label = omni_active ? 'Omnibus FV (' + str.tostring(omni_n) + '/23 models)' : is_omnibus ? 'Standard FV (Omnibus unavailable)' : (selected_industry == 'General/Diversified' ? 'Overall Relative Value' : 'Industry Relative Value')
     color valuation_color = valuation_status == 'Overvalued' or valuation_status == 'Very Overvalued' ? color_over : valuation_status == 'Undervalued' or valuation_status == 'Very Undervalued' ? color_under : color_bg
     float variance_pct = na(finalFairValue) ? na : (close / finalFairValue - 1) * 100
-    string comp_tt = (blend_eq ? 'No model has a predictive track record yet, so the blend is EQUAL-WEIGHTED (x data-quality tier).\n\n' : 'Weights = inverse error of each model\'s fair value against the price ' + str.tostring(i_w_horizon) + ' quarters later, x data-quality tier.\n\n') + 'Bear/Bull are the same weights applied to each model\'s own bear and bull case.' + (na(variance_pct) ? '' : '\n\nPrice vs Base: ' + (variance_pct > 0 ? '+' : '') + str.tostring(math.round(variance_pct)) + '%')
+    string comp_tt = (blend_eq ? 'No model has a predictive track record yet, so the blend is EQUAL-WEIGHTED (x data-quality tier).\n\n' : 'Weights = inverse error of each model fair value against the price ' + str.tostring(i_w_horizon) + ' quarters later, x data-quality tier.\n\n') + 'Bear/Bull are the same weights applied to each model own bear and bull case.' + (na(variance_pct) ? '' : '\n\nPrice vs Base: ' + (variance_pct > 0 ? '+' : '') + str.tostring(math.round(variance_pct)) + '%')
     f_model_row(T, row_idx, composite_label, compositeLo, finalFairValue, compositeHi, comp_tt)
     row_idx := row_idx + 1
     float band_w = not na(compositeLo) and not na(compositeHi) and not na(finalFairValue) and finalFairValue > 0 ? (compositeHi - compositeLo) / finalFairValue * 100 : na
@@ -2221,7 +2233,7 @@ if barstate.islast
             piotroski_status_text := 'Neutral'
             piotroski_status_color := color_bg
     f_cell(T, 0, row_idx, 'Piotroski F-Score', color_text, color_bg, i_textSize)
-    f_cell(T, 1, row_idx, piotroski_f_score, color_text, color_bg, i_textSize)
+    f_cell(T, 1, row_idx, na(piotroski_f_score) ? 'N/A' : str.tostring(piotroski_f_score, '#'), color_text, color_bg, i_textSize)
     f_cell(T, 2, row_idx, 'Financial Strength', color_text, color_bg, i_textSize)
     f_cell(T, 3, row_idx, piotroski_status_text, color_text, piotroski_status_color, i_textSize)
     row_idx := row_idx + 1
@@ -2478,7 +2490,7 @@ else
     bt_period := time >= i_is_start and time <= i_is_end ? 1 : (time >= i_oos_start and time <= i_oos_end ? 2 : (time > i_oos_end ? 3 : 0))
 float bt_dyn_margin = entry_margin
 int bt_cooldown = math.max(1, int(bpy / 12))
-f_rolling_update(stats_obj, current_fv, current_close, current_low, exit_prem, max_hold, max_open, int current_period) =>
+f_rolling_update(ModelStats stats_obj, current_fv, current_close, current_low, exit_prem, max_hold, max_open, int current_period) =>
     int open_trades = array.size(stats_obj.entry_prices)
     bool target_hit = not na(current_fv) and current_fv > 0 and current_close >= current_fv * (1.0 + exit_prem)
     float div_y = nz(div_yield, 0.0)
