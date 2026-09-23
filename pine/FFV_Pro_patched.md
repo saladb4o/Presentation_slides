@@ -434,8 +434,7 @@ i_useMean = input.bool(true, 'Use Mean Instead of Median', group = group_calc)
 i_ratioCap = input.float(200.0, 'Maximum Ratio Cap', minval = 50, group = group_calc)
 i_useBeneishCheck = input.bool(true, '🕵️ Apply Beneish M-Score (Fraud Check)', group = group_calc)
 i_use_rkv = input.bool(true, '💎 Apply Rhodes-Kropf (RKV) M/B Decomposition', group = group_calc, tooltip = 'Decomposes M/B into Mispricing and Growth Options. Drops value-trap quarters from the historical P/B average and flags current value traps.')
-i_sbc_proxy = input.bool(false, 'Subtract Non-cash items as SBC proxy', group = group_calc, tooltip = 'Pine has no stock-based-compensation field. NON_CASH_ITEMS also holds impairments, deferred tax, FX and fair-value moves, so subtracting it from FCF is a guess. Off by default.')
-i_flow_ttm = input.bool(true, 'Request flows as TTM', group = group_calc, tooltip = 'Income and cash-flow items are requested as TTM directly instead of summing four FQ values. If a financial ID errors on TTM for your market, switch this off.')
+i_flow_ttm = input.bool(true, 'Request flows as TTM', group = group_calc, tooltip = 'Income and cash-flow items are requested as TTM directly instead of summing four FQ values. Interest and R&D have no TTM field, so they are always summed from FQ.')
 group_iv = 'Intrinsic Value Models (Automated)'
 i_growth_src = input.string('Auto (Consensus EPS -> Sales CAGR)', 'Forward growth source', options = ['Auto (Consensus EPS -> Sales CAGR)', 'Manual'], group = group_iv, tooltip = 'Auto: FY consensus EPS growth (EARNINGS_ESTIMATE, has history and passes the report-lag gate), else 3y sales CAGR, else the manual value.\n\nAnalyst PRICE targets are never used here: they exist only for today, so they would leak into the backtest and make the street comparison circular.')
 i_analyst_growth = input.float(10.0, 'Manual forward growth %', group = group_iv, tooltip = 'Used when the source is Manual, or as the last fallback in Auto.') / 100
@@ -445,7 +444,7 @@ i_conf_gap = input.float(15.0, 'Agreement band: ours vs street PV (%)', minval =
 i_iv_projection_period = input.int(10, 'RIM Projection Period (Years)', group = group_iv, minval = 5, maxval = 20)
 i_cagr_years = input.int(3, 'CAGR Lookback Years', group = group_iv, minval = 1, maxval = 10)
 i_dcf_stage1_yrs = input.int(10, 'DCF: High-Growth Years (Stage 1)', group = group_iv, minval = 1, maxval = 15, tooltip = 'Used by every DCF-type model: main DCF, rNPV, AFFO DCF, Unbundled ServeCo and ECF.')
-i_strict_cap = input.bool(false, 'Strict capital structure', group = group_iv, tooltip = "ON: add minority interest to enterprise value, use common equity (ex-MI) as book value, and use income attributable to common (net of preferred dividends) as the earnings numerator.\n\nThis shifts P/B, EV/EBITDA, Acquirer's Multiple and every earnings multiple.")
+i_strict_cap = input.bool(true, 'Strict capital structure', group = group_iv, tooltip = "ON: add minority interest to enterprise value, use common equity (ex-MI) as book value, and use income attributable to common (net of preferred dividends) as the earnings numerator.\n\nThis shifts P/B, EV/EBITDA, Acquirer's Multiple and every earnings multiple.")
 group_display = 'Display Options'
 i_detail = input.string('None', 'Table detail (below the summary)', options = ['None', 'Models', 'Street', 'Health', 'Everything'], group = group_display, tooltip = 'The summary card is always shown. Pick one section to add below it.\n\nModels: every relative and intrinsic model.\nStreet: analyst targets, implied growth and P/E, ratings, confidence parts.\nHealth: every diagnostic and quality filter.\n\nEverything can run off a short chart.')
 i_tablePos = input.string('top_right', 'Table Position', options = ['top_right', 'middle_right', 'bottom_right'], group = group_display)
@@ -524,6 +523,9 @@ f_cagr_gen(float now_v, float old_v, float yrs) =>
 // 0 = heuristic guess (NOT valuation-grade).
 f_latch(float mem_in, float val, int tier) =>
     tier >= 2 and not na(val) ? val : mem_in
+// Tier of a value before carry-forward: 3 if requested, 2 if an identity filled it.
+f_tier(float raw, float v) =>
+    not na(raw) ? 3 : not na(v) ? 2 : 0
 // ---------------------------------------------------------------------
 // 3.1 MACRO TICKER ROUTING
 // ---------------------------------------------------------------------
@@ -606,16 +608,18 @@ float ebit_fq = f_fin('EBIT', flow_per) // 3
 float pretax_fq = f_fin('PRETAX_INCOME', flow_per) // 4
 float inc_tax_fq = f_fin('INCOME_TAX', flow_per) // 5
 float eps_fq = f_fin('EARNINGS_PER_SHARE_DILUTED', flow_per) // 6
-float interest_fq = f_fin('INTEREST_EXPENSE_ON_DEBT', flow_per) // 7
-float rnd_fq = f_fin('RESEARCH_AND_DEV', flow_per) // 8
+// Interest, R&D and preferred dividends have no TTM field: always FQ + vault.
+float interest_fq = f_fin('INTEREST_EXPENSE_ON_DEBT', 'FQ') // 7
+float rnd_fq = f_fin('RESEARCH_AND_DEV', 'FQ') // 8
 float pref_div_fq = f_fin('PREFERRED_DIVIDENDS', 'FQ') // 9
-float div_ps_fq = f_fin('DPS_COMMON_STOCK_PRIM_ISSUE', 'FQ') // 10
+float div_ps_fq = f_fin('DPS_COMMON_STOCK_PRIM_ISSUE', flow_per) // 10
 float minority_fq = f_fin('MINORITY_INTEREST', 'FQ') // 11
 // --- CASH FLOW (4) ---
 float ocf_fq = f_fin('CASH_F_OPERATING_ACTIVITIES', flow_per) // 12
-float capex_fq = f_fin('CAPITAL_EXPENDITURES', flow_per) // 13
-float da_fq = f_fin('CASH_FLOW_DEPRECATION_N_AMORTIZATION', flow_per) // 14
-float noncash_fq = f_fin('NON_CASH_ITEMS', flow_per) // 15 (optional SBC proxy)
+// Capex and cash-flow D&A have no TTM field: capex = FCF - OCF, D&A from the income statement.
+float fcf_fq = f_fin('FREE_CASH_FLOW', flow_per) // 13
+float da_fq = f_fin('DEP_AMORT_EXP_INCOME_S', flow_per) // 14
+float ni_fq = f_fin('NET_INCOME', flow_per) // 15 (attributable to the parent)
 // --- BALANCE SHEET (15) ---
 float shares_dil_fq = f_fin('DILUTED_SHARES_OUTSTANDING', 'FQ') // 16
 float shares_basic_fq = f_fin('TOTAL_SHARES_OUTSTANDING', 'FQ') // 17
@@ -630,8 +634,8 @@ float receiv_fq = f_fin('ACCOUNTS_RECEIVABLES_NET', 'FQ') // 25
 float retained_fq = f_fin('RETAINED_EARNINGS', 'FQ') // 26
 float ppe_gross_fq = f_fin('PPE_TOTAL_GROSS', 'FQ') // 27
 float accum_dep_fq = f_fin('ACCUM_DEPREC_TOTAL', 'FQ') // 28
-float goodwill_fq = f_fin('GOODWILL', 'FQ') // 29
-float intangibles_fq = f_fin('INTANGIBLES_NET', 'FQ') // 30
+float noncurr_assets_fq = f_fin('TOTAL_NON_CURRENT_ASSETS', 'FQ') // 29
+float intangibles_fq = f_fin('INTANGIBLES_NET', 'FQ') // 30 (includes goodwill)
 // --- FORWARD-LOOKING (1) ---
 // [FIX EST] Fiscal-year consensus, not a sum of four quarterly estimates.
 float eps_est_fq = f_fin('EARNINGS_ESTIMATE', 'FY') // 31
@@ -678,14 +682,15 @@ float ebit_ttm = f_flow(ebit_fq, is_new_quarter)
 float pretax_income_ttm = f_flow(pretax_fq, is_new_quarter)
 float income_tax_ttm = f_flow(inc_tax_fq, is_new_quarter)
 float eps_ttm = f_flow(eps_fq, is_new_quarter)
-float interest_expense_ttm = f_flow(interest_fq, is_new_quarter)
-float rnd_ttm = f_flow(rnd_fq, is_new_quarter)
+float interest_expense_ttm = f_ttm_vault(interest_fq, is_new_quarter)
+float rnd_ttm = f_ttm_vault(rnd_fq, is_new_quarter)
 float pref_div_ttm = f_ttm_vault(pref_div_fq, is_new_quarter)
-float div_per_share_ttm = f_ttm_vault(div_ps_fq, is_new_quarter)
+float div_per_share_ttm = f_flow(div_ps_fq, is_new_quarter)
 float ocf_ttm = f_flow(ocf_fq, is_new_quarter)
-float capex_ttm = f_flow(capex_fq, is_new_quarter)
+float fcf_rep_ttm = f_flow(fcf_fq, is_new_quarter)
+float capex_ttm = not na(fcf_rep_ttm) and not na(ocf_ttm) ? fcf_rep_ttm - ocf_ttm : na
 float depr_amort_ttm_raw = f_flow(da_fq, is_new_quarter)
-float noncash_ttm = f_flow(noncash_fq, is_new_quarter)
+float ni_rep_ttm = f_flow(ni_fq, is_new_quarter)
 float eps_est_ttm = f_locf(eps_est_fq)
 // =====================================================================
 // 3.6 DERIVATION BLOCK — THE RETIRED REQUESTS, REBUILT
@@ -693,8 +698,11 @@ float eps_est_ttm = f_locf(eps_est_fq)
 // (a) GROSS PROFIT = Revenue - COGS
 float gp_ttm = not na(total_revenue_ttm) and not na(cogs_ttm) ? total_revenue_ttm - cogs_ttm : na
 // (b) SHARES then NET INCOME
-float shares_out_latest = not na(shares_dil_fq) and shares_dil_fq > 0 ? shares_dil_fq : shares_basic_fq
-float net_income_ttm = not na(pretax_income_ttm) and not na(income_tax_ttm) ? pretax_income_ttm - income_tax_ttm : na
+// Larger of period-end and weighted diluted count: the weighted average lags new issues.
+float shares_out_latest = math.max(nz(shares_dil_fq), nz(shares_basic_fq))
+shares_out_latest := shares_out_latest > 0 ? shares_out_latest : na
+// Reported NI (after minority interest) first; pretax - tax includes the minority share.
+float net_income_ttm = not na(ni_rep_ttm) ? ni_rep_ttm : not na(pretax_income_ttm) and not na(income_tax_ttm) ? pretax_income_ttm - income_tax_ttm : na
 if na(net_income_ttm) and not na(eps_ttm) and not na(shares_out_latest)
     net_income_ttm := eps_ttm * shares_out_latest
 // (c) TOTAL EQUITY = Assets - Liabilities [exact identity]
@@ -704,14 +712,10 @@ float ebitda_ttm = not na(ebit_ttm) and not na(depr_amort_ttm_raw) ? ebit_ttm + 
 // (e) DIVIDEND YIELD = DPS_ttm / price
 float div_yield = close > 0 and not na(div_per_share_ttm) ? div_per_share_ttm / close : na
 div_yield := f_locf(div_yield)
-// (f) [FIX SBC] Optional SBC proxy from non-cash items, clamped to 15% of revenue
-float sbc_ttm = i_sbc_proxy ? math.max(nz(noncash_ttm, 0), 0) : 0.0
-sbc_ttm := math.min(sbc_ttm, math.max(nz(total_revenue_ttm, 0) * 0.15, 0))
 // --- COMPATIBILITY ALIASES ---
 float total_debt_latest = total_debt_fq
 float cash_latest = cash_fq
 float accounts_receivable_fq = receiv_fq
-float goodwill_latest = goodwill_fq
 float intangibles_latest = intangibles_fq
 float cpi_series = cpi_raw
 float eps_fy_curr = eps_ttm
@@ -769,12 +773,7 @@ if na(calc_shares) or calc_shares <= 0
         if s2 > 0
             calc_shares := s2
             t_shares := 2
-// Witness 3: basic share count
-if na(calc_shares) or calc_shares <= 0
-    if not na(shares_basic_fq) and shares_basic_fq > 0
-        calc_shares := shares_basic_fq
-        t_shares := 3
-// Witness 4: memory
+// Witness 3: memory
 if na(calc_shares) or calc_shares <= 0
     calc_shares := mem_shares
     t_shares := not na(calc_shares) ? 1 : 0
@@ -795,33 +794,31 @@ float calc_ppe_net = not na(calc_ppe_gross) and not na(_accum_dep) ? math.max(ca
 float calc_rec = f_locf(accounts_receivable_fq)
 float calc_curr_assets = curr_assets_fq
 float calc_total_liab = total_liab_fq
-// Triangle 1: Assets, Debt, Equity
-if na(calc_equity) and not na(calc_assets) and not na(calc_total_liab)
-    calc_equity := calc_assets - calc_total_liab
-else if na(calc_equity) and not na(calc_assets) and not na(calc_debt)
-    calc_equity := calc_assets - calc_debt
-if na(calc_assets) and not na(calc_equity) and not na(calc_debt)
-    calc_assets := calc_equity + calc_debt
-if na(calc_debt) and not na(calc_assets) and not na(calc_equity)
-    calc_debt := calc_assets - calc_equity
-// Triangle 1.5: Total Liabilities Reverse Engineering
+// Triangle 1: Assets = Liabilities + Equity (debt is only part of liabilities, so it has no identity)
+if na(calc_assets) and not na(calc_equity) and not na(calc_total_liab)
+    calc_assets := calc_equity + calc_total_liab
 if na(calc_total_liab) and not na(calc_assets) and not na(calc_equity)
     calc_total_liab := calc_assets - calc_equity
-// Triangle 1.6: Current Assets = Total Assets - (PPE + Goodwill + Intangibles)
+// Triangle 1.6: Current Assets = Total Assets - Non-current Assets
 if na(calc_curr_assets) and not na(calc_assets)
-    float inferred_lt_assets = nz(calc_ppe_net, 0) + nz(goodwill_latest, 0) + nz(intangibles_latest, 0)
-    if inferred_lt_assets > 0 and inferred_lt_assets < calc_assets
-        calc_curr_assets := calc_assets - inferred_lt_assets
-// [AUDIT FIX A] TIER SNAPSHOT.
-t_assets := not na(calc_assets) ? 3 : 0
-t_equity := not na(calc_equity) ? 3 : 0
+    if not na(noncurr_assets_fq)
+        calc_curr_assets := calc_assets - noncurr_assets_fq
+    else
+        float inferred_lt_assets = nz(calc_ppe_net, 0) + nz(intangibles_latest, 0)
+        if inferred_lt_assets > 0 and inferred_lt_assets < calc_assets
+            calc_curr_assets := calc_assets - inferred_lt_assets
+// [AUDIT FIX A] TIER SNAPSHOT: 3 = requested, 2 = filled by an identity.
+t_assets := f_tier(total_assets_fq, calc_assets)
+t_equity := f_tier(total_equity_latest, calc_equity)
 // Extrapolation (0% Growth for Balance Sheet items)
-if na(calc_assets)
+if na(calc_assets) and not na(mem_assets)
     calc_assets := mem_assets
+    t_assets := 1
 if na(calc_debt)
     calc_debt := nz(mem_debt, 0)
-if na(calc_equity)
+if na(calc_equity) and not na(mem_equity)
     calc_equity := mem_equity
+    t_equity := 1
 if na(calc_cash)
     calc_cash := mem_cash
 if na(calc_ppe_gross)
@@ -889,12 +886,11 @@ if na(calc_ebit) and not na(calc_ni)
     calc_ebit := calc_ni + nz(calc_tax, 0) + nz(calc_interest, 0)
 if na(calc_ni) and not na(calc_ebit)
     calc_ni := calc_ebit - nz(calc_tax, 0) - nz(calc_interest, 0)
-// [AUDIT FIX B] TIER SNAPSHOT.
-t_rev := not na(calc_rev) ? 3 : 0
-t_ni := not na(calc_ni) ? 3 : 0
-t_eps := not na(calc_eps) ? 3 : 0
-t_ebit := not na(calc_ebit) ? 3 : 0
-t_ebitda := not na(calc_ebitda) ? 3 : 0
+// [AUDIT FIX B] TIER SNAPSHOT: 3 = requested, 2 = filled by an identity.
+t_rev := f_tier(total_revenue_ttm, calc_rev)
+t_ni := f_tier(net_income_ttm, calc_ni)
+t_eps := f_tier(eps_ttm, calc_eps)
+t_ebit := f_tier(ebit_ttm, calc_ebit)
 // [FIX 1.3] QUARTER-GATED EXTRAPOLATION (+1% per stale quarter, max 8).
 var int bars_since_real = 0
 int bars_per_qtr = math.max(1, int(bpy / 4))
@@ -917,9 +913,6 @@ if na(calc_eps) and not na(calc_shares)
 if na(calc_ebit)
     calc_ebit := mem_ebit * ext_growth
     t_ebit := 1
-if na(calc_ebitda)
-    calc_ebitda := mem_ebitda * ext_growth
-    t_ebitda := 1
 // Terminal Lifeline -- gated by the firebreak
 if not na(calc_shares) and has_any_real_fundamental
     if na(calc_rev)
@@ -938,24 +931,24 @@ if not na(calc_shares) and has_any_real_fundamental
 float calc_ocf = ocf_ttm
 float calc_capex = capex_ttm
 float calc_da = depr_amort_ttm_raw
-// Triangle 6: D&A Reverse Engineering
-if not na(calc_ebitda) and not na(calc_ebit)
-    calc_da := calc_ebitda - calc_ebit
-else if not na(calc_ocf) and not na(calc_ni)
-    calc_da := calc_ocf - calc_ni
+float ppe_net_1y = ta.valuewhen(is_new_quarter, calc_ppe_net, 4)
+// Triangle 6: D&A ~ OCF - NI, only when D&A itself is missing (includes working-capital swings)
+bool da_rough = false
+if na(calc_da) and not na(calc_ocf) and not na(calc_ni)
+    calc_da := math.max(calc_ocf - calc_ni, 0)
+    da_rough := true
 // Triangle 7: EBITDA from D&A
 if na(calc_ebitda) and not na(calc_ebit) and not na(calc_da)
     calc_ebitda := calc_ebit + calc_da
-// Triangle 8: OCF from D&A
+// Triangle 8: OCF ~ NI + D&A (ignores working capital)
 if na(calc_ocf) and not na(calc_ni) and not na(calc_da)
     calc_ocf := calc_ni + calc_da
-// Triangle 9: CapEx via Change in Net PPE
-if na(calc_capex) and not na(calc_ppe_net) and not na(mem_ppe_net) and not na(calc_da)
-    calc_capex := -math.abs((calc_ppe_net - mem_ppe_net) + calc_da)
-// [AUDIT FIX C] TIER SNAPSHOT.
-t_ocf := not na(calc_ocf) ? 3 : 0
-if not na(calc_ebitda) and t_ebitda < 2
-    t_ebitda := 3
+// Triangle 9: CapEx = one-year change in net PPE + D&A
+if na(calc_capex) and not na(calc_ppe_net) and not na(ppe_net_1y) and not na(calc_da)
+    calc_capex := -math.max(calc_ppe_net - ppe_net_1y + calc_da, 0)
+// [AUDIT FIX C] TIER SNAPSHOT: approximations are tier 1 and never latch.
+t_ocf := not na(ocf_ttm) ? 3 : not na(calc_ocf) ? 1 : 0
+t_ebitda := not na(ebitda_ttm) ? 3 : not na(calc_ebitda) ? math.min(t_ebit, da_rough ? 1 : 2) : 0
 // Extrapolation
 if na(calc_da)
     calc_da := mem_da
@@ -977,6 +970,17 @@ if not na(calc_shares) and has_any_real_fundamental
         calc_ocf := nz(calc_ni) + nz(calc_da)
     if na(calc_capex)
         calc_capex := -nz(calc_da)
+// [FIX STALE] No new report for 2+ quarters: data counts as carried (tier 1); 4+ quarters: a guess (tier 0).
+int stale_cap = qtrs_stale > 4 ? 0 : qtrs_stale > 2 ? 1 : 3
+t_shares := math.min(t_shares, stale_cap)
+t_rev := math.min(t_rev, stale_cap)
+t_ni := math.min(t_ni, stale_cap)
+t_eps := math.min(t_eps, stale_cap)
+t_ebit := math.min(t_ebit, stale_cap)
+t_ebitda := math.min(t_ebitda, stale_cap)
+t_ocf := math.min(t_ocf, stale_cap)
+t_assets := math.min(t_assets, stale_cap)
+t_equity := math.min(t_equity, stale_cap)
 // --- 6. OVERRIDE ORIGINAL VARIABLES FOR DOWNSTREAM ---
 shares_out_latest := calc_shares
 total_revenue_ttm := calc_rev
@@ -996,7 +1000,7 @@ cash_latest := calc_cash
 total_assets_fq := calc_assets
 ppe_gross_fq := calc_ppe_gross
 float ppe_net_fq = calc_ppe_net
-float true_fcf = calc_ocf - math.abs(calc_capex) - nz(sbc_ttm, 0)
+float true_fcf = calc_ocf - math.abs(calc_capex)
 float fcf_ttm = calc_ocf - math.abs(calc_capex)
 float safe_affo = calc_ocf - math.abs(calc_capex)
 float net_debt_robust = calc_debt - nz(calc_cash, 0)
@@ -1221,7 +1225,7 @@ affo_ttm = safe_affo
 affo_ps_ttm = shares_out_latest > 0 ? affo_ttm / shares_out_latest : na
 book_value = i_strict_cap ? (nz(total_equity_latest) - nz(minority_fq, 0)) : total_equity_latest
 bvps_ttm = shares_out_latest > 0 ? book_value / shares_out_latest : na
-tangible_book_value = book_value - nz(goodwill_latest) - nz(intangibles_latest)
+tangible_book_value = book_value - nz(intangibles_latest)
 tbvps_ttm = shares_out_latest > 0 ? tangible_book_value / shares_out_latest : na
 market_cap_latest = close * shares_out_latest
 ev_latest = market_cap_latest + nz(net_debt_robust) + (i_strict_cap ? nz(minority_fq, 0) : 0.0)
