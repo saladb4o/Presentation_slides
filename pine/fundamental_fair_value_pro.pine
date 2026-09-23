@@ -2357,21 +2357,19 @@ f_tbl_b(int r0) =>
         row_idx += 1
         color vcol_s = st_verdict == 'High conviction' or str.startswith(st_verdict, 'Agree') ? color_under : st_verdict == 'Real disagreement' or st_verdict == 'Low information' ? color_over : color.new(color.orange, 40)
         string v_tt = 'Gap ours vs street PV: ' + (na(st_gap) ? 'N/A' : (st_gap > 0 ? '+' : '') + str.tostring(st_gap * 100, '#') + '%') + ' (agree band +/-' + str.tostring(i_conf_gap * 100, '#') + '%).' + (na(rc_score) ? '' : '\nRating score: ' + str.tostring(rc_score, '#.0') + ' (1 strong buy - 5 strong sell), ' + str.tostring(rc_tot, '#') + ' ratings.')
-        f_cell(T, 0, row_idx, 'Score', color_text, color_bg, i_textSize)
-        f_cell(T, 1, row_idx, f_ctxt(our_conf), color.white, f_ccol(our_conf), i_textSize)
-        f_cell(T, 2, row_idx, f_ctxt(st_conf), color.white, f_ccol(st_conf), i_textSize)
-        table.cell(T, 3, row_idx, st_verdict, text_color = color.white, bgcolor = vcol_s, text_size = i_textSize, tooltip = v_tt)
-        row_idx += 1
         array<string> cl = array.from('Agreement', 'Depth', 'Reliability / Freshness', 'Quality / Conviction')
         array<float> co = array.from(oc_agree, oc_depth, oc_rel, oc_qual)
         array<float> cs = array.from(sc_agree, sc_depth, sc_fresh, sc_conv)
         array<string> ctt = array.from('Ours: model dispersion (stdev / FV). Street: (high - low) / median.', 'Ours: ' + str.tostring(our_n_models) + ' models' + (our_track ? '' : ', no track record (x0.5)') + '. Street: sqrt(analysts) / sqrt(10).', 'Ours: exp(-log error / 0.3). Street: target age ' + (na(st_age_d) ? 'unknown' : str.tostring(st_age_d, '#') + ' days') + '.', 'Ours: data-quality tier less 0.2 per red flag (value trap, M-score, distress). Street: share of ratings in the largest bucket.')
+        string c_tt = 'Component    Ours / Street'
         for j = 0 to 3
-            table.cell(T, 0, row_idx, '  ' + array.get(cl, j), text_color = color_text, bgcolor = color_bg, text_size = i_textSize, tooltip = array.get(ctt, j))
-            f_cell(T, 1, row_idx, f_stxt(array.get(co, j)), color_text, color_bg, i_textSize)
-            f_cell(T, 2, row_idx, f_stxt(array.get(cs, j)), color_text, color_bg, i_textSize)
-            f_cell(T, 3, row_idx, '', color_text, color_bg, i_textSize)
-            row_idx += 1
+            c_tt += '\n' + array.get(cl, j) + ':  ' + f_stxt(array.get(co, j)) + ' / ' + f_stxt(array.get(cs, j))
+        c_tt += '\n\n' + array.join(ctt, '\n')
+        table.cell(T, 0, row_idx, 'Score', text_color = color_text, bgcolor = color_bg, text_size = i_textSize, tooltip = c_tt)
+        table.cell(T, 1, row_idx, f_ctxt(our_conf), text_color = color.white, bgcolor = f_ccol(our_conf), text_size = i_textSize, tooltip = c_tt)
+        table.cell(T, 2, row_idx, f_ctxt(st_conf), text_color = color.white, bgcolor = f_ccol(st_conf), text_size = i_textSize, tooltip = c_tt)
+        table.cell(T, 3, row_idx, st_verdict, text_color = color.white, bgcolor = vcol_s, text_size = i_textSize, tooltip = v_tt)
+        row_idx += 1
         if not na(cw_fv)
             table.cell(T, 0, row_idx, 'Confidence-weighted FV', text_color = color_text, bgcolor = color_bg, text_size = i_textSize, tooltip = '(Ours x our score + Street PV x street score) / sum of scores. Display only.')
             f_cell(T, 1, row_idx, '', color_text, color_bg, i_textSize)
