@@ -347,7 +347,7 @@ f_model_weight(array<float> hist_fv, array<float> hist_px, string selected_algo,
 // [FIX TIERS] Down-weight models built on carried or guessed inputs, using
 // the provenance tiers (3 reported, 2 exact identity, 1 carried, 0 guess).
 f_tier_q(int t) =>
-    t >= 3 ? 1.0 : t == 2 ? 0.85 : t == 1 ? 0.6 : 0.3
+    t >= 3 ? 1.0 : t == 2 ? 0.85 : t == 1 ? 0.6 : 0.0 // tier 0 (pure guess) leaves the blend
 f_wt_lbl(float w) =>
     w > 0 ? '  [' + str.tostring(w * 100, '#') + '%]' : ''
 // ==========================================
@@ -502,6 +502,13 @@ f_fresh(float v) =>
 // publication bar (1 slot). The fixed lag stays as the fallback cap.
 float earn_raw = request.earnings(syminfo.tickerid, earnings.actual, ignore_invalid_symbol = true)
 bool report_bar = f_fresh(earn_raw)
+// [FIX UNIT] Chart quoted in thousands (24.50 for 24,500 VND)? Quarterly P/E under 0.5
+// is impossible, so price / reported EPS decides once. Before the first EPS: VND + tick < 1.
+var float px_unit = syminfo.currency == 'VND' and syminfo.mintick < 1 ? 1000.0 : 1.0
+var bool px_unit_set = false
+if not px_unit_set and not na(earn_raw) and earn_raw != 0 and close > 0
+    px_unit := close / math.abs(earn_raw) < 0.5 ? 1000.0 : 1.0
+    px_unit_set := true
 f_fin(simple string id, simple string per) =>
     float raw = request.financial(syminfo.tickerid, id, per, ignore_invalid_symbol = true, currency = syminfo.currency)
     var float pending = na
@@ -512,7 +519,8 @@ f_fin(simple string id, simple string per) =>
         seen_t := time
     if not na(pending) and (time - seen_t >= i_report_lag * 86400000 or barstate.islast or (report_bar and time > seen_t))
         known := pending
-    known
+    // Money in chart price units; share counts untouched.
+    str.contains(id, 'SHARES_OUTSTANDING') ? known : known / px_unit
 f_cagr_gen(float now_v, float old_v, float yrs) =>
     float r = na
     if not na(now_v) and not na(old_v) and old_v > 0 and now_v > 0
@@ -806,6 +814,18 @@ for i = 0 to 20
         array.set(last_raw, i, x)
     if array.get(same_n, i) < 2
         f_put(i, x, i == iNI ? ni_src_t : 3)
+// [SANITY] A 10x quarter-on-quarter jump in revenue or assets is held at tier 1 for that
+// quarter (no latch); NI far from EPS x shares flags a unit or share-count problem.
+float rv_prev = ta.valuewhen(is_new_quarter, total_revenue_ttm, 1)
+float as_prev = ta.valuewhen(is_new_quarter, total_assets_fq, 1)
+bool jump_rv = rv_prev > 0 and total_revenue_ttm > 0 and math.abs(math.log(total_revenue_ttm / rv_prev)) > math.log(10)
+bool jump_as = as_prev > 0 and total_assets_fq > 0 and math.abs(math.log(total_assets_fq / as_prev)) > math.log(10)
+if jump_rv
+    array.set(eng_t, iRV, math.min(f_tg(iRV), 1))
+if jump_as
+    array.set(eng_t, iAS, math.min(f_tg(iAS), 1))
+bool ni_eps_gap = not na(ni_rep_ttm) and not na(eps_ttm) and not na(calc_shares) and ni_rep_ttm != 0 and math.abs(eps_ttm * calc_shares / ni_rep_ttm - 1) > 0.5
+bool data_suspect = jump_rv or jump_as or ni_eps_gap
 if na(f_g(iNI)) and not na(eps_ttm) and not na(calc_shares)
     f_put(iNI, eps_ttm * calc_shares, math.min(t_shares, 2))
 f_solve()
@@ -958,17 +978,16 @@ float _gm_prev = ta.valuewhen(is_new_quarter, _gm, 4)
 float _at = not na(_ta) and _ta > 0 ? nz(calc_rev) / _ta : na
 float _at_prev = ta.valuewhen(is_new_quarter, _at, 4)
 float _sh_prev = ta.valuewhen(is_new_quarter, calc_shares, 4)
-int _f = 0
-_f += (not na(_roa) and _roa > 0) ? 1 : 0
-_f += (not na(calc_ocf) and calc_ocf > 0) ? 1 : 0
-_f += (not na(_roa) and not na(_roa_prev) and _roa > _roa_prev) ? 1 : 0
-_f += (not na(calc_ocf) and not na(calc_ni) and calc_ocf > calc_ni) ? 1 : 0
-_f += (not na(_lev) and not na(_lev_prev) and _lev < _lev_prev) ? 1 : 0
-_f += (not na(_cr) and not na(_cr_prev) and _cr > _cr_prev) ? 1 : 0
-_f += (not na(calc_shares) and not na(_sh_prev) and calc_shares <= _sh_prev * 1.001) ? 1 : 0
-_f += (not na(_gm) and not na(_gm_prev) and _gm > _gm_prev) ? 1 : 0
-_f += (not na(_at) and not na(_at_prev) and _at > _at_prev) ? 1 : 0
-float piotroski_f_score = has_any_real_fundamental ? _f * 1.0 : na
+// [NEUTRAL] An untestable signal no longer counts as a fail: score = passes x 9 / tested
+// (needs 5+ testable signals).
+array<float> _pio = array.from(_roa > 0 ? 1.0 : 0.0, calc_ocf > 0 ? 1.0 : 0.0, _roa > _roa_prev ? 1.0 : 0.0, calc_ocf > calc_ni ? 1.0 : 0.0, _lev < _lev_prev ? 1.0 : 0.0, _cr > _cr_prev ? 1.0 : 0.0, calc_shares <= _sh_prev * 1.001 ? 1.0 : 0.0, _gm > _gm_prev ? 1.0 : 0.0, _at > _at_prev ? 1.0 : 0.0)
+array<float> _pio_in = array.from(_roa, calc_ocf, _roa + _roa_prev, calc_ocf + calc_ni, _lev + _lev_prev, _cr + _cr_prev, calc_shares + _sh_prev, _gm + _gm_prev, _at + _at_prev)
+int _f = 0, int _n = 0
+for k = 0 to 8
+    if not na(array.get(_pio_in, k))
+        _n += 1
+        _f += int(array.get(_pio, k))
+float piotroski_f_score = has_any_real_fundamental and _n >= 5 ? math.round(_f * 9.0 / _n) : na
 // --- Forward growth anchor from the FY consensus estimate ---
 float fwd_eps_growth = not na(eps_est_ttm) and not na(eps_ttm) and eps_ttm > 0 ? eps_est_ttm / eps_ttm - 1 : na
 fwd_eps_growth := na(fwd_eps_growth) ? na : math.max(math.min(fwd_eps_growth, 0.60), -0.50)
@@ -1107,6 +1126,11 @@ ocf_ps_ttm = shares_out_latest > 0 ? ocf_ttm / shares_out_latest : na
 affo_ttm = safe_affo
 affo_ps_ttm = shares_out_latest > 0 ? affo_ttm / shares_out_latest : na
 book_value = i_strict_cap ? (nz(total_equity_latest) - nz(minority_fq, 0)) : total_equity_latest
+// [CLEAN SURPLUS] Roll book value forward between reports: + earnings - dividends
+// accrued since the last report (Ohlson 1995), capped at half a year.
+float cs_years = math.min(bars_since_real / float(bpy), 0.5)
+if book_value > 0 and not na(net_income_ttm) and not na(shares_out_latest)
+    book_value += (net_income_ttm - nz(div_per_share_ttm) * shares_out_latest) * cs_years
 bvps_ttm = shares_out_latest > 0 ? book_value / shares_out_latest : na
 tangible_book_value = book_value - nz(intangibles_latest)
 tbvps_ttm = shares_out_latest > 0 ? tangible_book_value / shares_out_latest : na
@@ -1347,7 +1371,7 @@ float standard_capm_coe = base_rf_for_calc + (beta_mkt * calc_erp) + calc_crp
 // fx_rate = local currency units per 1 USD.
 float fx_to_usd = request.currency_rate(curr, 'USD', ignore_invalid_currency = true)
 float fx_rate = not na(fx_to_usd) and fx_to_usd > 0 ? 1.0 / fx_to_usd : ((curr == 'VND') ? 25000.0 : (curr == 'EUR' ? 0.93 : (curr == 'GBP' ? 0.79 : 1.0)))
-float mc_usd_billions = not na(market_cap_latest) ? (market_cap_latest / fx_rate) / 1e9 : 100.0
+float mc_usd_billions = not na(market_cap_latest) ? (market_cap_latest * px_unit / fx_rate) / 1e9 : 100.0
 float size_premium = 0.0
 if i_use_factors
     if mc_usd_billions < 1.0
@@ -1371,7 +1395,7 @@ if i_use_factors and not na(px_1m_ago) and not na(px_12m_ago) and px_12m_ago > 0
 float microstructure_premium = 0.0
 if i_use_factors
     float safe_vol = nz(volume, 1.0)
-    float dollar_vol_usd = (close * safe_vol) / fx_rate
+    float dollar_vol_usd = (close * px_unit * safe_vol) / fx_rate
     float daily_ret_abs = math.abs(ta.change(close) / nz(close[1], close))
     float amihud_raw = dollar_vol_usd > 0 ? (daily_ret_abs / dollar_vol_usd) * 1e6 : 0.0
     float amihud_90d = ta.sma(amihud_raw, 90)
@@ -1730,10 +1754,12 @@ if i_useBeneishCheck
     float sgi = rev_t / rev_prev
     float lvgi = (debt_t / assets_t) / math.max((debt_prev / assets_prev), 0.001)
     float tata = (net_income_ttm - ocf_ttm) / assets_t
-    dsri := math.min(math.max(dsri, 0.5), 3.0)
-    gmi := math.min(math.max(gmi, 0.5), 3.0)
+    // [NEUTRAL] A missing index = 1.0 (no change), missing accruals = 0; needs sales growth.
+    dsri := math.min(math.max(nz(dsri, 1.0), 0.5), 3.0)
+    gmi := math.min(math.max(nz(gmi, 1.0), 0.5), 3.0)
     sgi := math.min(math.max(sgi, 0.5), 3.0)
-    lvgi := math.min(math.max(lvgi, 0.5), 3.0)
+    lvgi := math.min(math.max(nz(lvgi, 1.0), 0.5), 3.0)
+    tata := nz(tata)
     m_score := -4.49 + (0.920 * dsri) + (0.528 * gmi) + (0.892 * sgi) + (4.679 * tata) - (0.327 * lvgi)
     is_manipulator := m_score > -1.78
 // Provisional only; bands and verdict are resolved after the Omnibus.
@@ -2152,7 +2178,7 @@ f_street_calc() =>
     float our_err = f_log_rmse(hist_iv_comp, hist_px_tracker, i_w_horizon)
     float oc_rel = na(our_err) ? 0.3 : math.exp(-our_err / 0.3)
     float oc_tier = (f_tier_q(t_eps) + f_tier_q(t_rev) + f_tier_q(t_ocf) + f_tier_q(t_equity) + f_tier_q(t_ebit)) / 5.0
-    float oc_flags = (is_rkv_value_trap ? 0.2 : 0.0) + (i_useBeneishCheck and is_manipulator ? 0.2 : 0.0) + (not na(altman_z) and altman_z < z_safe_cut ? 0.2 : 0.0)
+    float oc_flags = (is_rkv_value_trap ? 0.2 : 0.0) + (i_useBeneishCheck and is_manipulator ? 0.2 : 0.0) + (not na(altman_z) and altman_z < z_safe_cut ? 0.2 : 0.0) + (data_suspect ? 0.2 : 0.0)
     float oc_qual = f_clamp01(oc_tier - oc_flags)
     float our_conf = na(oc_agree) ? na : 100 * (0.35 * oc_agree + 0.20 * oc_depth + 0.25 * oc_rel + 0.20 * oc_qual)
     // --- STREET confidence ---
