@@ -890,35 +890,30 @@ method claim(Claims c, Claim k, float v) =>
 // ==========================================
 string selected_industry = i_industry
 if i_industry == 'Auto-Detect'
-    string sec = syminfo.sector
-    if sec == 'Electronic Technology' or sec == 'Technology Services'
-        selected_industry := 'Technology'
-    else if sec == 'Health Technology' or sec == 'Health Services'
-        selected_industry := 'Healthcare (Pharma/Biotech)'
-    else if sec == 'Finance'
-        string fin_ind = syminfo.industry
-        if str.contains(fin_ind, 'Real Estate Investment Trust') or str.contains(syminfo.description, 'REIT')
-            selected_industry := 'REITs'
-        else if str.contains(fin_ind, 'Bank') or str.contains(fin_ind, 'Insurance') or str.contains(fin_ind, 'Brokers') or str.contains(fin_ind, 'Investment Managers') or str.contains(fin_ind, 'Finance/Rental') or str.contains(fin_ind, 'Financial Conglomerates')
-            selected_industry := 'Financials (Bank/Insurance)'
-        else
-            // [FIX FIN-ROUTE] Property developers and other Finance-sector
-            // operating companies: the bank model does not fit them.
-            selected_industry := 'General/Diversified'
-    else if sec == 'Energy Minerals' or sec == 'Non-Energy Minerals' or sec == 'Process Industries'
-        selected_industry := 'Energy/Materials'
-    else if sec == 'Producer Manufacturing' or sec == 'Transportation' or sec == 'Industrial Services' or sec == 'Distribution Services' or sec == 'Commercial Services'
-        selected_industry := 'Capital Goods/Industrials'
-    else if sec == 'Retail Trade' or sec == 'Consumer Services' or sec == 'Consumer Durables'
-        selected_industry := 'Consumer Discretionary'
-    else if sec == 'Consumer Non-Durables'
-        selected_industry := 'Consumer Staples'
-    else if sec == 'Communications'
-        selected_industry := 'Telecom'
-    else if sec == 'Utilities'
-        selected_industry := 'Utilities'
-    else
-        selected_industry := 'General/Diversified'
+    string fin_ind = syminfo.industry
+    selected_industry := switch syminfo.sector
+        'Electronic Technology' => 'Technology'
+        'Technology Services' => 'Technology'
+        'Health Technology' => 'Healthcare (Pharma/Biotech)'
+        'Health Services' => 'Healthcare (Pharma/Biotech)'
+        // [FIX FIN-ROUTE] Property developers and other Finance-sector operating companies:
+        // the bank model does not fit them.
+        'Finance' => str.contains(fin_ind, 'Real Estate Investment Trust') or str.contains(syminfo.description, 'REIT') ? 'REITs' : str.match(fin_ind, 'Bank|Insurance|Brokers|Investment Managers|Finance/Rental|Financial Conglomerates') != '' ? 'Financials (Bank/Insurance)' : 'General/Diversified'
+        'Energy Minerals' => 'Energy/Materials'
+        'Non-Energy Minerals' => 'Energy/Materials'
+        'Process Industries' => 'Energy/Materials'
+        'Producer Manufacturing' => 'Capital Goods/Industrials'
+        'Transportation' => 'Capital Goods/Industrials'
+        'Industrial Services' => 'Capital Goods/Industrials'
+        'Distribution Services' => 'Capital Goods/Industrials'
+        'Commercial Services' => 'Capital Goods/Industrials'
+        'Retail Trade' => 'Consumer Discretionary'
+        'Consumer Services' => 'Consumer Discretionary'
+        'Consumer Durables' => 'Consumer Discretionary'
+        'Consumer Non-Durables' => 'Consumer Staples'
+        'Communications' => 'Telecom'
+        'Utilities' => 'Utilities'
+        => 'General/Diversified'
 // THE ALLOCATION MATRIX: 'description|codes|named'. Codes are the model rows' codes (section
 // 2b) plus the quality filters (GPA gross profit / assets, ROIC
 // ROIC - WACC, SLN Sloan accruals, SHY shareholder yield) and CAPE (the P/E
@@ -966,32 +961,32 @@ else if selected_industry == 'Utilities' or selected_industry == 'REITs' or sele
 // model is comes from its row: level (rate and claims), engine, the streams it reads, the
 // inputs it needs positive, its tier source, add-on, private scenario lever, family and
 // Omnibus tick box. Adding a model: one row here and its tick input.
-var Model M_COMP = f_add(Model.new(code = 'COMP', name = 'Standard Composite', bt_name = 'Composite (Final Blend)', grp = Group.comp, eng = Eng.comp, fam = 0, tick = i_om_comp))
-var Model M_PE = f_add(Model.new(code = 'PE', name = 'Blended P/E', bt_name = 'Blended PE', grp = Group.rel, level = Level.equity, eng = Eng.mult, fam = 1, s_drv = Sx.eps_b, s_fwd = Sx.eps_f, need1 = Sx.eps_b, t1 = Sx.eps_b, lk = Lever.pctl, dflt = 15.0, tick = i_om_pe))
-var Model M_PS = f_add(Model.new(code = 'PS', name = 'P/S', bt_name = 'Price / Sales', grp = Group.rel, level = Level.equity, eng = Eng.mult, fam = 2, s_drv = Sx.sales_ps, t1 = Sx.sales_ps, lk = Lever.pctl, dflt = 2.0, tick = i_om_ps))
-var Model M_PFCF = f_add(Model.new(code = 'FCF', name = 'P/FCF', bt_name = 'Price / FCF', grp = Group.rel, level = Level.equity, eng = Eng.mult, fam = 3, s_drv = Sx.fcf_ps, need1 = Sx.fcf_ps, t1 = Sx.fcf_ps, lk = Lever.pctl, dflt = 15.0, tick = i_om_pfcf))
-var Model M_PB = f_add(Model.new(code = 'PB', name = 'P/B', bt_name = 'Price / Book', grp = Group.rel, level = Level.equity, eng = Eng.mult, fam = 4, s_drv = Sx.bvps, t1 = Sx.bvps, lk = Lever.pctl, dflt = 1.5, rkv = true, tick = i_om_pb))
-var Model M_TBV = f_add(Model.new(code = 'TBV', name = 'P/TBV', bt_name = 'Price / TBV', grp = Group.rel, level = Level.equity, eng = Eng.mult, fam = 4, s_drv = Sx.tbvps, t1 = Sx.tbvps, lk = Lever.pctl, dflt = 2.0, tick = i_om_ptbv))
-var Model M_EV = f_add(Model.new(code = 'EV', name = 'Blended EV/EBITDA', bt_name = 'EV / EBITDA', grp = Group.rel, level = Level.firm, eng = Eng.mult, fam = 5, s_drv = Sx.ebitda, s_fwd = Sx.ebitda_f, t1 = Sx.ebitda, lk = Lever.pctl, dflt = 10.0, tick = i_om_ev))
-var Model M_PCF = f_add(Model.new(code = 'CF', name = 'P/CF', bt_name = 'Price / OCF', grp = Group.rel, level = Level.equity, eng = Eng.mult, fam = 3, s_drv = Sx.ocf_ps, t1 = Sx.ocf_ps, lk = Lever.pctl, dflt = 10.0, tick = i_om_pcf))
-var Model M_PAFFO = f_add(Model.new(code = 'AFFO', name = 'P/AFFO', bt_name = 'Price / AFFO', grp = Group.rel, level = Level.equity, eng = Eng.mult, fam = 3, s_drv = Sx.fcf_ps, t1 = Sx.fcf_ps, lk = Lever.pctl, dflt = 12.0, tick = i_om_paffo))
-var Model M_RNPV = f_add(Model.new(code = 'RNPV', name = 'rNPV (Risk-Adjusted)', bt_name = 'Risk-Adj NPV', grp = Group.sect, level = Level.firm, eng = Eng.ref, fam = 3, src = 'DCF', addon = AddOn.pipeline, t1 = Sx.fcff, tick = i_om_rnpv))
+var Model M_COMP = f_add(Model.new(code = 'COMP', name = 'Standard Composite', bt_name = 'Composite (Final Blend)', grp = Group.comp, eng = Eng.comp, tick = i_om_comp))
+var Model M_PE = f_add(Model.new(code = 'PE', name = 'Blended P/E', bt_name = 'Blended PE', grp = Group.rel, level = Level.equity, fam = 1, s_drv = Sx.eps_b, s_fwd = Sx.eps_f, need1 = Sx.eps_b, lk = Lever.pctl, dflt = 15.0, tick = i_om_pe))
+var Model M_PS = f_add(Model.new(code = 'PS', name = 'P/S', bt_name = 'Price / Sales', grp = Group.rel, level = Level.equity, fam = 2, s_drv = Sx.sales_ps, lk = Lever.pctl, dflt = 2.0, tick = i_om_ps))
+var Model M_PFCF = f_add(Model.new(code = 'FCF', name = 'P/FCF', bt_name = 'Price / FCF', grp = Group.rel, level = Level.equity, fam = 3, s_drv = Sx.fcf_ps, need1 = Sx.fcf_ps, lk = Lever.pctl, dflt = 15.0, tick = i_om_pfcf))
+var Model M_PB = f_add(Model.new(code = 'PB', name = 'P/B', bt_name = 'Price / Book', grp = Group.rel, level = Level.equity, fam = 4, s_drv = Sx.bvps, lk = Lever.pctl, dflt = 1.5, rkv = true, tick = i_om_pb))
+var Model M_TBV = f_add(Model.new(code = 'TBV', name = 'P/TBV', bt_name = 'Price / TBV', grp = Group.rel, level = Level.equity, fam = 4, s_drv = Sx.tbvps, lk = Lever.pctl, dflt = 2.0, tick = i_om_ptbv))
+var Model M_EV = f_add(Model.new(code = 'EV', name = 'Blended EV/EBITDA', bt_name = 'EV / EBITDA', grp = Group.rel, fam = 5, s_drv = Sx.ebitda, s_fwd = Sx.ebitda_f, lk = Lever.pctl, dflt = 10.0, tick = i_om_ev))
+var Model M_PCF = f_add(Model.new(code = 'CF', name = 'P/CF', bt_name = 'Price / OCF', grp = Group.rel, level = Level.equity, fam = 3, s_drv = Sx.ocf_ps, lk = Lever.pctl, dflt = 10.0, tick = i_om_pcf))
+var Model M_PAFFO = f_add(Model.new(code = 'AFFO', name = 'P/AFFO', bt_name = 'Price / AFFO', grp = Group.rel, level = Level.equity, fam = 3, s_drv = Sx.fcf_ps, lk = Lever.pctl, dflt = 12.0, tick = i_om_paffo))
+var Model M_RNPV = f_add(Model.new(code = 'RNPV', name = 'rNPV (Risk-Adjusted)', bt_name = 'Risk-Adj NPV', grp = Group.sect, eng = Eng.ref, fam = 3, src = 'DCF', addon = AddOn.pipeline, t1 = Sx.fcff, tick = i_om_rnpv))
 var Model M_ECF = f_add(Model.new(code = 'ECF', name = 'Equity Cash Flow', bt_name = 'Equity Cash Flow', grp = Group.sect, level = Level.equity, eng = Eng.vdcf, fam = 1, s_cf = Sx.fcfe, s_earn = Sx.ni_ps, s_ret = Sx.roe_n, need1 = Sx.ni_ps, need2 = Sx.roe_n, t1 = Sx.ni_ps, t2 = Sx.roe_n, tick = i_om_ecf))
-var Model M_ADCF = f_add(Model.new(code = 'ADCF', name = 'AFFO DCF', bt_name = 'AFFO DCF', grp = Group.sect, level = Level.equity, eng = Eng.vdcf, fam = 3, s_cf = Sx.fcf_ps, s_earn = Sx.fcf_ps, t1 = Sx.fcf_ps, tick = i_om_affo))
-var Model M_UNB = f_add(Model.new(code = 'UNB', name = 'Unbundled (SOTP)', bt_name = 'Unbundled SOTP', grp = Group.sect, level = Level.firm, eng = Eng.vdcf, fam = 3, s_cf = Sx.fcff_s, s_earn = Sx.nopat_s, s_ret = Sx.roic, addon = AddOn.netco, t1 = Sx.fcff_s, tick = i_om_unb))
-var Model M_APV = f_add(Model.new(code = 'APV', name = 'Adjusted PV (APV)', bt_name = 'Adjusted PV', grp = Group.sect, level = Level.unlev, eng = Eng.vdcf, fam = 3, s_cf = Sx.fcff, s_earn = Sx.nopat, s_ret = Sx.roic, addon = AddOn.shield, t1 = Sx.fcff, tick = i_om_apv))
-var Model M_EVA = f_add(Model.new(code = 'EVA', name = 'Economic Value Added', bt_name = 'Econ Value Added', grp = Group.sect, level = Level.firm, eng = Eng.eva, fam = 1, s_earn = Sx.nopat, s_cap = Sx.ic, t1 = Sx.nopat, tick = i_om_eva))
-var Model M_DDM = f_add(Model.new(code = 'DDM', name = 'Dividend Discount (DDM)', bt_name = 'Dividend Discount', grp = Group.sect, level = Level.equity, eng = Eng.gperp, fam = 6, s_cf = Sx.dps, need1 = Sx.dps, t1 = Sx.dps, tick = i_om_ddm))
-var Model M_DCF = f_add(Model.new(code = 'DCF', name = 'DCF (McKinsey/ROIC)', bt_name = 'DCF (McKinsey)', grp = Group.abs, level = Level.firm, eng = Eng.vdcf, fam = 3, s_cf = Sx.fcff, s_earn = Sx.nopat, s_ret = Sx.roic, t1 = Sx.fcff, tick = i_om_dcf))
+var Model M_ADCF = f_add(Model.new(code = 'ADCF', name = 'AFFO DCF', bt_name = 'AFFO DCF', grp = Group.sect, level = Level.equity, eng = Eng.vdcf, fam = 3, s_cf = Sx.fcf_ps, s_earn = Sx.fcf_ps, tick = i_om_affo))
+var Model M_UNB = f_add(Model.new(code = 'UNB', name = 'Unbundled (SOTP)', bt_name = 'Unbundled SOTP', grp = Group.sect, eng = Eng.vdcf, fam = 3, s_cf = Sx.fcff_s, s_earn = Sx.nopat_s, s_ret = Sx.roic, addon = AddOn.netco, tick = i_om_unb))
+var Model M_APV = f_add(Model.new(code = 'APV', name = 'Adjusted PV (APV)', bt_name = 'Adjusted PV', grp = Group.sect, level = Level.unlev, eng = Eng.vdcf, fam = 3, s_cf = Sx.fcff, s_earn = Sx.nopat, s_ret = Sx.roic, addon = AddOn.shield, tick = i_om_apv))
+var Model M_EVA = f_add(Model.new(code = 'EVA', name = 'Economic Value Added', bt_name = 'Econ Value Added', grp = Group.sect, eng = Eng.eva, fam = 1, s_earn = Sx.nopat, s_cap = Sx.ic, tick = i_om_eva))
+var Model M_DDM = f_add(Model.new(code = 'DDM', name = 'Dividend Discount (DDM)', bt_name = 'Dividend Discount', grp = Group.sect, level = Level.equity, eng = Eng.gperp, fam = 6, s_cf = Sx.dps, need1 = Sx.dps, tick = i_om_ddm))
+var Model M_DCF = f_add(Model.new(code = 'DCF', name = 'DCF (McKinsey/ROIC)', bt_name = 'DCF (McKinsey)', eng = Eng.vdcf, fam = 3, s_cf = Sx.fcff, s_earn = Sx.nopat, s_ret = Sx.roic, tick = i_om_dcf))
 // Banks and insurers: the Equity variant (net income on book value at the bank rate, nothing
 // comes off). Everyone else: the Entity variant (NOPAT on invested capital at WACC, less the
 // claims). Decided once from the framework and the industry.
-var Model M_RIM = f_add(Model.new(code = 'RIM', name = 'Residual Income (RIM)', bt_name = 'Residual Income', grp = Group.abs, level = use_bank_model ? Level.bank : Level.firm, eng = Eng.rim, fam = 1, s_earn = use_bank_model ? Sx.ni : Sx.nopat, s_cap = use_bank_model ? Sx.book : Sx.ic, t1 = use_bank_model ? Sx.ni : Sx.nopat, t2 = use_bank_model ? Sx.book : Sx.none, tick = i_om_rim))
-var Model M_EPV = f_add(Model.new(code = 'EPV', name = 'EPV (Greenwald)', bt_name = 'EPV (Greenwald)', grp = Group.abs, level = Level.firm, eng = Eng.perp, fam = 1, s_cf = Sx.nopat_n, t1 = Sx.nopat_n, tick = i_om_epv))
-var Model M_GRA = f_add(Model.new(code = 'GRA', name = 'Graham', bt_name = 'Graham Number', grp = Group.abs, level = Level.equity, eng = Eng.graham, fam = 1, s_earn = Sx.eps_pos, s_gx = Sx.g_gra, s_adj = Sx.yadj, need1 = Sx.eps_pos, t1 = Sx.eps_pos, lk = Lever.scale, lv_bear = 0.5, lv_bull = 1.5, tick = i_om_graham))
-var Model M_R40 = f_add(Model.new(code = 'R40', name = 'Rule of 40', bt_name = 'Rule of 40', grp = Group.abs, level = Level.firm, eng = Eng.rulex, fam = 2, s_drv = Sx.rev, s_gx = Sx.rev_g, s_adj = Sx.fcf_margin, t1 = Sx.rev, t2 = Sx.fcf_margin, lk = Lever.step, lv_bear = -i_scen_r40_bps, lv_bull = i_scen_r40_bps, tick = i_om_r40))
-var Model M_ACQ = f_add(Model.new(code = 'ACQ', name = "Acquirer's Multiple", bt_name = "Acquirer's Mult", grp = Group.abs, level = Level.firm, eng = Eng.mult, fam = 5, s_drv = Sx.ebit, need1 = Sx.ebit, t1 = Sx.ebit, lk = Lever.step, lv_bear = -i_scen_acq_delta, lv_bull = i_scen_acq_delta, lv_floor = 1.0, m0 = i_acquirer_mult, tick = i_om_acq))
-var Model M_OE = f_add(Model.new(code = 'OE', name = "Owners' Earnings", bt_name = "Owners' Earnings", grp = Group.abs, level = Level.equity, eng = Eng.perp, fam = 3, s_cf = Sx.oe_ps, need1 = Sx.oe_ps, t1 = Sx.oe_ps, tick = i_om_oe))
+var Model M_RIM = f_add(Model.new(code = 'RIM', name = 'Residual Income (RIM)', bt_name = 'Residual Income', level = use_bank_model ? Level.bank : Level.firm, eng = Eng.rim, fam = 1, s_earn = use_bank_model ? Sx.ni : Sx.nopat, s_cap = use_bank_model ? Sx.book : Sx.ic, t2 = use_bank_model ? Sx.book : Sx.none, tick = i_om_rim))
+var Model M_EPV = f_add(Model.new(code = 'EPV', name = 'EPV (Greenwald)', bt_name = 'EPV (Greenwald)', eng = Eng.perp, fam = 1, s_cf = Sx.nopat_n, tick = i_om_epv))
+var Model M_GRA = f_add(Model.new(code = 'GRA', name = 'Graham', bt_name = 'Graham Number', level = Level.equity, eng = Eng.graham, fam = 1, s_earn = Sx.eps_pos, s_gx = Sx.g_gra, s_adj = Sx.yadj, need1 = Sx.eps_pos, lk = Lever.scale, lv_bear = 0.5, lv_bull = 1.5, tick = i_om_graham))
+var Model M_R40 = f_add(Model.new(code = 'R40', name = 'Rule of 40', bt_name = 'Rule of 40', eng = Eng.rulex, fam = 2, s_drv = Sx.rev, s_gx = Sx.rev_g, s_adj = Sx.fcf_margin, t2 = Sx.fcf_margin, lk = Lever.step, lv_bear = -i_scen_r40_bps, lv_bull = i_scen_r40_bps, tick = i_om_r40))
+var Model M_ACQ = f_add(Model.new(code = 'ACQ', name = "Acquirer's Multiple", bt_name = "Acquirer's Mult", fam = 5, s_drv = Sx.ebit, need1 = Sx.ebit, lk = Lever.step, lv_bear = -i_scen_acq_delta, lv_bull = i_scen_acq_delta, lv_floor = 1.0, m0 = i_acquirer_mult, tick = i_om_acq))
+var Model M_OE = f_add(Model.new(code = 'OE', name = "Owners' Earnings", bt_name = "Owners' Earnings", level = Level.equity, eng = Eng.perp, fam = 3, s_cf = Sx.oe_ps, need1 = Sx.oe_ps, tick = i_om_oe))
 // Bar 0: what the framework allocates, the Standard scope (every allocated multiple and
 // sector model, plus the absolute models the framework is named after), then the row checks.
 if barstate.isfirst
@@ -1003,6 +998,9 @@ if barstate.isfirst
         m.fw := m.grp == Group.comp or str.contains(fw_codes, ' ' + m.code + ' ')
         m.on := m.fw
         m.std := m.fw and m.grp != Group.comp and (m.grp != Group.abs or str.contains(fw_named, ' ' + m.code + ' '))
+        // Tier source left unset: the row's first stream (driver, else cash flow, else earnings).
+        if m.t1 == Sx.none
+            m.t1 := m.s_drv != Sx.none ? m.s_drv : m.s_cf != Sx.none ? m.s_cf : m.s_earn
     f_rows_check()
 // =====================================================================
 // THE RECORDS: two clocks, four records
@@ -1493,25 +1491,15 @@ if CK.dirty
     float interest_expense_ttm = fin.get(6)
     float rnd_ttm = fin.get(7)
     float pref_div_ttm = fin.get(8)
-    float div_per_share_ttm = fin.get(9)
     float ocf_ttm = fin.get(10)
-    float fcf_rep_ttm = fin.get(11)
-    float depr_amort_ttm_raw = fin.get(12)
     float ni_rep_ttm = fin.get(13) // attributable to the parent
     float minority_fq = fin.get(14)
-    float shares_dil_fq = fin.get(15)
-    float shares_basic_fq = fin.get(16)
-    float total_liab_fq = fin.get(18)
-    float curr_assets_fq = fin.get(19)
     float curr_liab_fq = fin.get(20)
     float total_debt_latest = fin.get(21)
     float cash_latest = fin.get(22)
-    float inventory_fq = fin.get(23)
     float receiv_fq = fin.get(24)
-    float retained_fq = fin.get(25)
     float ppe_gross_fq = fin.get(26)
     float accum_dep_fq = fin.get(27)
-    float intangibles_latest = fin.get(28) // includes goodwill
     float eps_est_ttm = fin.get(29)
     // Year-ago (and one-quarter-ago) rows of the store, one read per column.
     array<float> Y1 = ST.back(1)
@@ -1520,7 +1508,7 @@ if CK.dirty
     array<float> Y12 = ST.back(12)
     // --- PRE-ENGINE DERIVATIONS ---
     // Larger of period-end and weighted diluted count: the weighted average lags new issues.
-    float shares_out_latest = math.max(nz(shares_dil_fq), nz(shares_basic_fq))
+    float shares_out_latest = math.max(nz(fin.get(15)), nz(fin.get(16)))
     shares_out_latest := shares_out_latest > 0 ? shares_out_latest : na
     // Reported NI (after minority interest) first; pretax - tax includes the minority share.
     float net_income_ttm = not na(ni_rep_ttm) ? ni_rep_ttm : not na(pretax_income_ttm) and not na(income_tax_ttm) ? pretax_income_ttm - income_tax_ttm : na
@@ -1551,7 +1539,7 @@ if CK.dirty
     else if na(interest_expense_ttm) and nz(total_debt_latest) > 0
         interest_expense_ttm := total_debt_latest * int_rate
     // --- 2. LOAD REQUESTED VALUES (tier 3; NI tier from its source) ---
-    array<float> eng_raw = array.from(total_assets_fq, total_liab_fq, float(na), curr_assets_fq, float(na), total_revenue_ttm, cogs_ttm, float(na), ebit_ttm, depr_amort_ttm_raw, float(na), ocf_ttm, fcf_rep_ttm, float(na), ppe_gross_fq, math.abs(accum_dep_fq), float(na), net_income_ttm, cash_latest, accounts_receivable_ttm, total_debt_latest)
+    array<float> eng_raw = array.from(total_assets_fq, fin.get(18), float(na), fin.get(19), float(na), total_revenue_ttm, cogs_ttm, float(na), ebit_ttm, fin.get(12), float(na), ocf_ttm, fin.get(11), float(na), ppe_gross_fq, math.abs(accum_dep_fq), float(na), net_income_ttm, cash_latest, accounts_receivable_ttm, total_debt_latest)
     for i = 0 to 20
         float x = eng_raw.get(i)
         if CK.adv and not na(x)
@@ -1717,7 +1705,7 @@ if CK.dirty
     // Unlevered FCF for the firm-value DCFs: OCF is after interest paid, so the after-tax
     // interest goes back in (else the debt is charged once in the cash flow and again as claims).
     float fcff = true_fcf + nz(interest_expense_ttm) * (1 - effective_tax)
-    float working_capital_proxy = nz(receiv_fq, nz(calc_rev) * 0.1) + nz(inventory_fq, nz(calc_rev) * 0.1) - nz(calc_rev) * 0.15
+    float working_capital_proxy = nz(receiv_fq, nz(calc_rev) * 0.1) + nz(fin.get(23), nz(calc_rev) * 0.1) - nz(calc_rev) * 0.15
     float ic_equity_method = calc_equity + total_debt_latest - nz(cash_latest)
     // Operating assets at NET PPE: NOPAT is after depreciation, so the capital it earns on is too
     // (gross PPE keeps fully depreciated assets in the base and understates ROIC).
@@ -1789,7 +1777,7 @@ if CK.dirty
         ST.write(Q_RV0 + k, x)
     F := Firm.new(sh = calc_shares, rev = calc_rev, gp = calc_gp, ebit = calc_ebit, ebitda = calc_ebitda, ocf = calc_ocf, ni_c = calc_ni, ni = net_income_ttm, eps = eps_ttm, eq = calc_equity, debt = calc_debt, assets = calc_assets, tl = calc_total_liab, ca = calc_curr_assets, fcf = true_fcf, nd = net_debt_robust,
          t_rev = t_rev, t_ni = t_ni, t_eps = t_eps, t_ebit = t_ebit, t_ebitda = t_ebitda, t_ocf = t_ocf, t_cfo = t_cfo, t_eq = t_equity,
-         minority = minority_fq, pref_div = pref_div_ttm, dps = div_per_share_ttm, intang = intangibles_latest, cl = curr_liab_fq, re = retained_fq, eps_est = eps_est_ttm, eps0 = raw_eps, interest = interest_expense_ttm,
+         minority = minority_fq, pref_div = pref_div_ttm, dps = fin.get(9), intang = fin.get(28), cl = curr_liab_fq, re = fin.get(25), eps_est = eps_est_ttm, eps0 = raw_eps, interest = interest_expense_ttm,
          tax = effective_tax, ebit_n = ebit_normalized, nopat = nopat_adjusted, nopat_n = nopat_norm, fcff = fcff, ic = invested_capital_adj, roic = roic_adj, netco_sh = netco_sh, netco_rab = netco_sh * invested_capital_adj, oe_ps = oe_per_share,
          pipe = nz(rnd_ttm) * 5.0 * 0.15, shield = nz(total_debt_latest) * effective_tax, rev_g = rev_growth, asset_g = asset_growth, ebitda_g = ebitda_growth, inv_dummy = investment_dummy, deter = is_deteriorating, fwd_g = fwd_eps_growth,
          pio = has_any_real_fundamental and _n >= 5 ? math.round(_f * 9.0 / _n) : na, m_score = m_score, manip = is_manipulator, sh_1y = _sh_prev, debt_1y = total_debt_1y_ago, suspect = data_suspect, has = has_any_real_fundamental)
