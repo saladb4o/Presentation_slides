@@ -74,12 +74,19 @@ f_push(array<float> a, float v, int max_n, float cap, bool keep_na) =>
         array.push(a, ok ? math.min(v, cap) : na)
         if array.size(a) > max_n
             array.shift(a)
+// Signed version (held to +/-cap, na skipped) for histories whose medians must count the
+// bad quarters too: ROE, EBIT / equity, FCFF margin.
+f_push_s(array<float> a, float v, int max_n, float cap) =>
+    if not na(v)
+        array.push(a, math.max(math.min(v, cap), -cap))
+        if array.size(a) > max_n
+            array.shift(a)
 // Damodaran synthetic credit spread from interest cover (EBIT / interest).
 f_synthetic_spread(float ebit, float interest) =>
     var array<float> cut = array.from(8.5, 6.5, 5.5, 4.25, 3.0, 2.5, 2.25, 2.0, 1.75, 1.5, 1.25, 0.8)
     var array<float> spr = array.from(0.0063, 0.0078, 0.0098, 0.0108, 0.0122, 0.0156, 0.0200, 0.0240, 0.0351, 0.0417, 0.0600, 0.0800, 0.1200)
-    // Unknown EBIT with interest owed: a mid (BBB) bucket, not the distressed one.
-    float icr = interest > 0 ? nz(ebit / interest, 3.5) : 100.0
+    // Unknown EBIT or unknown interest: a mid (BBB) bucket, not the distressed or the AAA one.
+    float icr = na(interest) ? 3.5 : interest > 0 ? nz(ebit / interest, 3.5) : 100.0
     int k = 0
     while k < 12 and not (icr > array.get(cut, k))
         k += 1
@@ -115,30 +122,32 @@ f_calculate_rim(nopat_base, invested_capital, shares, net_debt, wacc, growth_rat
         equity_value = enterprise_value - net_debt
         iv_rim := equity_value / shares
     iv_rim
-// Value-driver DCF: FCF = NOPAT x (1 - g / RONIC). Today's FCF / NOPAT converges year by
-// year to the rate NEXT year's growth needs (this year's investment funds it), so
-// heavy-investment years are not compounded forward and the explicit years meet the
-// terminal value without a jump.
-// na ROIC: the driver is already a free cash flow (no reinvestment is charged). No
-// positive NOPAT: FCF simply grows with the fade.
+// Value-driver DCF: FCF = NOPAT x (1 - g / RONIC). Year by year, FCF moves from today's
+// (grown with NOPAT) to what is left after the reinvestment NEXT year's growth needs (this
+// year's investment funds it), so heavy-investment years are not compounded forward and
+// the explicit years meet the terminal value without a jump. Written on the growth path,
+// not on FCF / NOPAT, so NOPAT <= 0 converges the same way (no jump at zero NOPAT).
+// na ROIC: the driver is already a free cash flow (no reinvestment is charged).
 f_calculate_dcf_value_driver_extended(fcf_per_share, nopat_per_share, roic_current, wacc, growth_stage1, growth_term, years_stage1) =>
     float pv_explicit = 0.0
-    float current_fcf = fcf_per_share
-    float current_nopat = nopat_per_share
+    float cum = 1.0
     float adjusted_growth_term = math.min(growth_term, wacc - 0.015)
-    // Return on new capital: today's ROIC capped at 20%, but never below the discount rate
-    // (a high-rate market must not turn every unit of growth into value destruction).
+    // Return on new capital: today's ROIC fading to a terminal ROIC capped at 20%, neither
+    // below the discount rate (a high-rate market must not turn every unit of growth into
+    // value destruction). The cap binds at the terminal, not in the high-growth years.
+    float roic_0 = math.max(roic_current, wacc)
     float terminal_roic = math.max(math.min(roic_current, 0.20), wacc)
-    float conv_0 = nopat_per_share > 0 ? fcf_per_share / nopat_per_share : na
     for i = 1 to years_stage1 by 1
         float weight = i / (years_stage1 + 1.0)
         float year_growth = growth_stage1 * (1.0 - weight) + adjusted_growth_term * weight
         float next_w = (i + 1) / (years_stage1 + 1.0)
         float next_growth = i < years_stage1 ? growth_stage1 * (1.0 - next_w) + adjusted_growth_term * next_w : adjusted_growth_term
         float wc = i / (years_stage1 * 1.0)
-        current_nopat := current_nopat * (1 + year_growth)
-        current_fcf := na(conv_0) ? current_fcf * (1 + year_growth) : current_nopat * (conv_0 * (1 - wc) + (na(roic_current) ? 1.0 : 1 - next_growth / terminal_roic) * wc)
+        cum *= 1 + year_growth
+        float conv_target = na(roic_current) ? 1.0 : 1 - next_growth / (roic_0 * (1 - wc) + terminal_roic * wc)
+        float current_fcf = fcf_per_share * cum * (1 - wc) + nopat_per_share * cum * conv_target * wc
         pv_explicit := pv_explicit + current_fcf / math.pow(1 + wacc, i)
+    float current_nopat = nopat_per_share * cum
     float reinvestment_rate_term = na(roic_current) ? 0.0 : terminal_roic > 0 ? adjusted_growth_term / terminal_roic : 0.0
     float terminal_nopat = current_nopat * (1 + adjusted_growth_term)
     float terminal_fcf = terminal_nopat * (1 - reinvestment_rate_term)
@@ -153,8 +162,8 @@ f_calculate_reverse_dcf(current_price, fcf_total, claims, shares, discount_rate,
     float low = -0.50
     float high = 1.00
     float solved_g = na
-    // Terminal growth stays 1pt under the discount rate or the perpetuity diverges.
-    float tg = math.min(term_growth, discount_rate - 0.01)
+    // Terminal growth stays 1.5pt under the discount rate, as in the DCF it is compared with.
+    float tg = math.min(term_growth, discount_rate - 0.015)
     if fcf_total > 0 and current_price > 0 and shares > 0
         for i = 0 to 14 by 1
             float mid = (low + high) / 2
@@ -339,8 +348,9 @@ f_set3(Model m, int s, float v) =>
 // than 40% of a blend once 3+ families are present (with 2, a cap would force 50/50 and
 // erase the track-record weights, so they only normalise). 0 Composite | 1 earnings / returns |
 // 2 sales | 3 cash flow | 4 book | 5 EBIT(DA) | 6 dividends. (P/AFFO reads the FCF
-// figure: no AFFO field exists, so it is a cash-flow model like P/FCF.)
-var array<int> FAM = array.from(0, 1, 2, 3, 4, 4, 5, 3, 3, 3, 3, 3, 3, 3, 1, 6, 3, 1, 1, 1, 2, 5, 3)
+// figure: no AFFO field exists, so it is a cash-flow model like P/FCF. Equity Cash Flow is
+// net income less the equity growth needs, on ROE: an earnings model, like the bank RIM.)
+var array<int> FAM = array.from(0, 1, 2, 3, 4, 4, 5, 3, 3, 3, 1, 3, 3, 3, 1, 6, 3, 1, 1, 1, 2, 5, 3)
 // Normalise 23 registry-ordered weights to 1 in place, then cap each family's share and
 // hand the excess to the uncapped families pro rata (a few passes converge).
 f_fam_cap(array<float> w) =>
@@ -841,8 +851,8 @@ for st = 0 to 4
             f_put(iOC, f_g(iNI) + f_g(iDA), math.min(math.min(f_tg(iNI), f_tg(iDA)), 1))
 // --- 8. STALENESS: no new report for 2+ quarters -> tier 1, 4+ quarters -> tier 0 ---
 var int bars_since_real = 0
-float qtrs_stale = bars_since_real / float(math.max(1, int(bpy / 4)))
 bars_since_real := is_new_quarter ? 0 : bars_since_real + 1
+float qtrs_stale = bars_since_real / float(math.max(1, int(bpy / 4)))
 int stale_cap = qtrs_stale > 4 ? 0 : qtrs_stale > 2 ? 1 : 3
 for i = 0 to 20
     array.set(eng_t, i, math.min(f_tg(i), stale_cap))
@@ -898,6 +908,7 @@ float net_debt_robust = calc_debt - nz(calc_cash, 0)
 // the local 10Y + 2% stand in for it.
 float pref_equity = nz(pref_div_ttm) / math.max(us10y_yield / 100 + 0.02, 0.04)
 float claims = net_debt_robust + (i_strict_cap ? nz(minority_fq) + pref_equity : 0.0)
+string claims_txt = i_strict_cap ? 'net debt, minority interest and preferred' : 'net debt' // tooltips
 // Equity of the parent's shareholders (ex minority interest; ex preferred when the strict
 // structure also takes preferred dividends out of earnings): the base of ROE.
 float parent_equity = total_equity_latest - nz(minority_fq) - (i_strict_cap ? pref_equity : 0.0)
@@ -963,15 +974,16 @@ altman_z := f_locf(altman_z)
 float z_safe_cut = z_is_em ? 4.35 : 1.8
 float z_gold_cut = z_is_em ? 5.85 : 3.0
 // --- PIOTROSKI F-SCORE: 9 signals, all locally computed ---
-float _roa = not na(_ta) and _ta > 0 ? nz(calc_ni) / _ta : na
+// A missing input leaves its signal untested (no nz): banks have no gross margin.
+float _roa = not na(_ta) and _ta > 0 ? calc_ni / _ta : na
 float _roa_prev = ta.valuewhen(is_new_quarter, _roa, 4)
 float _cr = not na(_ca) and not na(_cl) and _cl > 0 ? _ca / _cl : na
 float _cr_prev = ta.valuewhen(is_new_quarter, _cr, 4)
 float _lev = not na(_ta) and _ta > 0 ? nz(calc_debt) / _ta : na
 float _lev_prev = ta.valuewhen(is_new_quarter, _lev, 4)
-float _gm = not na(calc_rev) and calc_rev > 0 ? nz(calc_gp) / calc_rev : na
+float _gm = not na(calc_rev) and calc_rev > 0 ? calc_gp / calc_rev : na
 float _gm_prev = ta.valuewhen(is_new_quarter, _gm, 4)
-float _at = not na(_ta) and _ta > 0 ? nz(calc_rev) / _ta : na
+float _at = not na(_ta) and _ta > 0 ? calc_rev / _ta : na
 float _at_prev = ta.valuewhen(is_new_quarter, _at, 4)
 float _sh_prev = ta.valuewhen(is_new_quarter, calc_shares, 4)
 // [NEUTRAL] An untestable signal no longer counts as a fail: score = passes x 9 / tested
@@ -995,17 +1007,19 @@ if not na(ebit_1y_ago) and not na(ebit_2y_ago)
     ebit_normalized := (ebit_ttm + ebit_1y_ago + ebit_2y_ago) / 3.0
 else if not na(ebit_1y_ago)
     ebit_normalized := (ebit_ttm + ebit_1y_ago) / 2.0
-// R&D is capitalised over 3 years, straight line. A year before the history starts is
-// taken as 10% below the year after it, so a young listing still amortises all 3 vintages.
+// R&D is capitalised over 3 years, straight line. A year with no R&D figure (before the
+// history, or before the field starts) is taken as 10% below the year after it, so every
+// vintage is amortised: the history is read on the raw series, where missing is na, not 0.
 float safe_rnd = nz(rnd_ttm, 0)
-float rnd_1y_ago = nz(ta.valuewhen(is_new_quarter, safe_rnd, 4), safe_rnd * 0.9)
-float rnd_2y_ago = nz(ta.valuewhen(is_new_quarter, safe_rnd, 8), rnd_1y_ago * 0.9)
-float rnd_3y_ago = nz(ta.valuewhen(is_new_quarter, safe_rnd, 12), rnd_2y_ago * 0.9)
+float rnd_1y_ago = nz(ta.valuewhen(is_new_quarter, rnd_ttm, 4), safe_rnd * 0.9)
+float rnd_2y_ago = nz(ta.valuewhen(is_new_quarter, rnd_ttm, 8), rnd_1y_ago * 0.9)
+float rnd_3y_ago = nz(ta.valuewhen(is_new_quarter, rnd_ttm, 12), rnd_2y_ago * 0.9)
 float rnd_amortization = (rnd_1y_ago + rnd_2y_ago + rnd_3y_ago) / 3.0
 // The unamortised part is an asset: with it outside invested capital, ROIC (and EVA / RIM)
 // would count the capitalised R&D in NOPAT against a capital base that leaves it out.
 float research_asset = safe_rnd + rnd_1y_ago * 2.0 / 3.0 + rnd_2y_ago / 3.0
-float effective_tax = pretax_income_ttm > 0 ? math.min(math.max(income_tax_ttm / pretax_income_ttm, 0.0), 0.35) : 0.21
+// A missing tax line falls back to 21% as a loss year does (it made NOPAT and WACC na).
+float effective_tax = pretax_income_ttm > 0 ? math.min(math.max(nz(income_tax_ttm / pretax_income_ttm, 0.21), 0.0), 0.35) : 0.21
 float nopat_adjusted = (ebit_ttm + safe_rnd - rnd_amortization) * (1 - effective_tax)
 // EPV capitalises NORMALISED earnings: EBIT averaged over up to three years.
 float nopat_norm = (ebit_normalized + safe_rnd - rnd_amortization) * (1 - effective_tax)
@@ -1083,11 +1097,12 @@ if beta_sample
 // ==========================================
 // AUTO-PREMIUM CALCULATION
 // ==========================================
+// Annualised over the window actually used: intraday charts cap it below 5 years.
 f_get_cagr_optimized(current_price_series, bars_back_5y) =>
     float p_now = current_price_series
     float p_old = current_price_series[bars_back_5y]
     if not na(p_now) and not na(p_old) and p_old > 0
-        math.pow(p_now / p_old, 1.0 / 5.0) - 1.0
+        math.pow(p_now / p_old, bpy / float(bars_back_5y)) - 1.0
     else
         0.08
 int bars_in_5y = math.min(5 * bpy, 4900)
@@ -1272,9 +1287,10 @@ if is_new_quarter
         if m.rkv and rkv_trip and not na(r) and r < 1.2
             r := na
         f_push(m.hist, r, i_numQuarters, i_ratioCap, false)
-    f_push(hist_roe, roe_avg, 20, 10.0, false)
-    f_push(hist_op, op_val, 20, 10.0, false)
-    f_push(hist_fcff_margins, not na(total_revenue_ttm) and total_revenue_ttm > 0 ? fcff / total_revenue_ttm : na, 20, 1.0, false)
+    // Loss quarters stay in: dropping them biased the medians (ROE, FCFF margin) upward.
+    f_push_s(hist_roe, roe_avg, 20, 10.0)
+    f_push_s(hist_op, op_val, 20, 10.0)
+    f_push_s(hist_fcff_margins, not na(total_revenue_ttm) and total_revenue_ttm > 0 ? fcff / total_revenue_ttm : na, 20, 1.0)
     f_push(hist_px, close[1], 20, 999999, true)
     for m in MD
         f_push(m.fvh, m.fv, 20, 999999, true)
@@ -1378,6 +1394,11 @@ float final_discount_rate = nz(final_wacc_auto, cost_of_equity)
 // ==============================================
 // 4. TRIANGULATED ROBUST GROWTH & TERMINAL RATES
 // ==============================================
+// Banks and insurers use the Equity models (RIM: NI / book at CoE; growth from ROE), the
+// rest the Entity models (RIM: NOPAT / invested capital at WACC; growth from ROIC).
+string _fin_ind = syminfo.industry
+bool fin_bank_like = (str.contains(_fin_ind, 'Banks') and not str.contains(_fin_ind, 'Brokers')) or str.contains(_fin_ind, 'Insurance')
+bool use_bank_model = is_financial_sector and (i_financial_model_type == 'Equity Model (Bank/Insurer)' or (i_financial_model_type == 'Auto (by industry)' and fin_bank_like))
 float retention_ratio = 1.0
 if not na(div_per_share_ttm) and not na(eps_ttm) and eps_ttm > 0
     payout = div_per_share_ttm / eps_ttm
@@ -1390,8 +1411,10 @@ float normalized_sgr = base_profitability * retention_ratio
 float sales_cagr_3y = f_calculate_cagr_from_series(total_revenue_ttm, 3)
 float effective_sgr = base_profitability > 0 ? normalized_sgr : nz(sales_cagr_3y, 0.05)
 // Reinvestment = NOPAT - FCFF: both unlevered (the levered FCF also nets out interest).
+// A bank's operating cash flow swings with loans and deposits, so its fundamental growth
+// is ROE x retention, not ROIC x reinvestment.
 float reinvestment_rate = nopat_adjusted > 0 ? (nopat_adjusted - fcff) / nopat_adjusted : 0.0
-float roic_sgr = math.max(roic_adj * reinvestment_rate, 0.0)
+float roic_sgr = use_bank_model ? normalized_sgr : math.max(roic_adj * reinvestment_rate, 0.0)
 // [MACRO] The CPI/GDP macro adjustment is gone with the feeds.
 // [STREET-1] Forward growth leg: consensus EPS growth (historical, lag-gated),
 // then sales CAGR, then the manual value. Replaces the fixed 10% input.
@@ -1468,11 +1491,7 @@ float de_mkt = nz(total_debt_latest) / (market_cap_latest > 0 ? market_cap_lates
 float unlevered_beta = beta_mkt / (1 + (1 - effective_tax) * de_mkt)
 float unlevered_coe = math.max(cost_of_equity - (beta_mkt - unlevered_beta) * calc_erp, math.min(nz(cost_of_debt_synthetic, base_rf_for_calc + 0.01), cost_of_equity))
 float total_debt_1y_ago = ta.valuewhen(is_new_quarter, total_debt_latest, 4)
-// RIM: banks and insurers use the Equity model (NI / book at CoE), the rest the
-// Entity model (NOPAT / invested capital at WACC).
-string _fin_ind = syminfo.industry
-bool fin_bank_like = (str.contains(_fin_ind, 'Banks') and not str.contains(_fin_ind, 'Brokers')) or str.contains(_fin_ind, 'Insurance')
-bool use_bank_model = is_financial_sector and (i_financial_model_type == 'Equity Model (Bank/Insurer)' or (i_financial_model_type == 'Auto (by industry)' and fin_bank_like))
+// RIM inputs: the Equity model for banks and insurers, the Entity model for the rest.
 float rim_nopat_proxy = use_bank_model ? net_income_ttm : nopat_adjusted
 float rim_capital_proxy = use_bank_model ? book_value : invested_capital_adj
 float rim_discount_proxy = use_bank_model ? math.min(cost_of_equity, 0.15) : final_discount_rate
@@ -1483,16 +1502,17 @@ float ni_ps = net_income_ttm / shares_out_latest
 float roe_n = nz(median_roe, roe_avg)
 float fcff_ps = fcff / shares_out_latest
 float claims_ps = claims / shares_out_latest
-// Telecom unbundling: NetCo share = net PPE / invested capital (30-90%, 80% without data).
-// NetCo = that share of net PPE at a RAB multiple; ServeCo = the rest of the unlevered FCF
-// and NOPAT through the value-driver DCF. Both are firm values: the claims come off once.
-float netco_sh = invested_capital_adj > 0 and ppe_net_fq > 0 ? math.min(math.max(ppe_net_fq / invested_capital_adj, 0.3), 0.9) : 0.8
-float netco_ppe = nz(ppe_net_fq) * netco_sh
-// Reverse DCF input (median unlevered FCF margin) and Rule of 40 inputs.
+// Telecom unbundling: NetCo share = net PPE / invested capital (held to 30-90%; no PPE, no
+// split). NetCo = that share of invested capital (the network, net PPE) at a RAB multiple;
+// ServeCo = the rest of the unlevered FCF and NOPAT through the value-driver DCF. The two
+// shares match, so at allowed return = ROIC = WACC the parts add up to the whole. Both are
+// firm values: the claims come off once.
+float netco_sh = ppe_net_fq > 0 ? math.min(math.max(ppe_net_fq / invested_capital_adj, 0.3), 0.9) : na
+float netco_rab = netco_sh * invested_capital_adj
+// Reverse DCF input (median unlevered FCF margin) and the Rule of 40 margin.
 float median_fcf_margin = nz(f_median(hist_fcff_margins), 0.10)
 float dcf_input_fcf_total_rev = total_revenue_ttm * median_fcf_margin
 float true_fcf_margin_ttm = true_fcf / total_revenue_ttm
-float safe_rev_growth = not na(rev_growth) ? rev_growth : 0.10
 // [FIX GRAHAM] No revenue-based EPS fallback: Graham needs real positive earnings.
 float base_eps = eps_ttm > 0 ? eps_ttm : na
 float safe_us10y = us10y_yield > 0 ? us10y_yield : 4.0
@@ -1542,7 +1562,7 @@ for s = 0 to 2
         [af_v, af_m] = f_calculate_dcf_value_driver_extended(affo_ps_ttm, affo_ps_ttm, float(na), ce, gs, tg, i_dcf_stage1_yrs)
         f_set3(M_ADCF, s, af_v)
     if M_UNB.fw or (om_free and i_om_unb)
-        float netco = f_calculate_rab_model(netco_ppe, i_rab_allowed_return, wc, tg, 0.0, shares_out_latest)
+        float netco = f_calculate_rab_model(netco_rab, i_rab_allowed_return, wc, tg, 0.0, shares_out_latest)
         [sv_v, sv_m] = f_calculate_dcf_value_driver_extended(fcff_ps * (1 - netco_sh), nopat_ps * (1 - netco_sh), roic_adj, wc, gs, tg, i_dcf_stage1_yrs)
         f_set3(M_UNB, s, netco + sv_v - claims_ps)
     if M_APV.fw or (om_free and i_om_apv)
@@ -1560,7 +1580,8 @@ for s = 0 to 2
     f_set3(M_EPV, s, (nopat_norm / dr - claims) / shares_out_latest)
     // Graham: Bear/Bull halve / add half the growth term.
     f_set3(M_GRA, s, base_eps * (8.5 + 2 * (graham_g * f_sc(s, 1.0, 0.5, 1.5)) * 100) * graham_yield_adj)
-    f_set3(M_R40, s, f_calculate_rule_of_x_fv(f_sc(s, safe_rev_growth, math.max(safe_rev_growth - i_scen_r40_bps, 0.0), safe_rev_growth + i_scen_r40_bps), true_fcf_margin_ttm, total_revenue_ttm, claims, shares_out_latest))
+    // Rule of 40 needs a year-ago revenue: no guessed growth (the old fallback was 10%).
+    f_set3(M_R40, s, na(rev_growth) ? na : f_calculate_rule_of_x_fv(f_sc(s, rev_growth, math.max(rev_growth - i_scen_r40_bps, 0.0), rev_growth + i_scen_r40_bps), true_fcf_margin_ttm, total_revenue_ttm, claims, shares_out_latest))
     // 🌟 THE ACQUIRER'S MULTIPLE (EV / EBIT): Bear/Bull move the target multiple.
     if acq_ok
         f_set3(M_ACQ, s, (ebit_ttm * f_sc(s, i_acquirer_mult, math.max(i_acquirer_mult - i_scen_acq_delta, 1.0), i_acquirer_mult + i_scen_acq_delta) - claims) / shares_out_latest)
@@ -2180,19 +2201,19 @@ f_det_models(int r0) =>
         if (m.on or m.om) and ((k >= 16 and k != 21) or not na(m.fv))
             string lbl = k == 20 ? (super_stock ? '🌟 Rule of 65 (Super Stock)' : 'Rule of 40 Value') : k == 21 ? "Acquirer's Mult (" + str.tostring(i_acquirer_mult) + "x EBIT)" : m.name
             string tt = switch k
-                20 => (super_stock ? 'Rule of 65 Score: ' + str.tostring(rx_score, '#.#') + '%\n(Hyper-Growth Premium Unlocked!)' : 'Rule of 40 Score: ' + str.tostring(r40_score, '#.#') + '%') + '\n\nASSUMPTION: fixed EV/Sales rule -- 1x + 0.25x per Rule-of-40 point (floor 1.5x); the Rule-of-X multiple (12x + 0.3x per point above 65, never below that base) phases in as Rule-of-X goes from 55 to 65; capped at 25x.'
+                20 => (super_stock ? 'Rule of 65 Score: ' + str.tostring(rx_score, '#.#') + '%\n(Hyper-Growth Premium Unlocked!)' : 'Rule of 40 Score: ' + (na(rev_growth) ? 'N/A (needs a year-ago revenue)' : str.tostring(r40_score, '#.#') + '%')) + '\n\nASSUMPTION: fixed EV/Sales rule -- 1x + 0.25x per Rule-of-40 point (floor 1.5x); the Rule-of-X multiple (12x + 0.3x per point above 65, never below that base) phases in as Rule-of-X goes from 55 to 65; capped at 25x.'
                 19 => 'Needs positive EPS. Growth capped at 15%; the 4.4/Y bond-yield factor is capped at 1.0.'
                 21 => 'Bear/Bull shift the EBIT multiple by +/-' + str.tostring(i_scen_acq_delta) + 'x.'
                 9 => 'ASSUMPTION (not fitted, no trial-outcome data): pipeline = 5x annual R&D, 15% risk-adjusted, added to the DCF equity value. In the Omnibus it replaces the DCF, which it contains.'
-                12 => 'NetCo share ' + str.tostring(netco_sh * 100, '#') + '% = net PPE / invested capital (30-90%). NetCo = that share of net PPE at a RAB multiple; ServeCo = the rest of the unlevered FCF and NOPAT through the DCF at WACC. Net debt comes off once.'
-                16 => 'Unlevered FCF (FCF + after-tax interest) and NOPAT at WACC, less net debt' + (i_strict_cap ? ', minority interest and preferred' : '') + '. FCF / NOPAT moves from today to the reinvestment each year of growth needs (1 - g / ROIC) over stage 1.\n\nBear/Bull move the discount rate, terminal growth AND stage-1 growth.'
-                17 => (use_bank_model ? 'Equity model: net income - CoE x book value' : 'Entity model: NOPAT - WACC x invested capital (incl. capitalised R&D)') + ', growing at the stage-1 rate and fading to terminal over ' + str.tostring(i_iv_projection_period) + ' years, plus ' + (use_bank_model ? 'book value.' : 'invested capital, less net debt.')
+                12 => 'NetCo share ' + str.tostring(netco_sh * 100, '#') + '% = net PPE / invested capital (30-90%). NetCo = that share of invested capital (the network) at a RAB multiple; ServeCo = the rest of the unlevered FCF and NOPAT through the DCF at WACC. Less ' + claims_txt + ', once.'
+                16 => 'Unlevered FCF (FCF + after-tax interest) and NOPAT at WACC, less ' + claims_txt + '. Over stage 1, FCF moves from the current cash flow to what is left after the reinvestment next-year growth needs, NOPAT x (1 - g / RONIC); RONIC moves from the current ROIC to a terminal ROIC capped at 20% (never below WACC).\n\nBear/Bull move the discount rate, terminal growth AND stage-1 growth.'
+                17 => (use_bank_model ? 'Equity model: net income - CoE x book value' : 'Entity model: NOPAT - WACC x invested capital (incl. capitalised R&D)') + ', growing at the stage-1 rate and fading to terminal over ' + str.tostring(i_iv_projection_period) + ' years, plus ' + (use_bank_model ? 'book value.' : 'invested capital, less ' + claims_txt + '.')
                 10 => 'FCFE = net income x (1 - g / ROE): the equity a firm must retain to grow comes off, two-stage at the cost of equity. ROE ' + f_gtxt(roe_n) + ' (5-year median). For a bank, debt is raw material, not financing, so net borrowing is not counted as cash to shareholders.'
                 11 => 'FCF (the AFFO proxy) at the cost of equity. FCF is already after capex, so the terminal value takes no second reinvestment charge.'
-                13 => 'Unlevered FCF through the two-stage DCF at the unlevered cost of capital ' + f_gtxt(unlevered_coe) + ' (the cost of equity less the leverage part of beta), plus the tax shield on debt (debt x tax), less net debt.'
-                18 => 'Normalised NOPAT (EBIT averaged over up to 3 years) / WACC, no growth, less net debt.'
+                13 => 'Unlevered FCF through the two-stage DCF at the unlevered cost of capital ' + f_gtxt(unlevered_coe) + ' (the cost of equity less the leverage part of beta), plus the tax shield on debt (debt x tax), less ' + claims_txt + '.'
+                18 => 'Normalised NOPAT (EBIT averaged over up to 3 years) / WACC, no growth, less ' + claims_txt + '.'
                 22 => 'OCF less maintenance capex (growth capex = sales growth x net PPE / sales): after interest, so a no-growth perpetuity at the cost of equity.'
-                14 => 'Invested capital (incl. capitalised R&D) + PV(EVA) - net debt.'
+                14 => 'Invested capital (incl. capitalised R&D) + PV(EVA), less ' + claims_txt + '.'
                 15 => 'Gordon growth on the trailing dividend.\nDPS: ' + str.tostring(div_per_share_ttm, '#.##') + '\nYield: ' + (na(ddm_yield) ? 'N/A' : str.tostring(ddm_yield, '#.##') + '%') + '\nCost of equity: ' + str.tostring(cost_of_equity * 100, '#.#') + '%\nTerminal growth: ' + str.tostring(final_terminal_growth * 100, '#.#') + '%'
                 => ''
             f_model_row(row_idx, lbl + f_wt_lbl(omni_active ? m.om_w : m.w), m.lo, m.fv, m.hi, tt)
