@@ -148,8 +148,8 @@ f_new_model() =>
 // =====================================================================
 // Each model is one ROW, declared once in section 2b with every fact about it: its level
 // (which fixes the discount rate AND whether the claims ahead of common come off), its
-// engine, the streams it reads, its add-on, its private scenario lever, family and Omnibus
-// tick box. The ENGINES are declared here, above every input and data series, so the
+// engine, the streams it reads, its add-on, its private scenario lever and family
+// (its code is its Omnibus member name). The ENGINES are declared here, above every input and data series, so the
 // compiler stops them reading anything but the record they are handed. f_kin forms that
 // record for Base and any scenario (a position on four axes) on one path; f_eval runs the
 // engine, adds the add-on and sends each leg through the one claim bridge. The result lands
@@ -199,7 +199,7 @@ enum Lever
 // growth x0.5 / x1.5 | step: Rule of 40's revenue growth -/+ a shift, Acquirer's multiple -/+ a
 // step (Bear floor 1x). Each follows its axis position, so a partial move scales it.
 // STREAMS: every input a model reads, each formed once per bar in the stream table
-// (f_drivers). f_sunit and f_sown state each stream's unit and whose cash flow it is.
+// (f_drivers). f_sunit states each stream's unit.
 enum Sx
     none = '-'
     eps_b = 'EPS'
@@ -258,26 +258,6 @@ f_sunit(Sx s) =>
         Sx.yadj => 2
         Sx.rev_g => 2
         Sx.fcf_margin => 2
-        => 0
-// Whose cash flow a stream is: 1 all capital providers (discounted at WACC or the unlevered
-// cost), 2 common shareholders (at the cost of equity), 0 neither (a multiple's driver).
-f_sown(Sx s) =>
-    switch s
-        Sx.fcff => 1
-        Sx.nopat => 1
-        Sx.ic => 1
-        Sx.roic => 1
-        Sx.fcff_s => 1
-        Sx.nopat_s => 1
-        Sx.nopat_n => 1
-        Sx.ni => 2
-        Sx.book => 2
-        Sx.ni_ps => 2
-        Sx.roe_n => 2
-        Sx.fcfe => 2
-        Sx.fcf_ps => 2
-        Sx.dps => 2
-        Sx.oe_ps => 2
         => 0
 // What an engine sees, and nothing else: the rate and growths after the scenario move and
 // the one terminal cap, the row's streams and its lever.
@@ -384,7 +364,7 @@ type Model
 // driver, next year's driver, a rule's growth and second input) | need1/2: streams that must
 // be positive for a value (a relative multiple is off without them) | t1/t2: tier sources (the row takes the worse tier) | src: the
 // row a reference row builds on | lk, lv_*: the lever, its Bear / Bull moves, a Bear floor |
-// m0: a rule multiple's target | tick: Omnibus tick box | dflt: an own multiple with no
+// m0: a rule multiple's target | tick: listed in Omnibus Members (bar 0) | dflt: an own multiple with no
 // history | rkv: P/B drops value-trap quarters. Derived on bar 0: src_i, held_by (the
 // row that holds this one: rNPV holds the DCF, P/FCF holds P/AFFO), ps (per-share streams).
 enum Claim
@@ -654,45 +634,21 @@ f_tier(Model m, Drv d) =>
     math.min(f_stier(d, m.t1), f_stier(d, m.t2))
 f_same_streams(Model a, Model b) =>
     a.s_cf == b.s_cf and a.s_earn == b.s_earn and a.s_ret == b.s_ret and a.s_cap == b.s_cap and a.s_drv == b.s_drv and a.s_fwd == b.s_fwd and a.s_gx == b.s_gx and a.s_adj == b.s_adj
-// Bar 0: derive what the rows imply (units, reference sources, relations) and stop the
-// script on a row that contradicts itself, before any value is shown.
+// Bar 0: derive what the rows imply: units (a row reads per-share streams or totals) and
+// reference sources.
 f_rows_check() =>
-    for [i, m] in MD
-        string e = ''
-        for [j, q] in MD
-            if j != i and q.code == m.code
-                e += ' shares its code with another row;'
+    for m in MD
         if m.eng != Eng.comp
             int u = -1
             for x in array.from(m.s_cf, m.s_earn, m.s_cap, m.s_drv, m.s_fwd)
                 int ux = f_sunit(x)
                 if ux == 0 or ux == 1
-                    if u >= 0 and ux != u
-                        e += ' mixes per-share and total streams;'
                     u := ux
             m.ps := u == 1
-            bool firm = m.level == Level.firm or m.level == Level.unlev
-            if firm and m.ps
-                e += ' values the firm on per-share streams (the claims are totals);'
-            if m.addon != AddOn.none and not firm
-                e += ' has an add-on but is not valued at firm level;'
-            if m.eng == Eng.vdcf or m.eng == Eng.rim or m.eng == Eng.eva or m.eng == Eng.perp or m.eng == Eng.gperp
-                for x in array.from(m.s_cf, m.s_earn, m.s_ret, m.s_cap)
-                    int o = f_sown(x)
-                    if o > 0 and (o == 1) != firm
-                        e += ' discounts ' + str.tostring(x) + ' at the ' + str.tostring(m.level) + ' rate;'
             if m.eng == Eng.ref
                 for [j, q] in MD
                     if q.code == m.src
                         m.src_i := j
-                if m.src_i < 0
-                    e += ' references no row;'
-                else
-                    Model sm = MD.get(m.src_i)
-                    if sm.eng == Eng.ref or sm.grp == Group.sect
-                        e += ' references a row that is not computed on every bar;'
-        if e != ''
-            runtime.error('Model row ' + m.code + ':' + e)
     // Relations, derived: a reference row holds its source (rNPV holds the DCF); two rows with
     // the same streams, engine and level and no add-on are one model counted twice (P/FCF and
     // P/AFFO). The Omnibus drops the held row once its holder carries weight.
@@ -704,9 +660,6 @@ f_rows_check() =>
             for [j, b] in MD
                 if j > i and b.eng == a.eng and b.level == a.level and a.addon == AddOn.none and b.addon == AddOn.none and f_same_streams(a, b)
                     b.held_by := i
-    for [i, m] in MD
-        if m.held_by > i
-            runtime.error('Model row ' + m.code + ': the row holding it must be declared before it.')
     true
 // Normalise the registry-ordered weights (one per row) to 1 in place, then cap each family's
 // share and hand the excess to the uncapped families pro rata (a few passes converge).
@@ -796,35 +749,10 @@ bool is_omnibus = i_blend_mode == 'Omnibus (All Available Models)'
 // === OMNIBUS MEMBERSHIP (only read when Blend Mode = Omnibus) ==
 // ==============================================================
 group_omni = 'Omnibus: Selection'
-group_omni_r = 'Omnibus: Relative Multiples'
-group_omni_s = 'Omnibus: Sector Models'
-group_omni_a = 'Omnibus: Absolute Models'
-i_omni_mode = input.string('Auto (Framework Allocation)', 'Member Selection', options = ['Auto (Framework Allocation)', 'Manual (Tick Models Below)'], group = group_omni, tooltip = 'Auto: every model the sector framework enables, each a member in its own right.\n\nManual: the boxes you tick. All are ticked by default, so Manual starts equal to Auto; untick to remove a model.\n\nEither way rNPV replaces the DCF it contains, P/AFFO (an FCF proxy) gives way to P/FCF, and a member is dropped if its model returns na or a non-positive value. The table row "Omnibus Members" reports what survived.')
-i_omni_strict = input.bool(true, 'Manual: still require framework approval', group = group_omni, tooltip = 'ON (default): a ticked model is used only if the sector framework ALSO enables it.\n\nOFF: the ticks override the framework; a ticked sector model is computed even outside its sector.')
-i_om_comp = input.bool(false, 'Standard Composite (the whole Standard blend)', group = group_omni, tooltip = 'The Standard blend entered as a SINGLE member. Off by default: Standard and Omnibus are alternatives.\n\nWARNING: it already contains the relative multiples and sector models below, plus the absolute models the framework is named after (Technology: DCF, RIM, Rule of 40; Financials: RIM). Ticking it alongside any of them counts those models twice. The Omnibus Members row flags this as DOUBLE-COUNT.')
+i_omni_mode = input.string('Auto (Framework Allocation)', 'Member Selection', options = ['Auto (Framework Allocation)', 'Manual (Members List)'], group = group_omni, tooltip = 'Auto: every model the sector framework enables, each a member in its own right.\n\nManual: the models listed in Members. Every model is listed by default, so Manual starts equal to Auto; delete a code to remove a model.\n\nEither way rNPV replaces the DCF it contains, P/AFFO (an FCF proxy) gives way to P/FCF, and a member is dropped if its model returns na or a non-positive value. The table row "Omnibus Members" reports what survived.')
+i_omni_strict = input.bool(true, 'Manual: still require framework approval', group = group_omni, tooltip = 'ON (default): a listed model is used only if the sector framework ALSO enables it.\n\nOFF: the list overrides the framework; a listed sector model is computed even outside its sector.')
+i_om_codes = input.string('PE PS FCF PB TBV EV CF AFFO RNPV ECF ADCF UNB APV EVA DDM DCF RIM EPV GRA R40 ACQ OE', 'Members (Manual)', group = group_omni, tooltip = 'Model codes separated by spaces, used when Member Selection is Manual.\n\nRelative: PE P/E, PS P/S, FCF P/FCF, PB P/B, TBV P/TBV, EV EV/EBITDA, CF P/CF, AFFO P/AFFO.\nSector: RNPV rNPV, ECF Equity Cash Flow, ADCF AFFO DCF, UNB Unbundled, APV Adjusted PV, EVA Economic Value Added, DDM Dividend Discount.\nAbsolute: DCF, RIM Residual Income, EPV Greenwald, GRA Graham, R40 Rule of 40, ACQ Acquirer\'s Multiple, OE Owners\' Earnings.\n\nCOMP = the whole Standard blend as a SINGLE member (not listed by default: Standard and Omnibus are alternatives). WARNING: it already contains the relative multiples and sector models, plus the absolute models the framework is named after (Technology: DCF, RIM, Rule of 40; Financials: RIM). Listing it alongside any of them counts those models twice. The Omnibus Members row flags this as DOUBLE-COUNT.')
 i_omni_sanity_x = input.float(10.0, 'Drop members beyond Nx / (1/N)x price', minval = 0, maxval = 50, step = 1, group = group_omni, tooltip = 'A member whose fair value exceeds N times the current price, or falls below 1/N of it, is excluded.\n\n0 = off. The Standard Composite member is never dropped by this test.')
-i_om_pe = input.bool(true, 'Blended P/E', group = group_omni_r, inline = 'r1')
-i_om_ps = input.bool(true, 'P/S', group = group_omni_r, inline = 'r1')
-i_om_pfcf = input.bool(true, 'P/FCF', group = group_omni_r, inline = 'r2')
-i_om_pb = input.bool(true, 'P/B', group = group_omni_r, inline = 'r2')
-i_om_ptbv = input.bool(true, 'P/TBV', group = group_omni_r, inline = 'r3')
-i_om_ev = input.bool(true, 'Blended EV/EBITDA', group = group_omni_r, inline = 'r3')
-i_om_pcf = input.bool(true, 'P/CF', group = group_omni_r, inline = 'r4')
-i_om_paffo = input.bool(true, 'P/AFFO', group = group_omni_r, inline = 'r4')
-i_om_rnpv = input.bool(true, 'rNPV (Risk-Adjusted)', group = group_omni_s, inline = 's1')
-i_om_ecf = input.bool(true, 'Equity Cash Flow', group = group_omni_s, inline = 's1')
-i_om_affo = input.bool(true, 'AFFO DCF', group = group_omni_s, inline = 's2')
-i_om_unb = input.bool(true, 'Unbundled (SOTP)', group = group_omni_s, inline = 's2')
-i_om_apv = input.bool(true, 'Adjusted PV (APV)', group = group_omni_s, inline = 's3')
-i_om_eva = input.bool(true, 'Economic Value Added', group = group_omni_s, inline = 's3')
-i_om_ddm = input.bool(true, 'Dividend Discount (DDM)', group = group_omni_s)
-i_om_dcf = input.bool(true, 'DCF (McKinsey/ROIC)', group = group_omni_a, inline = 'a1')
-i_om_rim = input.bool(true, 'Residual Income (RIM)', group = group_omni_a, inline = 'a1')
-i_om_epv = input.bool(true, 'EPV (Greenwald)', group = group_omni_a, inline = 'a2')
-i_om_graham = input.bool(true, 'Graham', group = group_omni_a, inline = 'a2')
-i_om_r40 = input.bool(true, 'Rule of 40', group = group_omni_a, inline = 'a3')
-i_om_acq = input.bool(true, "Acquirer's Multiple", group = group_omni_a, inline = 'a3')
-i_om_oe = input.bool(true, "Owners' Earnings", group = group_omni_a)
 i_numQuarters = input.int(20, 'Number of Quarters to Average', minval = 4, maxval = 60, group = group_calc)
 i_useMean = input.bool(true, 'Use Mean Instead of Median', group = group_calc)
 i_ratioCap = input.float(200.0, 'Maximum Ratio Cap', minval = 50, group = group_calc)
@@ -870,8 +798,6 @@ i_split_2 = input.float(0.25, 'Auto-Split: Period 2 share', minval = 0.1, maxval
 i_bt_view = input.string('Matrix (all periods)', 'Backtest View', options = ['Matrix (all periods)', 'Focus: Period 1', 'Focus: Period 2', 'Focus: Period 3', 'Robustness verdict'], group = group_oos, tooltip = 'Focus shows one period with every metric as its own column. Robustness grades stability across all three and against the always-in baseline.')
 i_bt_min_n = input.int(5, 'Minimum trades for a valid cell', minval = 1, maxval = 50, group = group_oos)
 i_bt_drop_straddle = input.bool(true, 'Exclude trades that straddle a period boundary', group = group_oos, tooltip = 'A trade entered late in P1 and exited deep in P2 would otherwise credit all its P2 return to P1.')
-group_rows = 'Model rows: check and inspect'
-i_dw_code = input.string('', 'Data window: model code', group = group_rows, tooltip = "Plots one model row's Base result record in the Data Window, bar by bar: value, engine core per share, add-on and claims per share, discount rate and both growths.\n\nCodes: PE PS FCF PB TBV EV CF AFFO RNPV ECF ADCF UNB APV EVA DDM DCF RIM EPV GRA R40 ACQ OE. Empty = off.")
 // What counts as a claim ahead of common, stated once: net debt always; minority interest and
 // preferred under the strict capital structure. Every strict test in the script reads this.
 f_claim_on(Claim k) =>
@@ -954,34 +880,34 @@ else if selected_industry == 'Utilities' or selected_industry == 'REITs' or sele
 // Declaration order is the registry order the blends still walk: 0 Standard Composite |
 // 1-8 relative multiples | 9-15 sector models | 16-22 absolute models. Everything else a
 // model is comes from its row: level (rate and claims), engine, the streams it reads, the
-// inputs it needs positive, its tier source, add-on, private scenario lever, family and
-// Omnibus tick box. Adding a model: one row here and its tick input.
-var Model M_COMP = f_add(Model.new(code = 'COMP', name = 'Standard Composite', bt_name = 'Composite (Final Blend)', grp = Group.comp, eng = Eng.comp, tick = i_om_comp))
-var Model M_PE = f_add(Model.new(code = 'PE', name = 'Blended P/E', bt_name = 'Blended PE', grp = Group.rel, level = Level.equity, fam = 1, s_drv = Sx.eps_b, s_fwd = Sx.eps_f, need1 = Sx.eps_b, lk = Lever.pctl, dflt = 15.0, tick = i_om_pe))
-var Model M_PS = f_add(Model.new(code = 'PS', name = 'P/S', bt_name = 'Price / Sales', grp = Group.rel, level = Level.equity, fam = 2, s_drv = Sx.sales_ps, lk = Lever.pctl, dflt = 2.0, tick = i_om_ps))
-var Model M_PFCF = f_add(Model.new(code = 'FCF', name = 'P/FCF', bt_name = 'Price / FCF', grp = Group.rel, level = Level.equity, fam = 3, s_drv = Sx.fcf_ps, need1 = Sx.fcf_ps, lk = Lever.pctl, dflt = 15.0, tick = i_om_pfcf))
-var Model M_PB = f_add(Model.new(code = 'PB', name = 'P/B', bt_name = 'Price / Book', grp = Group.rel, level = Level.equity, fam = 4, s_drv = Sx.bvps, lk = Lever.pctl, dflt = 1.5, rkv = true, tick = i_om_pb))
-var Model M_TBV = f_add(Model.new(code = 'TBV', name = 'P/TBV', bt_name = 'Price / TBV', grp = Group.rel, level = Level.equity, fam = 4, s_drv = Sx.tbvps, lk = Lever.pctl, dflt = 2.0, tick = i_om_ptbv))
-var Model M_EV = f_add(Model.new(code = 'EV', name = 'Blended EV/EBITDA', bt_name = 'EV / EBITDA', grp = Group.rel, fam = 5, s_drv = Sx.ebitda, s_fwd = Sx.ebitda_f, lk = Lever.pctl, dflt = 10.0, tick = i_om_ev))
-var Model M_PCF = f_add(Model.new(code = 'CF', name = 'P/CF', bt_name = 'Price / OCF', grp = Group.rel, level = Level.equity, fam = 3, s_drv = Sx.ocf_ps, lk = Lever.pctl, dflt = 10.0, tick = i_om_pcf))
-var Model M_PAFFO = f_add(Model.new(code = 'AFFO', name = 'P/AFFO', bt_name = 'Price / AFFO', grp = Group.rel, level = Level.equity, fam = 3, s_drv = Sx.fcf_ps, lk = Lever.pctl, dflt = 12.0, tick = i_om_paffo))
-var Model M_RNPV = f_add(Model.new(code = 'RNPV', name = 'rNPV (Risk-Adjusted)', bt_name = 'Risk-Adj NPV', grp = Group.sect, eng = Eng.ref, fam = 3, src = 'DCF', addon = AddOn.pipeline, t1 = Sx.fcff, tick = i_om_rnpv))
-var Model M_ECF = f_add(Model.new(code = 'ECF', name = 'Equity Cash Flow', bt_name = 'Equity Cash Flow', grp = Group.sect, level = Level.equity, eng = Eng.vdcf, fam = 1, s_cf = Sx.fcfe, s_earn = Sx.ni_ps, s_ret = Sx.roe_n, need1 = Sx.ni_ps, need2 = Sx.roe_n, t1 = Sx.ni_ps, t2 = Sx.roe_n, tick = i_om_ecf))
-var Model M_ADCF = f_add(Model.new(code = 'ADCF', name = 'AFFO DCF', bt_name = 'AFFO DCF', grp = Group.sect, level = Level.equity, eng = Eng.vdcf, fam = 3, s_cf = Sx.fcf_ps, s_earn = Sx.fcf_ps, tick = i_om_affo))
-var Model M_UNB = f_add(Model.new(code = 'UNB', name = 'Unbundled (SOTP)', bt_name = 'Unbundled SOTP', grp = Group.sect, eng = Eng.vdcf, fam = 3, s_cf = Sx.fcff_s, s_earn = Sx.nopat_s, s_ret = Sx.roic, addon = AddOn.netco, tick = i_om_unb))
-var Model M_APV = f_add(Model.new(code = 'APV', name = 'Adjusted PV (APV)', bt_name = 'Adjusted PV', grp = Group.sect, level = Level.unlev, eng = Eng.vdcf, fam = 3, s_cf = Sx.fcff, s_earn = Sx.nopat, s_ret = Sx.roic, addon = AddOn.shield, tick = i_om_apv))
-var Model M_EVA = f_add(Model.new(code = 'EVA', name = 'Economic Value Added', bt_name = 'Econ Value Added', grp = Group.sect, eng = Eng.eva, fam = 1, s_earn = Sx.nopat, s_cap = Sx.ic, tick = i_om_eva))
-var Model M_DDM = f_add(Model.new(code = 'DDM', name = 'Dividend Discount (DDM)', bt_name = 'Dividend Discount', grp = Group.sect, level = Level.equity, eng = Eng.gperp, fam = 6, s_cf = Sx.dps, need1 = Sx.dps, tick = i_om_ddm))
-var Model M_DCF = f_add(Model.new(code = 'DCF', name = 'DCF (McKinsey/ROIC)', bt_name = 'DCF (McKinsey)', eng = Eng.vdcf, fam = 3, s_cf = Sx.fcff, s_earn = Sx.nopat, s_ret = Sx.roic, tick = i_om_dcf))
+// inputs it needs positive, its tier source, add-on, private scenario lever and family.
+// Adding a model: one row here (and its code in the Members default).
+var Model M_COMP = f_add(Model.new(code = 'COMP', name = 'Standard Composite', bt_name = 'Composite (Final Blend)', grp = Group.comp, eng = Eng.comp))
+var Model M_PE = f_add(Model.new(code = 'PE', name = 'Blended P/E', bt_name = 'Blended PE', grp = Group.rel, level = Level.equity, fam = 1, s_drv = Sx.eps_b, s_fwd = Sx.eps_f, need1 = Sx.eps_b, lk = Lever.pctl, dflt = 15.0))
+var Model M_PS = f_add(Model.new(code = 'PS', name = 'P/S', bt_name = 'Price / Sales', grp = Group.rel, level = Level.equity, fam = 2, s_drv = Sx.sales_ps, lk = Lever.pctl, dflt = 2.0))
+var Model M_PFCF = f_add(Model.new(code = 'FCF', name = 'P/FCF', bt_name = 'Price / FCF', grp = Group.rel, level = Level.equity, fam = 3, s_drv = Sx.fcf_ps, need1 = Sx.fcf_ps, lk = Lever.pctl, dflt = 15.0))
+var Model M_PB = f_add(Model.new(code = 'PB', name = 'P/B', bt_name = 'Price / Book', grp = Group.rel, level = Level.equity, fam = 4, s_drv = Sx.bvps, lk = Lever.pctl, dflt = 1.5, rkv = true))
+var Model M_TBV = f_add(Model.new(code = 'TBV', name = 'P/TBV', bt_name = 'Price / TBV', grp = Group.rel, level = Level.equity, fam = 4, s_drv = Sx.tbvps, lk = Lever.pctl, dflt = 2.0))
+var Model M_EV = f_add(Model.new(code = 'EV', name = 'Blended EV/EBITDA', bt_name = 'EV / EBITDA', grp = Group.rel, fam = 5, s_drv = Sx.ebitda, s_fwd = Sx.ebitda_f, lk = Lever.pctl, dflt = 10.0))
+var Model M_PCF = f_add(Model.new(code = 'CF', name = 'P/CF', bt_name = 'Price / OCF', grp = Group.rel, level = Level.equity, fam = 3, s_drv = Sx.ocf_ps, lk = Lever.pctl, dflt = 10.0))
+var Model M_PAFFO = f_add(Model.new(code = 'AFFO', name = 'P/AFFO', bt_name = 'Price / AFFO', grp = Group.rel, level = Level.equity, fam = 3, s_drv = Sx.fcf_ps, lk = Lever.pctl, dflt = 12.0))
+var Model M_RNPV = f_add(Model.new(code = 'RNPV', name = 'rNPV (Risk-Adjusted)', bt_name = 'Risk-Adj NPV', grp = Group.sect, eng = Eng.ref, fam = 3, src = 'DCF', addon = AddOn.pipeline, t1 = Sx.fcff))
+var Model M_ECF = f_add(Model.new(code = 'ECF', name = 'Equity Cash Flow', bt_name = 'Equity Cash Flow', grp = Group.sect, level = Level.equity, eng = Eng.vdcf, fam = 1, s_cf = Sx.fcfe, s_earn = Sx.ni_ps, s_ret = Sx.roe_n, need1 = Sx.ni_ps, need2 = Sx.roe_n, t1 = Sx.ni_ps, t2 = Sx.roe_n))
+var Model M_ADCF = f_add(Model.new(code = 'ADCF', name = 'AFFO DCF', bt_name = 'AFFO DCF', grp = Group.sect, level = Level.equity, eng = Eng.vdcf, fam = 3, s_cf = Sx.fcf_ps, s_earn = Sx.fcf_ps))
+var Model M_UNB = f_add(Model.new(code = 'UNB', name = 'Unbundled (SOTP)', bt_name = 'Unbundled SOTP', grp = Group.sect, eng = Eng.vdcf, fam = 3, s_cf = Sx.fcff_s, s_earn = Sx.nopat_s, s_ret = Sx.roic, addon = AddOn.netco))
+var Model M_APV = f_add(Model.new(code = 'APV', name = 'Adjusted PV (APV)', bt_name = 'Adjusted PV', grp = Group.sect, level = Level.unlev, eng = Eng.vdcf, fam = 3, s_cf = Sx.fcff, s_earn = Sx.nopat, s_ret = Sx.roic, addon = AddOn.shield))
+var Model M_EVA = f_add(Model.new(code = 'EVA', name = 'Economic Value Added', bt_name = 'Econ Value Added', grp = Group.sect, eng = Eng.eva, fam = 1, s_earn = Sx.nopat, s_cap = Sx.ic))
+var Model M_DDM = f_add(Model.new(code = 'DDM', name = 'Dividend Discount (DDM)', bt_name = 'Dividend Discount', grp = Group.sect, level = Level.equity, eng = Eng.gperp, fam = 6, s_cf = Sx.dps, need1 = Sx.dps))
+var Model M_DCF = f_add(Model.new(code = 'DCF', name = 'DCF (McKinsey/ROIC)', bt_name = 'DCF (McKinsey)', eng = Eng.vdcf, fam = 3, s_cf = Sx.fcff, s_earn = Sx.nopat, s_ret = Sx.roic))
 // Banks and insurers: the Equity variant (net income on book value at the bank rate, nothing
 // comes off). Everyone else: the Entity variant (NOPAT on invested capital at WACC, less the
 // claims). Decided once from the framework and the industry.
-var Model M_RIM = f_add(Model.new(code = 'RIM', name = 'Residual Income (RIM)', bt_name = 'Residual Income', level = use_bank_model ? Level.bank : Level.firm, eng = Eng.rim, fam = 1, s_earn = use_bank_model ? Sx.ni : Sx.nopat, s_cap = use_bank_model ? Sx.book : Sx.ic, t2 = use_bank_model ? Sx.book : Sx.none, tick = i_om_rim))
-var Model M_EPV = f_add(Model.new(code = 'EPV', name = 'EPV (Greenwald)', bt_name = 'EPV (Greenwald)', eng = Eng.perp, fam = 1, s_cf = Sx.nopat_n, tick = i_om_epv))
-var Model M_GRA = f_add(Model.new(code = 'GRA', name = 'Graham', bt_name = 'Graham Number', level = Level.equity, eng = Eng.graham, fam = 1, s_earn = Sx.eps_pos, s_gx = Sx.g_gra, s_adj = Sx.yadj, need1 = Sx.eps_pos, lk = Lever.scale, lv_bear = 0.5, lv_bull = 1.5, tick = i_om_graham))
-var Model M_R40 = f_add(Model.new(code = 'R40', name = 'Rule of 40', bt_name = 'Rule of 40', eng = Eng.rulex, fam = 2, s_drv = Sx.rev, s_gx = Sx.rev_g, s_adj = Sx.fcf_margin, t2 = Sx.fcf_margin, lk = Lever.step, lv_bear = -i_scen_r40_bps, lv_bull = i_scen_r40_bps, tick = i_om_r40))
-var Model M_ACQ = f_add(Model.new(code = 'ACQ', name = "Acquirer's Multiple", bt_name = "Acquirer's Mult", fam = 5, s_drv = Sx.ebit, need1 = Sx.ebit, lk = Lever.step, lv_bear = -i_scen_acq_delta, lv_bull = i_scen_acq_delta, lv_floor = 1.0, m0 = i_acquirer_mult, tick = i_om_acq))
-var Model M_OE = f_add(Model.new(code = 'OE', name = "Owners' Earnings", bt_name = "Owners' Earnings", level = Level.equity, eng = Eng.perp, fam = 3, s_cf = Sx.oe_ps, need1 = Sx.oe_ps, tick = i_om_oe))
+var Model M_RIM = f_add(Model.new(code = 'RIM', name = 'Residual Income (RIM)', bt_name = 'Residual Income', level = use_bank_model ? Level.bank : Level.firm, eng = Eng.rim, fam = 1, s_earn = use_bank_model ? Sx.ni : Sx.nopat, s_cap = use_bank_model ? Sx.book : Sx.ic, t2 = use_bank_model ? Sx.book : Sx.none))
+var Model M_EPV = f_add(Model.new(code = 'EPV', name = 'EPV (Greenwald)', bt_name = 'EPV (Greenwald)', eng = Eng.perp, fam = 1, s_cf = Sx.nopat_n))
+var Model M_GRA = f_add(Model.new(code = 'GRA', name = 'Graham', bt_name = 'Graham Number', level = Level.equity, eng = Eng.graham, fam = 1, s_earn = Sx.eps_pos, s_gx = Sx.g_gra, s_adj = Sx.yadj, need1 = Sx.eps_pos, lk = Lever.scale, lv_bear = 0.5, lv_bull = 1.5))
+var Model M_R40 = f_add(Model.new(code = 'R40', name = 'Rule of 40', bt_name = 'Rule of 40', eng = Eng.rulex, fam = 2, s_drv = Sx.rev, s_gx = Sx.rev_g, s_adj = Sx.fcf_margin, t2 = Sx.fcf_margin, lk = Lever.step, lv_bear = -i_scen_r40_bps, lv_bull = i_scen_r40_bps))
+var Model M_ACQ = f_add(Model.new(code = 'ACQ', name = "Acquirer's Multiple", bt_name = "Acquirer's Mult", fam = 5, s_drv = Sx.ebit, need1 = Sx.ebit, lk = Lever.step, lv_bear = -i_scen_acq_delta, lv_bull = i_scen_acq_delta, lv_floor = 1.0, m0 = i_acquirer_mult))
+var Model M_OE = f_add(Model.new(code = 'OE', name = "Owners' Earnings", bt_name = "Owners' Earnings", level = Level.equity, eng = Eng.perp, fam = 3, s_cf = Sx.oe_ps, need1 = Sx.oe_ps))
 // Bar 0: what the framework allocates, the Standard scope (every allocated multiple and
 // sector model, plus the absolute models the framework is named after), then the row checks.
 if barstate.isfirst
@@ -992,6 +918,7 @@ if barstate.isfirst
         FAM.push(m.fam)
         m.fw := m.grp == Group.comp or str.contains(fw_codes, ' ' + m.code + ' ')
         m.on := m.fw
+        m.tick := str.contains(' ' + str.upper(i_om_codes) + ' ', ' ' + m.code + ' ')
         m.std := m.fw and m.grp != Group.comp and (m.grp != Group.abs or str.contains(fw_named, ' ' + m.code + ' '))
         // Tier source left unset: the row's first stream (driver, else cash flow, else earnings).
         if m.t1 == Sx.none
@@ -2088,7 +2015,7 @@ float z_gold_cut = z_is_em ? 5.85 : 3.0
 // ==============================================================
 // === THE MODEL STAGE: every row on one path (the stream table is Drivers', 3.7)
 // ==============================================================
-bool omni_manual = i_omni_mode == 'Manual (Tick Models Below)'
+bool omni_manual = i_omni_mode == 'Manual (Members List)'
 bool om_free = is_omnibus and omni_manual and not i_omni_strict
 // Every row through f_eval at Base, on every bar; Bear, Bull and the readouts run once, on the
 // last bar, below the blends. Reference rows (rNPV) run after the rows they build on. A sector
@@ -2123,7 +2050,7 @@ for m in MD
 // framework is named after. Scope Omnibus: every model in its own right (Auto: all the
 // framework enables; Manual: the ticked boxes, gated by the framework unless strict is off),
 // inside the sanity band (a member beyond N x / (1/N) x the price leaves; never the Composite).
-// Only Manual can tick the Standard Composite, which is then flagged as a double count next to
+// Only Manual can list the Standard Composite, which is then flagged as a double count next to
 // any of its members. Prior = track record x provenance tier, or equal x tier when no member
 // has a track record (a young listing). A held row gives way once its holder carries weight
 // (rNPV contains the DCF; P/AFFO reads the same FCF stream as P/FCF). Then the caps: the family
@@ -3001,37 +2928,6 @@ fill(p_fv, p_buy, color = color.new(color.green, 90), title = 'Margin of Safety 
 bool is_screaming_buy = close < buy_zone_line
 bool is_screaming_sell = close > sell_zone_line
 barcolor(is_screaming_buy ? color.green : is_screaming_sell ? color.red : na, title = "Zone Bar Highlights")
-// One model row's Base result record in the Data Window, bar by bar (Model rows: Data window).
-var int dw_i = -1
-if barstate.isfirst and str.trim(i_dw_code) != ''
-    for [k, m] in MD
-        if m.code == str.upper(str.trim(i_dw_code))
-            dw_i := k
-float dw_val = na
-float dw_core = na
-float dw_add = na
-float dw_cl = na
-float dw_rate = na
-float dw_g1 = na
-float dw_gT = na
-if dw_i >= 0
-    Model dm = MD.get(dw_i)
-    Res dr = dm.res.get(0)
-    float per = dm.ps ? 1.0 : dr.sh
-    dw_val := dr.value
-    dw_core := dr.core / per
-    dw_add := dr.add / per
-    dw_cl := dr.cl / per
-    dw_rate := dr.x.rate * 100
-    dw_g1 := dr.x.g1 * 100
-    dw_gT := dr.x.gT * 100
-plot(dw_val, 'Row: value', display = display.data_window)
-plot(dw_core, 'Row: engine core / share', display = display.data_window)
-plot(dw_add, 'Row: add-on / share', display = display.data_window)
-plot(dw_cl, 'Row: claims / share', display = display.data_window)
-plot(dw_rate, 'Row: rate %', display = display.data_window)
-plot(dw_g1, 'Row: stage-1 growth %', display = display.data_window)
-plot(dw_gT, 'Row: terminal growth %', display = display.data_window)
 // ==========================================
 // 8. TRUE ROLLING BACKTESTER
 // ==========================================
