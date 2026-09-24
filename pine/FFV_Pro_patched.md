@@ -63,10 +63,6 @@ f_ratio_stats(array<float> arr, bool use_mean, float dflt, float lo_p, float hi_
             c_lo := f_pct_sorted(s, lo_p)
             c_hi := f_pct_sorted(s, hi_p)
     [nz(ct, dflt), na(ct) or n < 4, c_lo, c_hi]
-// Previous model stage (the shadow check in section 6 calls it; delete with the check):
-// one multiple x one driver, price form, or EV form (driver x multiple - net debt) / shares.
-f_apply(float drv, float mult, bool is_ev, float nd, float sh) =>
-    na(drv) or drv <= 0 or na(mult) ? na : is_ev ? (drv * mult - nd) / sh : drv * mult
 // Push a positive value (capped at cap), keeping at most max_n. Non-positive or na
 // values are skipped, or pushed as na when keep_na: [FIX ALIGN] every array read
 // pairwise against hist_px must keep index i meaning "the same quarter".
@@ -108,102 +104,6 @@ f_calculate_cagr_from_series(series_data, years) =>
     if not na(current_val) and not na(past_val) and past_val > 0 and current_val > 0
         cagr := math.pow(current_val / past_val, 1.0 / years) - 1
     cagr
-// ---- PREVIOUS MODEL STAGE: only the shadow check in section 6 calls the functions from
-// here to f_calculate_eva; delete them with the check. The engines are in the model stage. ----
-f_calculate_rim(nopat_base, invested_capital, shares, net_debt, wacc, growth_rate, terminal_growth, projection_years) =>
-    float iv_rim = na
-    float adjusted_term_growth = math.min(terminal_growth, wacc - 0.015)
-    if not na(nopat_base) and not na(invested_capital) and invested_capital > 0 and not na(wacc) and not na(terminal_growth) and wacc > adjusted_term_growth
-        capital_charge_base = invested_capital * wacc
-        economic_profit_base = nopat_base - capital_charge_base
-        float total_discounted_ep = 0.0
-        float projected_ep = economic_profit_base
-        for i = 1 to projection_years by 1
-            // Stage-1 growth fades linearly to terminal, as in the DCF.
-            float w = i / (projection_years + 1.0)
-            projected_ep := projected_ep * (1 + growth_rate * (1 - w) + adjusted_term_growth * w)
-            total_discounted_ep := total_discounted_ep + projected_ep / math.pow(1 + wacc, i)
-        terminal_value_ep = projected_ep * (1 + adjusted_term_growth) / (wacc - adjusted_term_growth)
-        discounted_terminal_value_ep = terminal_value_ep / math.pow(1 + wacc, projection_years)
-        enterprise_value = invested_capital + total_discounted_ep + discounted_terminal_value_ep
-        equity_value = enterprise_value - net_debt
-        iv_rim := equity_value / shares
-    iv_rim
-// Value-driver DCF: FCF = NOPAT x (1 - g / RONIC). Year by year, FCF moves from today's
-// (grown with NOPAT) to what is left after the reinvestment NEXT year's growth needs (this
-// year's investment funds it), so heavy-investment years are not compounded forward and
-// the explicit years meet the terminal value without a jump. Written on the growth path,
-// not on FCF / NOPAT, so NOPAT <= 0 converges the same way (no jump at zero NOPAT).
-// na ROIC: the driver is already a free cash flow (no reinvestment is charged).
-f_calculate_dcf_value_driver_extended(fcf_per_share, nopat_per_share, roic_current, wacc, growth_stage1, growth_term, years_stage1) =>
-    float pv_explicit = 0.0
-    float cum = 1.0
-    float adjusted_growth_term = math.min(growth_term, wacc - 0.015)
-    // Return on new capital: today's ROIC fading to a terminal ROIC capped at 20%, neither
-    // below the discount rate (a high-rate market must not turn every unit of growth into
-    // value destruction). The cap binds at the terminal, not in the high-growth years.
-    float roic_0 = math.max(roic_current, wacc)
-    float terminal_roic = math.max(math.min(roic_current, 0.20), wacc)
-    for i = 1 to years_stage1 by 1
-        float weight = i / (years_stage1 + 1.0)
-        float year_growth = growth_stage1 * (1.0 - weight) + adjusted_growth_term * weight
-        float next_w = (i + 1) / (years_stage1 + 1.0)
-        float next_growth = i < years_stage1 ? growth_stage1 * (1.0 - next_w) + adjusted_growth_term * next_w : adjusted_growth_term
-        float wc = i / (years_stage1 * 1.0)
-        cum *= 1 + year_growth
-        float conv_target = na(roic_current) ? 1.0 : 1 - next_growth / (roic_0 * (1 - wc) + terminal_roic * wc)
-        float current_fcf = fcf_per_share * cum * (1 - wc) + nopat_per_share * cum * conv_target * wc
-        pv_explicit := pv_explicit + current_fcf / math.pow(1 + wacc, i)
-    float current_nopat = nopat_per_share * cum
-    float reinvestment_rate_term = na(roic_current) ? 0.0 : terminal_roic > 0 ? adjusted_growth_term / terminal_roic : 0.0
-    float terminal_nopat = current_nopat * (1 + adjusted_growth_term)
-    float terminal_fcf = terminal_nopat * (1 - reinvestment_rate_term)
-    float tv_value = terminal_fcf / (wacc - adjusted_growth_term)
-    float pv_tv = tv_value / math.pow(1 + wacc, years_stage1)
-    float total_value = pv_explicit + pv_tv
-    float implied_exit_multiple = current_nopat > 0 ? tv_value / current_nopat : na
-    [total_value, implied_exit_multiple]
-f_calculate_rule_of_x_fv(rev_growth, margin, total_revenue, net_debt, shares) =>
-    float rule_40_score = (rev_growth + margin) * 100
-    float rule_x_score = (rev_growth * 2.0 + margin) * 100
-    // Continuous in both scores: 1x + 0.25x per Rule-of-40 point (floor 1.5x); the Rule-of-X
-    // multiple (12x + 0.3x per point above 65, never below the base) phases in from 55 to 65.
-    float base_mult = math.max(1.0 + rule_40_score * 0.25, 1.5)
-    float x_mult = math.max(12.0 + (rule_x_score - 65) * 0.3, base_mult)
-    float ramp = math.min(math.max((rule_x_score - 55) / 10.0, 0.0), 1.0)
-    float fair_multiple = math.min(base_mult + (x_mult - base_mult) * ramp, 25.0)
-    float target_ev = fair_multiple * total_revenue
-    float target_equity_value = target_ev - net_debt
-    shares > 0 ? target_equity_value / shares : na
-f_calculate_rnpv_sotp(base_dcf_per_share, rnd_annual, shares) =>
-    float capitalized_pipeline = rnd_annual * 5.0
-    float risk_adjusted_pipeline_val = shares > 0 ? (capitalized_pipeline * 0.15) / shares : 0
-    base_dcf_per_share + risk_adjusted_pipeline_val
-// A regulated asset is worth its asset base scaled by the ratio of the return
-// the regulator ALLOWS to the return investors REQUIRE:
-// EV = RAB * (allowed_return - g) / (wacc - g)
-f_calculate_rab_model(rab_base, allowed_return, wacc, growth, net_debt, shares) =>
-    float rab_ev = na
-    if not na(rab_base) and rab_base > 0 and not na(wacc) and wacc > 0
-        // Keep g strictly below wacc or the perpetuity diverges.
-        float g = math.min(nz(growth, 0.0), wacc - 0.005)
-        float r = not na(allowed_return) and allowed_return > 0 ? allowed_return : wacc
-        float rab_multiple = (r - g) / (wacc - g)
-        rab_multiple := math.max(math.min(rab_multiple, 2.0), 0.5)
-        rab_ev := rab_base * rab_multiple
-    shares > 0 and not na(rab_ev) ? (rab_ev - net_debt) / shares : na
-// Gordon growth DDM on the long-run terminal rate, held 1.5pt under the rate as in every
-// other perpetuity here.
-f_calculate_ddm(dps, coe, terminal_growth) =>
-    float g = math.min(nz(terminal_growth, 0.02), coe - 0.015)
-    not na(dps) and dps > 0 and coe > g ? (dps * (1 + g)) / (coe - g) : na
-// [FIX EVA] Invested capital + PV(EVA) is FIRM value; subtract net debt for
-// equity. Growth is the terminal rate, held 1.5pt under WACC like the DCF's.
-f_calculate_eva(nopat, invested_capital, wacc, g_term, net_debt, shares) =>
-    float g = math.min(g_term, wacc - 0.015)
-    float current_eva = nopat - (invested_capital * wacc)
-    float pv_eva = (current_eva * (1 + g)) / (wacc - g)
-    shares > 0 ? (invested_capital + pv_eva - nz(net_debt)) / shares : na
 // ==============================================================
 // === UNIFIED MODEL WEIGHT (predictive, scale-free) ============
 // ==============================================================
@@ -998,7 +898,6 @@ i_bt_view = input.string('Matrix (all periods)', 'Backtest View', options = ['Ma
 i_bt_min_n = input.int(5, 'Minimum trades for a valid cell', minval = 1, maxval = 50, group = group_oos)
 i_bt_drop_straddle = input.bool(true, 'Exclude trades that straddle a period boundary', group = group_oos, tooltip = 'A trade entered late in P1 and exited deep in P2 would otherwise credit all its P2 return to P1.')
 group_rows = 'Model rows: check and inspect'
-i_shadow = input.bool(true, 'Shadow check: run the previous model stage alongside', group = group_rows, tooltip = 'Runs the model stage as it was before the model rows, from the same inputs, and compares every row with it: Base on every bar, Bear and Bull on the last bar, the tiers and the DCF exit multiple. The result is the "Shadow check" row of the table.\n\nTurn it off once it reads MATCH on your symbols: it roughly doubles the model work per bar.')
 i_dw_code = input.string('', 'Data window: model code', group = group_rows, tooltip = "Plots one model row's Base result record in the Data Window, bar by bar: value, engine core per share, add-on and claims per share, discount rate and both growths.\n\nCodes: PE PS FCF PB TBV EV CF AFFO RNPV ECF ADCF UNB APV EVA DDM DCF RIM EPV GRA R40 ACQ OE. Empty = off.")
 // What counts as a claim ahead of common, stated once: net debt always; minority interest and
 // preferred under the strict capital structure. Every strict test in the script reads this.
@@ -1762,8 +1661,6 @@ float calc_crp = i_auto_calc_erp_crp ? auto_crp : i_crp_manual
 sales_ps_ttm = shares_out_latest > 0 ? total_revenue_ttm / shares_out_latest : na
 fcf_ps_ttm = shares_out_latest > 0 ? fcf_ttm / shares_out_latest : na
 ocf_ps_ttm = shares_out_latest > 0 ? ocf_ttm / shares_out_latest : na
-// AFFO proxy = FCF (no AFFO field): P/AFFO and AFFO DCF read the FCF per share stream.
-affo_ps_ttm = fcf_ps_ttm
 book_value = f_claim_on(Claim.minority) ? parent_equity : total_equity_latest
 // [CLEAN SURPLUS] Roll book value forward between reports: + earnings - dividends
 // accrued since the last report (Ohlson 1995), capped at half a year.
@@ -2136,134 +2033,6 @@ for m in MD
     m.on := m.fw and (m.grp != Group.rel or m.need1 == Sx.none or D.s.get(m.need1) > 0)
     // 🛡️ ZERO-BOUND: [FIX NEG] a negative or na base value never enters any blend.
     m.fv := m.fv > 0 ? m.fv : na
-// ==============================================================
-// === SHADOW CHECK (this version only): the previous model stage alongside
-// ==============================================================
-// The model stage as it was before the rows, run from the same inputs into SHM (scenario x
-// row) and compared with the rows: Base on every bar, Bear and Bull on the last bar, each
-// within 1e-9 of the larger of the value and the price, na only against na; the tiers and
-// the DCF's exit multiple too. Delete this block, f_apply and the f_calculate_* functions
-// once it reads MATCH.
-var matrix<float> SHM = matrix.new<float>(3, MD.size(), na)
-var int sh_n = 0
-var int sh_bad = 0
-var float sh_max = 0.0
-var string sh_first = ''
-float sh_bar = na
-if i_shadow
-    SHM.fill(na)
-    float claims_o = net_debt_robust + (i_strict_cap ? nz(minority_fq) + pref_equity : 0.0)
-    float sh_ev = math.max(shares_out_latest, 1)
-    array<float> drvs = array.from(earnings_base, sales_ps_ttm, fcf_ps_ttm, bvps_ttm, tbvps_ttm, ebitda_ttm, ocf_ps_ttm, affo_ps_ttm)
-    for k = 1 to 8
-        Model m = MD.get(k)
-        float dk = array.get(drvs, k - 1)
-        float dfk = k == 1 ? eps_f1_proj : k == 6 ? est_ebitda_fwd : na
-        for s = 0 to 2
-            float mu = f_sc(s, m.avg, m.plo, m.phi)
-            SHM.set(s, k, f_blend2(f_apply(dk, mu, k == 6, claims_o, sh_ev), f_apply(dfk, mu, k == 6, claims_o, sh_ev) / fwd_disc))
-    float wacc_bear = wacc_base + i_scen_wacc_bps
-    float wacc_bull = math.max(wacc_base - i_scen_wacc_bps, 0.02)
-    float coe_bear = cost_of_equity + i_scen_wacc_bps
-    float coe_bull = math.max(cost_of_equity - i_scen_wacc_bps, 0.02)
-    float tg_bear = math.max(final_terminal_growth - i_scen_g_bps, 0.0)
-    float tg_bull = final_terminal_growth + i_scen_g_bps
-    // [FIX SCEN-G] Bear/Bull also move stage-1 growth.
-    float g_bear = math.max(final_growth_rate - i_scen_growth_bps, -0.05)
-    float g_bull = math.min(final_growth_rate + i_scen_growth_bps, dynamic_growth_cap)
-    // RIM inputs: the Equity model for banks and insurers, the Entity model for the rest.
-    float rim_nopat_proxy = use_bank_model ? net_income_ttm : nopat_adjusted
-    float rim_capital_proxy = use_bank_model ? book_value : invested_capital_adj
-    float rim_discount_proxy = use_bank_model ? math.min(cost_of_equity, 0.15) : wacc_base
-    float rim_debt_proxy = use_bank_model ? 0.0 : claims_o
-    float nopat_ps = nopat_adjusted / shares_out_latest
-    float fcff_ps = fcff / shares_out_latest
-    float claims_ps_o = claims_o / shares_out_latest
-    bool acq_ok = ebit_ttm > 0 and shares_out_latest > 0
-    float sh_iem = na
-    for s = 0 to 2
-        float wc = f_sc(s, wacc_base, wacc_bear, wacc_bull)
-        float ce = f_sc(s, cost_of_equity, coe_bear, coe_bull)
-        float gs = f_sc(s, final_growth_rate, g_bear, g_bull)
-        float tg = f_sc(s, final_terminal_growth, tg_bear, tg_bull)
-        // Extended value-driver DCF (McKinsey) on unlevered FCF, less the claims; the base case
-        // also reports the implied exit multiple. rNPV adds the pipeline to this same DCF.
-        [dcf_v, dcf_m] = f_calculate_dcf_value_driver_extended(fcff_ps, nopat_ps, roic_adj, wc, gs, tg, i_dcf_stage1_yrs)
-        float dcf_eq = dcf_v - claims_ps_o
-        SHM.set(s, M_DCF.idx, dcf_eq)
-        if s == 0
-            sh_iem := dcf_m
-        // --- Sector models ---
-        if M_RNPV.fw or (om_free and i_om_rnpv)
-            SHM.set(s, M_RNPV.idx, f_calculate_rnpv_sotp(dcf_eq, nz(rnd_ttm), shares_out_latest))
-        if M_ECF.fw or (om_free and i_om_ecf)
-            // FCFE = NI less the equity reinvestment growth needs (g / ROE): the value driver on
-            // the equity side, at CoE. A bank borrows as raw material, so net borrowing is not a
-            // cash flow to its shareholders; the equity it must retain to grow is.
-            [ec_v, ec_m] = f_calculate_dcf_value_driver_extended(ni_ps * (1 - gs / roe_n), ni_ps, roe_n, ce, gs, tg, i_dcf_stage1_yrs)
-            SHM.set(s, M_ECF.idx, ni_ps > 0 and roe_n > 0 ? ec_v : na)
-        if M_ADCF.fw or (om_free and i_om_affo)
-            // FCF is already after capex: the terminal value takes no second reinvestment charge.
-            [af_v, af_m] = f_calculate_dcf_value_driver_extended(affo_ps_ttm, affo_ps_ttm, float(na), ce, gs, tg, i_dcf_stage1_yrs)
-            SHM.set(s, M_ADCF.idx, af_v)
-        if M_UNB.fw or (om_free and i_om_unb)
-            float netco = f_calculate_rab_model(netco_rab, i_rab_allowed_return, wc, tg, 0.0, shares_out_latest)
-            [sv_v, sv_m] = f_calculate_dcf_value_driver_extended(fcff_ps * (1 - netco_sh), nopat_ps * (1 - netco_sh), roic_adj, wc, gs, tg, i_dcf_stage1_yrs)
-            SHM.set(s, M_UNB.idx, netco + sv_v - claims_ps_o)
-        if M_APV.fw or (om_free and i_om_apv)
-            // Unlevered FCF through the same two-stage DCF at the unlevered cost of capital, plus
-            // the tax shield on permanent debt (debt x tax), less the claims ahead of common.
-            [ap_v, ap_m] = f_calculate_dcf_value_driver_extended(fcff_ps, nopat_ps, roic_adj, f_sc(s, unlevered_coe, unlevered_coe + i_scen_wacc_bps, math.max(unlevered_coe - i_scen_wacc_bps, 0.02)), gs, tg, i_dcf_stage1_yrs)
-            SHM.set(s, M_APV.idx, ap_v + nz(total_debt_latest) * effective_tax / shares_out_latest - claims_ps_o)
-        if M_EVA.fw or (om_free and i_om_eva)
-            SHM.set(s, M_EVA.idx, f_calculate_eva(nopat_adjusted, invested_capital_adj, wc, tg, claims_o, shares_out_latest))
-        if M_DDM.fw or (om_free and i_om_ddm)
-            SHM.set(s, M_DDM.idx, f_calculate_ddm(div_per_share_ttm, ce, tg))
-        // --- Absolute models (the DCF is above) ---
-        SHM.set(s, M_RIM.idx, f_calculate_rim(rim_nopat_proxy, rim_capital_proxy, shares_out_latest, rim_debt_proxy, f_sc(s, rim_discount_proxy, rim_discount_proxy + i_scen_wacc_bps, math.max(rim_discount_proxy - i_scen_wacc_bps, 0.02)), gs, tg, i_iv_projection_period))
-        // EPV (Greenwald): no-growth perpetuity of NORMALISED NOPAT, less the claims.
-        SHM.set(s, M_EPV.idx, (nopat_norm / wc - claims_o) / shares_out_latest)
-        // Graham: Bear/Bull halve / add half the growth term.
-        SHM.set(s, M_GRA.idx, base_eps * (8.5 + 2 * (graham_g * f_sc(s, 1.0, 0.5, 1.5)) * 100) * graham_yield_adj)
-        // Rule of 40 needs a year-ago revenue: no guessed growth (the old fallback was 10%).
-        // Bear = growth less the shift, not floored at 0: the floor lifted a shrinking firm's
-        // Bear case above its Base.
-        SHM.set(s, M_R40.idx, na(rev_growth) ? na : f_calculate_rule_of_x_fv(f_sc(s, rev_growth, rev_growth - i_scen_r40_bps, rev_growth + i_scen_r40_bps), true_fcf_margin_ttm, total_revenue_ttm, claims_o, shares_out_latest))
-        // 🌟 THE ACQUIRER'S MULTIPLE (EV / EBIT): Bear/Bull move the target multiple.
-        if acq_ok
-            SHM.set(s, M_ACQ.idx, (ebit_ttm * f_sc(s, i_acquirer_mult, math.max(i_acquirer_mult - i_scen_acq_delta, 1.0), i_acquirer_mult + i_scen_acq_delta) - claims_o) / shares_out_latest)
-        // Owners' earnings are after interest (an equity cash flow): no-growth perpetuity at CoE.
-        if oe_ok
-            SHM.set(s, M_OE.idx, oe_per_share / ce)
-    array<int> tiers_o = array.from(3, t_eps, t_rev, t_ocf, t_equity, t_equity, t_ebitda, t_cfo, t_ocf, t_ocf, math.min(t_ni, t_equity), t_ocf, t_ocf, t_ocf, t_ebit, stale_cap, t_ocf, use_bank_model ? math.min(t_ni, t_equity) : t_ebit, t_ebit, t_eps, math.min(t_rev, t_ocf), t_ebit, t_ocf)
-    string sh_day = str.format_time(time, 'yyyy-MM-dd')
-    float bar_max = 0.0
-    for [k, m] in MD
-        if m.eng != Eng.comp
-            for s = 0 to n_sc - 1
-                float o = SHM.get(s, k)
-                o := s == 0 and not (o > 0) ? na : o
-                float n = s == 0 ? m.fv : s == 1 ? m.lo : m.hi
-                float rel = na(o) or na(n) ? na : math.abs(n - o) / math.max(math.abs(o), close)
-                bool same = na(o) ? na(n) : not na(n) and rel <= 1e-9
-                sh_n += 1
-                bar_max := math.max(bar_max, nz(rel))
-                if not same
-                    sh_bad += 1
-                    if sh_first == ''
-                        sh_first := m.code + ' ' + (s == 0 ? 'Base' : s == 1 ? 'Bear' : 'Bull') + ' on ' + sh_day + ': previous ' + str.tostring(o) + ', rows ' + str.tostring(n)
-        if m.tier != array.get(tiers_o, k)
-            sh_bad += 1
-            if sh_first == ''
-                sh_first := m.code + ' tier on ' + sh_day + ': previous ' + str.tostring(array.get(tiers_o, k)) + ', rows ' + str.tostring(m.tier)
-    bool iem_same = na(sh_iem) ? na(implied_exit_multiple) : not na(implied_exit_multiple) and math.abs(implied_exit_multiple - sh_iem) <= 1e-9 * math.max(math.abs(sh_iem), 1.0)
-    sh_n += 1
-    if not iem_same
-        sh_bad += 1
-        if sh_first == ''
-            sh_first := 'DCF exit multiple on ' + sh_day + ': previous ' + str.tostring(sh_iem) + ', rows ' + str.tostring(implied_exit_multiple)
-    sh_max := math.max(sh_max, bar_max)
-    sh_bar := bar_max
 // ==============================================================
 // === STANDARD BLEND: multiples + sector models + named absolute =
 // ==============================================================
@@ -3005,14 +2774,6 @@ f_det_health2(HealthView h, int r0) =>
             f_row4(row_idx, array.get(qnm, j), j == 2 ? '(Net Income - Operating Cash Flow) / Total Assets.\n\nSloan (1996) is a RETURNS anomaly, not a fraud test. Beneish M-Score in the Z+M row is the manipulation model.' : '', array.get(qvl, j), array.get(qtg, j), f_qword(j, p), c1 = p ? color.green : j == 3 ? color_text : color.red, c3 = color.white, b3 = p ? color_under : color_over)
             row_idx += 1
     row_idx
-// Shadow check result (section 6): how many values were compared, the largest relative
-// difference, and the first mismatch.
-f_shadow_row(int r0) =>
-    int row_idx = r0
-    string mx = sh_max <= 0 ? '0' : '1e' + str.tostring(math.floor(math.log10(sh_max)))
-    string tt = 'The previous model stage runs alongside the model rows from the same inputs: Base on every bar, Bear and Bull on the last bar, plus the tiers and the DCF exit multiple. A value matches within 1e-9 of the larger of itself and the price; na matches only na.\n\nCompared: ' + str.tostring(sh_n) + '. Largest relative difference: ' + mx + '.' + (sh_bad == 0 ? '' : '\nFirst mismatch: ' + sh_first)
-    f_row4(row_idx, 'Shadow check', tt, str.tostring(sh_n) + ' compared', 'max diff ' + mx, sh_bad == 0 ? 'MATCH' : str.tostring(sh_bad) + ' DIFF', c3 = color.white, b3 = sh_bad == 0 ? color_under : color_over, stt = tt)
-    row_idx + 1
 if barstate.islast
     StreetView sv = StreetView.new()
     if i_show_street
@@ -3021,8 +2782,6 @@ if barstate.islast
     int r_ = f_tbl_head()
     r_ := f_sum_val(sv, r_)
     r_ := f_sum_health(hv, r_)
-    if i_shadow
-        r_ := f_shadow_row(r_)
     bool all_ = i_detail == 'Everything'
     if all_ or i_detail == 'Models'
         r_ := f_det_models(r_)
@@ -3079,7 +2838,6 @@ plot(dw_cl, 'Row: claims / share', display = display.data_window)
 plot(dw_rate, 'Row: rate %', display = display.data_window)
 plot(dw_g1, 'Row: stage-1 growth %', display = display.data_window)
 plot(dw_gT, 'Row: terminal growth %', display = display.data_window)
-plot(sh_bar, 'Shadow: largest relative difference', display = display.data_window)
 // ==========================================
 // 8. TRUE ROLLING BACKTESTER
 // ==========================================
@@ -3380,4 +3138,5 @@ f_bt_table() =>
     true
 if barstate.islast and i_show_bt
     f_bt_table()
+
 ```
