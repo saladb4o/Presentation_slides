@@ -645,6 +645,10 @@ f_eval(Model m, Drv d, Claims c, Pos p, int k) =>
             r.value := f_blend2(r.spot, r.fwd)
     r.why := not ok ? 'needs positive ' + str.tostring(d.s.get(m.need1) > 0 ? m.need2 : m.need1) : not na(r.value) ? '' : m.eng == Eng.mult and not (x.drv > 0) ? 'needs positive ' + str.tostring(m.s_drv) : 'inputs missing'
     r.value
+// A row's VIEW: 0 own history (a multiple of the ticker's own past), 1 a rule (Graham, Rule
+// of 40, Acquirer's), 2 intrinsic (perpetuities, growth paths, excess returns).
+f_view(Model m) =>
+    m.lk == Lever.pctl ? 0 : m.lk == Lever.scale or m.lk == Lever.step ? 1 : 2
 f_stier(Drv d, Sx s) =>
     s == Sx.none ? 3 : nz(d.t.get(s), 3)
 // Provenance tier of a row: the worse of its tier sources' tiers.
@@ -788,6 +792,7 @@ group_calc = 'Calculation Parameters'
 i_weighting_algo = input.string('IVW (Error Variance)', 'Weighting Algorithm', options = ['IVW (Error Variance)', 'SMAPE (Symmetric Error)', 'MALE (Log Error)', 'WMAPE (Weighted Error)', 'RMSLE (Root Mean Sq Log)'], group = group_calc, tooltip = 'Every model is scored on how well its stored fair value predicted the price N quarters later (see horizon below).\nIVW: inverse mean squared log error.\nSMAPE/MALE/WMAPE/RMSLE: inverse of that error metric.')
 i_w_horizon = input.int(4, 'Weighting: forecast horizon (quarters)', minval = 0, maxval = 8, group = group_calc, tooltip = 'Each model is scored on how well its fair value at quarter t predicted the price at t + N. 0 = same-quarter fit.')
 i_blend_mode = input.string('Standard (Relative + Sector)', 'Composite Blend Mode', options = ['Standard (Relative + Sector)', 'Omnibus (All Available Models)'], group = group_calc, tooltip = 'Standard: blends the relative multiples, the sector-specific models and the absolute models a framework is named after (Technology: DCF, RIM and Rule of 40; Financials: RIM). The other absolute models still render in the table for reference.\n\nOmnibus: blends every model the Valuation Framework enables (multiples, sector and absolute models), each weighted on its own track record.')
+i_view_cap = input.float(100, 'Cap own-history multiples at (% of the blend)', minval = 20, maxval = 100, step = 5, group = group_calc, tooltip = "A second cap on top of the family cap, for Standard and Omnibus alike: the own-history multiples (P/E, P/S, P/FCF, P/B, P/TBV, EV/EBITDA, P/CF, P/AFFO) may hold at most this share of the blend. Their weights are scaled down together, and the family cap is re-applied, so both caps hold. 100 = off (default). The table's view mix shows the share today.") / 100
 bool is_omnibus = i_blend_mode == 'Omnibus (All Available Models)'
 // ==============================================================
 // === OMNIBUS MEMBERSHIP (only read when Blend Mode = Omnibus) ==
@@ -1409,12 +1414,12 @@ CK.step(is_new_quarter, fin_changed, bpy)
 // solver's carry ratios | REPORT singles: raw revenue, assets and net PPE (the sanity and capex
 // rules read the requested values), R&D, EPS as released (CAPE), the F-score ratios, then EBIT,
 // revenue, assets, EBITDA, debt, receivables and COGS as solved | RELEASE: parent equity, ROE,
-// operating profitability | CLOSE: price, the value shown, then one column per row
+// operating profitability | CLOSE: price, the value shown (and on the release bar), then one column per row
 // for its fair value and one for its multiple observation.
 int Q_FLOW = 0, int Q_RAT = 14, int Q_RV0 = 35, int Q_AS0 = 36, int Q_PN0 = 37, int Q_RND = 38, int Q_EPS0 = 39
 int Q_ROA = 40, int Q_CR = 41, int Q_LEV = 42, int Q_GM = 43, int Q_AT = 44, int Q_SH = 45, int Q_EBIT = 46
 int Q_REV = 47, int Q_AS = 48, int Q_EBITDA = 49, int Q_DEBT = 50, int Q_REC = 51, int Q_COGS = 52
-int Q_PEQ = 53, int Q_ROE = 54, int Q_OP = 55, int Q_PX = 56, int Q_FFV = 57, int Q_FV = 58
+int Q_PEQ = 53, int Q_ROE = 54, int Q_OP = 55, int Q_PX = 56, int Q_FFV = 57, int Q_FREL = 58, int Q_FV = 59
 int Q_MULT = Q_FV + MD.size()
 var QStore ST = QStore.new(matrix.new<float>(128, Q_MULT + MD.size(), na))
 var Firm F = Firm.new()
@@ -2139,89 +2144,105 @@ for m in MD
     // 🛡️ ZERO-BOUND: [FIX NEG] a negative or na base value never enters any blend.
     m.fv := m.fv > 0 ? m.fv : na
 // ==============================================================
-// === STANDARD BLEND: multiples + sector models + named absolute =
+// === THE BLEND: one function, two scopes =======================
 // ==============================================================
-// Weight = track record x provenance. Weight 0 = no track record yet: if NO model
-// has one (young listing), fall back to equal weights x provenance.
-float blend_sc_sum = 0.0
-for m in MD
-    if m.grp != Group.comp
-        m.w := m.on and m.std and m.fv > 0 ? m.trk * f_tier_q(m.tier) : 0.0
-        blend_sc_sum += m.w
-bool blend_eq = blend_sc_sum <= 0
-float blend_w_tot = 0.0
-for m in MD
-    if m.grp != Group.comp
-        m.w := m.fv > 0 ? (blend_eq ? (m.on and m.std ? f_tier_q(m.tier) : 0.0) : m.w) : 0.0
-        blend_w_tot += m.w
+// Scope Standard: the allocated multiples and sector models, plus the absolute models the
+// framework is named after. Scope Omnibus: every model in its own right (Auto: all the
+// framework enables; Manual: the ticked boxes, gated by the framework unless strict is off),
+// inside the sanity band (a member beyond N x / (1/N) x the price leaves; never the Composite).
+// Only Manual can tick the Standard Composite, which is then flagged as a double count next to
+// any of its members. Prior = track record x provenance tier, or equal x tier when no member
+// has a track record (a young listing). A held row gives way once its holder carries weight
+// (rNPV contains the DCF; P/AFFO reads the same FCF stream as P/FCF). Then the caps: the family
+// cap (f_fam_cap), and the optional own-history cap: one multiplier on those rows, found by
+// bisection with the family cap re-run on every candidate, so both caps hold. Writes each row's
+// share (m.w, or m.om / m.om_w) and returns [value, band half-width, members, equal-weighted,
+// members that also hold a Standard share, own-history share].
+f_blend(bool omni) =>
+    bool sane = omni and i_omni_sanity_x >= 1.5 and close > 0
+    array<float> p = array.new_float(0)
+    float tot = 0.0
+    for m in MD
+        bool comp = m.grp == Group.comp
+        bool ok = (omni ? (omni_manual ? m.tick and (not i_omni_strict or m.on) : not comp and m.on) : not comp and m.on and m.std) and m.fv > 0
+        ok := ok and (not sane or comp or (m.fv <= close * i_omni_sanity_x and m.fv * i_omni_sanity_x >= close))
+        p.push(ok ? m.trk * f_tier_q(m.tier) : -1.0)
+        tot += ok ? p.last() : 0.0
+    array<float> w0 = array.new_float(MD.size(), 0.0)
+    int n_oth = 0
+    for [k, m] in MD
+        if p.get(k) >= 0 and not (m.held_by >= 0 and w0.get(m.held_by) > 0)
+            w0.set(k, tot > 0 ? p.get(k) : f_tier_q(m.tier))
+            n_oth += f_view(m) != 0 and w0.get(k) > 0 ? 1 : 0
+    array<float> w = w0.copy()
+    float lo = 0.0, float hi = 1.0, float own = 0.0, float eff = i_view_cap
+    // The cap is inert with no member outside the group. A level below the reachable floor (the
+    // share with a vanishing multiplier: the family cap hands weight back, e.g. rNPV shares a
+    // family with P/FCF) is lifted to that floor + 1 point.
+    int nit = i_view_cap < 1.0 and n_oth > 0 ? 33 : 1
+    for it = 0 to nit - 1
+        // it 0: no multiplier | 1: the floor | 2-31: bisection | 32: the largest multiplier found.
+        float x = it == 0 ? 1.0 : it == 1 ? 1e-9 : it == nit - 1 ? (lo > 0 ? lo : 1.0) : (lo + hi) / 2
+        for [k, m] in MD
+            w.set(k, w0.get(k) * (f_view(m) == 0 and m.grp != Group.comp ? x : 1.0))
+        f_fam_cap(w)
+        own := 0.0
+        for [k, m] in MD
+            own += f_view(m) == 0 and m.grp != Group.comp ? w.get(k) : 0.0
+        if it == 0 and own <= i_view_cap
+            break
+        if it == 1
+            eff := math.max(i_view_cap, own + 0.01)
+        else if it > 1 and it < nit - 1
+            lo := own <= eff ? x : lo
+            hi := own <= eff ? hi : x
+    float fv = 0.0
+    int n = 0
+    int nsub = 0
+    array<float> vs = array.new_float(0)
+    array<float> ws = array.new_float(0)
+    for [k, m] in MD
+        float x = w.get(k)
+        if omni
+            m.om := x > 0
+            m.om_w := x
+            nsub += x > 0 and m.w > 0 ? 1 : 0
+        else
+            m.w := x
+        if x > 0
+            n += 1
+            fv += m.fv * x
+            vs.push(m.fv)
+            ws.push(x)
+    fv := n > 0 ? fv : na
+    [fv, nz(f_wsd(vs, ws, fv), fv * 0.15), n, tot <= 0, nsub, own]
+// Standard first: the Omnibus may hold the Standard Composite as a member.
 float compositeFairValue = na
+float fv_stddev = na
 float compositeLo = na
 float compositeHi = na
-array<float> blend_vals = array.new_float(0)
-array<float> blend_ws = array.new_float(0)
-if blend_w_tot > 0
-    array<float> bw = array.new_float(MD.size(), 0.0)
-    for [k, m] in MD
-        if m.grp != Group.comp
-            array.set(bw, k, m.w)
-    f_fam_cap(bw)
-    compositeFairValue := 0.0
-    for [k, m] in MD
-        if m.grp != Group.comp
-            m.w := array.get(bw, k) // normalised, family-capped share, read by the table
-            if m.w > 0
-                compositeFairValue += m.fv * m.w
-                array.push(blend_vals, m.fv)
-                array.push(blend_ws, m.w)
-float fv_stddev = nz(f_wsd(blend_vals, blend_ws, compositeFairValue), compositeFairValue * 0.15)
-M_COMP.fv := compositeFairValue
-// Provisional only; bands and verdict are resolved after the Omnibus.
+bool blend_eq = true
+float std_own = na
+float raw_omnibus_fv = na
+float omni_sd = na
+int omni_n = 0
+int omni_sub = 0
+bool omni_eq = true
+float omni_own = na
+for sc = 0 to 1
+    [bf, bs, bn, be, bsub, bown] = f_blend(sc == 1)
+    if sc == 0
+        compositeFairValue := bf, fv_stddev := bs, blend_eq := be, std_own := bown
+        M_COMP.fv := bf
+    else
+        raw_omnibus_fv := bf, omni_sd := bs, omni_n := bn, omni_eq := be, omni_sub := bsub, omni_own := bown
 float finalFairValue = compositeFairValue > 0 ? compositeFairValue : na
-// ==============================================================
-// === GRAND MASTER BLEND (Multi-Algo Smart Omnibus) ============
-// ==============================================================
-// Every model is a member in its own right, weighted on its own track record. Auto: every
-// model the framework enables. Manual: the ticked boxes, gated by the framework unless
-// strict is off. The Standard Composite holds every model with a Standard weight: only
-// Manual can tick it, and it is flagged as a double count next to any of them.
-bool omni_sane_on = i_omni_sanity_x >= 1.5 and close > 0
-float omni_w_sum = 0.0
-for m in MD
-    float v = m.fv
-    bool comp = m.grp == Group.comp
-    bool ok = omni_manual ? m.tick and (not i_omni_strict or m.on) : not comp and m.on
-    // Sanity: drop a member beyond N x / (1/N) x the price (never the Composite).
-    m.om := ok and v > 0 and (not omni_sane_on or comp or (v <= close * i_omni_sanity_x and v * i_omni_sanity_x >= close))
-    m.om_w := m.om ? m.trk * f_tier_q(m.tier) : 0.0
-    omni_w_sum += m.om_w
-// m.om_w becomes each member's final share: track record (or, when no member has one,
-// equal) x tier, family-capped. A held row gives way once its holder carries weight: the
-// relations are derived from the rows on bar 0 (rNPV contains the DCF; P/AFFO reads the
-// same FCF stream as P/FCF). A member left with no share leaves the blend.
-array<float> ow = array.new_float(MD.size(), 0.0)
-for [k, m] in MD
-    bool dup = m.held_by >= 0 and array.get(ow, m.held_by) > 0
-    array.set(ow, k, m.om and not dup ? (omni_w_sum > 0 ? m.om_w : f_tier_q(m.tier)) : 0.0)
-f_fam_cap(ow)
-float raw_omnibus_fv = 0.0
-int omni_n = 0, int omni_sub = 0
-array<float> omni_vals = array.new_float(0)
-array<float> omni_ws = array.new_float(0)
-for [k, m] in MD
-    m.om_w := array.get(ow, k)
-    m.om := m.om and m.om_w > 0
-    if m.om
-        omni_n += 1
-        omni_sub += m.w > 0 ? 1 : 0
-        raw_omnibus_fv += m.fv * m.om_w
-        array.push(omni_vals, m.fv)
-        array.push(omni_ws, m.om_w)
 bool omni_dupe = M_COMP.om and omni_sub > 0
 string omni_dupe_tt = omni_dupe ? 'WARNING: the Standard Composite is in the blend alongside ' + str.tostring(omni_sub) + ' of the models it already contains. Those are counted twice.' : ''
 bool omni_active = is_omnibus and omni_n > 0
 if omni_active
     finalFairValue := raw_omnibus_fv
-    fv_stddev := nz(f_wsd(omni_vals, omni_ws, raw_omnibus_fv), raw_omnibus_fv * 0.15)
+    fv_stddev := omni_sd
 // ==============================================================
 // === SCENARIOS AND READOUTS (last bar): one loop, one f_eval call
 // ==============================================================
@@ -2311,7 +2332,7 @@ if barstate.islast
                     if m.grp != Group.comp and m.w > 0
                         float x = nz(vj.get(k), m.fv)
                         sv += (up ? x : math.max(x, 0.0)) * m.w
-                sv := blend_w_tot > 0 ? sv : na
+                sv := not na(compositeFairValue) ? sv : na
                 float ov = 0.0
                 for [k, m] in MD
                     if m.om
@@ -2399,6 +2420,8 @@ string valuation_status = na(finalFairValue) ? 'N/A' : close > upperBound ? 'Ver
 bool rkv_trip = i_use_rkv and not na(D.roe) and D.roe < nz(rf_local_avg, 4.0) / 100 + 0.05
 ST.write(Q_PX, close > 0 ? close : na)
 ST.write(Q_FFV, finalFairValue > 0 ? finalFairValue : na)
+if CK.adv
+    ST.write(Q_FREL, finalFairValue > 0 ? finalFairValue : na)
 for [k, m] in MD
     ST.write(Q_FV + k, m.fv > 0 ? m.fv : na)
     if m.lk == Lever.pctl
@@ -2586,7 +2609,7 @@ f_street_calc() =>
     float overlap = na(rng_union) ? na : rng_union <= 0 ? 1.0 : math.max(math.min(our_hi_r, st_hi) - math.max(our_lo_r, st_lo), 0.0) / rng_union
     // --- OUR confidence ---
     int our_n_models = omni_active ? omni_n : 0
-    bool our_track = omni_active ? omni_w_sum > 0 : not blend_eq
+    bool our_track = omni_active ? not omni_eq : not blend_eq
     if not omni_active
         for m in MD
             our_n_models += m.fv > 0 and m.w > 0 ? 1 : 0
@@ -2747,23 +2770,33 @@ f_tbl_head() =>
     f_cell(3, 0, 'REAL-TIME', color.white, hc)
     1
 // Members of the live blend (base value, weight) for the "Ours" tooltip.
+// Members of the live blend: value x share = contribution (they sum to the fair value), then
+// the view mix: own history, rules, intrinsic.
 f_members_tt() =>
     string t = ''
+    array<float> vm = array.new_float(3, 0.0)
     for m in MD
-        if omni_active ? m.om : m.w > 0
-            float sh = omni_active ? m.om_w : m.w
-            t += '\n' + m.name + ': ' + f_px(m.fv) + '  (' + str.tostring(sh * 100, '#') + '%)'
-    t
+        float sh = omni_active ? m.om_w : m.w
+        if sh > 0
+            t += '\n' + m.name + ': ' + f_px(m.fv) + ' x ' + str.tostring(sh * 100, '#') + '% = ' + f_px(m.fv * sh)
+            int v = m.grp == Group.comp ? 2 : f_view(m)
+            vm.set(v, vm.get(v) + sh)
+    t + '\n\nView mix: own history ' + str.tostring(vm.get(0) * 100, '#') + '%, rules ' + str.tostring(vm.get(1) * 100, '#') + '%, intrinsic ' + str.tostring(vm.get(2) * 100, '#') + '%' + (i_view_cap < 1.0 ? ' (own history capped at ' + str.tostring(i_view_cap * 100, '#') + '%).' : '.')
 f_sum_val(StreetView s, int r0) =>
     int row_idx = r0
     f_hdr(row_idx, 'Fair Value', 'Bear', 'Base', 'Bull', '')
     row_idx += 1
     // Ours
     string lbl = omni_active ? 'Ours: Omnibus ' + str.tostring(omni_n) + '/' + str.tostring(MD.size()) + (omni_dupe ? ' (!)' : '') : is_omnibus ? 'Ours (Standard)' : 'Ours (composite)'
-    string tt = omni_active ? 'Omnibus blend. ' + (omni_w_sum > 0 ? 'Weight = inverse prediction error against price ' + str.tostring(i_w_horizon) + ' quarters later, x data-quality tier.' : 'No member has 4+ paired quarters yet, so the weights are equal x data-quality tier.') : (is_omnibus ? 'Omnibus unavailable (no member survived gating), so this is the Standard composite.\n\n' : '') + (blend_eq ? 'No model has a predictive track record yet, so the blend is EQUAL-WEIGHTED (x data-quality tier).' : 'Weights = inverse error of each model fair value against the price ' + str.tostring(i_w_horizon) + ' quarters later, x data-quality tier.')
+    string tt = omni_active ? 'Omnibus blend. ' + (not omni_eq ? 'Weight = inverse prediction error against price ' + str.tostring(i_w_horizon) + ' quarters later, x data-quality tier.' : 'No member has 4+ paired quarters yet, so the weights are equal x data-quality tier.') : (is_omnibus ? 'Omnibus unavailable (no member survived gating), so this is the Standard composite.\n\n' : '') + (blend_eq ? 'No model has a predictive track record yet, so the blend is EQUAL-WEIGHTED (x data-quality tier).' : 'Weights = inverse error of each model fair value against the price ' + str.tostring(i_w_horizon) + ' quarters later, x data-quality tier.')
     if omni_dupe
         tt += '\n\n' + omni_dupe_tt
-    tt += '\nBear/Bull apply the same weights to each model own bear and bull case.\n\nMembers (base value, weight):' + f_members_tt() + '\n\nEvery model: Table detail > Models.'
+    // Since the last report: the step on its release bar, then prices, rates and time since.
+    float f_pre = ST.at(Q_FFV, 1)
+    float f_rel = ST.at(Q_FREL, 0)
+    if f_pre > 0 and f_rel > 0 and finalFairValue > 0
+        tt += '\n\nSince the last report: ' + str.tostring((finalFairValue / f_pre - 1) * 100, '#.#') + '% = the release bar ' + str.tostring((f_rel / f_pre - 1) * 100, '#.#') + '% + prices, rates and time since ' + str.tostring((finalFairValue - f_rel) / f_pre * 100, '#.#') + '% (of the last value before it).'
+    tt += '\nBear/Bull apply the same weights to each model own bear and bull case.\n\nMembers (value x share = contribution):' + f_members_tt() + '\n\nEvery model: Table detail > Models.'
     f_model_row(row_idx, lbl, compositeLo, finalFairValue, compositeHi, tt)
     row_idx += 1
     // Price vs ours
@@ -2868,6 +2901,13 @@ f_order(string codes) =>
 // ---------- detail sections ----------
 f_det_models(int r0) =>
     int row_idx = r0
+    // The view mix of the live blend (own history, rules, intrinsic), before the rows.
+    array<float> vm = array.new_float(3, 0.0)
+    for m in MD
+        float sh = omni_active ? m.om_w : m.w
+        vm.set(m.grp == Group.comp ? 2 : f_view(m), vm.get(m.grp == Group.comp ? 2 : f_view(m)) + nz(sh))
+    f_row4(row_idx, 'View mix', 'Share of the live blend by view: a multiple of the ticker own history, a rule (Graham, Rule of 40, Acquirer), or intrinsic (perpetuities, growth paths, excess returns).' + (i_view_cap < 1.0 ? ' Own history capped at ' + str.tostring(i_view_cap * 100, '#') + '% (a level the family cap cannot reach is lifted to the reachable floor + 1 point).' : ' Settings > Cap own-history multiples.'), 'Own ' + str.tostring(vm.get(0) * 100, '#') + '%', 'Rules ' + str.tostring(vm.get(1) * 100, '#') + '%', 'Intrinsic ' + str.tostring(vm.get(2) * 100, '#') + '%')
+    row_idx += 1
     f_hdr(row_idx, 'Relative Valuation', 'Bear', 'Base', 'Bull', '[xx%] = weight in the live blend (Standard or Omnibus). * = synthetic base multiple (under 4 quarters of history).')
     row_idx += 1
     for m in MD
@@ -2910,7 +2950,7 @@ f_det_models(int r0) =>
 f_det_omni(int r0) =>
     int row_idx = r0
     if is_omnibus
-        string omni_tt = omni_n == 0 ? 'No member survived gating, so the fair value is the Standard composite, not an Omnibus value.' : (omni_w_sum > 0 ? 'Share of the blend. Weight = inverse prediction error against price ' + str.tostring(i_w_horizon) + ' quarters later, x data-quality tier.\n\n' : 'No member has 4+ paired quarters yet, so the weights are equal x data-quality tier.\n\n')
+        string omni_tt = omni_n == 0 ? 'No member survived gating, so the fair value is the Standard composite, not an Omnibus value.' : (not omni_eq ? 'Share of the blend. Weight = inverse prediction error against price ' + str.tostring(i_w_horizon) + ' quarters later, x data-quality tier.\n\n' : 'No member has 4+ paired quarters yet, so the weights are equal x data-quality tier.\n\n')
         if omni_dupe
             omni_tt += omni_dupe_tt + '\n\n'
         for m in MD
@@ -2919,7 +2959,7 @@ f_det_omni(int r0) =>
         f_cell(0, row_idx, 'Omnibus Members', color_text, color_header)
         f_cell(1, row_idx, str.tostring(omni_n) + ' / ' + str.tostring(MD.size()), omni_dupe ? color.orange : omni_n >= 3 ? color.green : omni_n > 0 ? color.orange : color.red, color_bg, omni_tt)
         f_cell(2, row_idx, omni_manual ? (i_omni_strict ? 'Manual (strict)' : 'Manual') : 'Auto', color_text, color_bg)
-        f_cell(3, row_idx, omni_n == 0 ? 'INACTIVE' : omni_dupe ? 'DOUBLE-COUNT' : omni_w_sum > 0 ? 'Weighted' : 'Equal wt', omni_n == 0 ? color.red : omni_dupe ? color.orange : color_text, color_bg)
+        f_cell(3, row_idx, omni_n == 0 ? 'INACTIVE' : omni_dupe ? 'DOUBLE-COUNT' : not omni_eq ? 'Weighted' : 'Equal wt', omni_n == 0 ? color.red : omni_dupe ? color.orange : color_text, color_bg)
         row_idx += 1
     row_idx
 f_det_street(StreetView s, int r0) =>
