@@ -760,7 +760,7 @@ i_useBeneishCheck = input.bool(true, '🕵️ Apply Beneish M-Score (Fraud Check
 i_use_rkv = input.bool(true, '💎 Apply Rhodes-Kropf (RKV) M/B Decomposition', group = group_calc, tooltip = 'Decomposes M/B into Mispricing and Growth Options. Drops value-trap quarters from the historical P/B average and flags current value traps.')
 i_flow_ttm = input.bool(true, 'Request flows as TTM', group = group_calc, tooltip = 'Income and cash-flow items are requested as TTM directly instead of summing four FQ values. Interest and R&D have no TTM field, so they are always summed from FQ.')
 group_iv = 'Intrinsic Value Models (Automated)'
-i_growth_src = input.string('Auto (Consensus EPS -> Sales CAGR)', 'Forward growth source', options = ['Auto (Consensus EPS -> Sales CAGR)', 'Manual'], group = group_iv, tooltip = 'Auto: FY consensus EPS growth (EARNINGS_ESTIMATE, has history and passes the report-lag gate), else 3y sales CAGR, else the manual value.\n\nAnalyst PRICE targets are never used here: they exist only for today, so they would leak into the backtest and make the street comparison circular.')
+i_growth_src = input.string('Auto (Consensus EPS -> Sales CAGR)', 'Forward growth source', options = ['Auto (Consensus EPS -> Sales CAGR)', 'Manual'], group = group_iv, tooltip = 'Auto: FY consensus EPS growth (EARNINGS_ESTIMATE, has history and passes the report-lag gate), else FY consensus revenue growth (SALES_ESTIMATES, for loss makers), else 3y sales CAGR, else the manual value.\n\nAnalyst PRICE targets are never used here: they exist only for today, so they would leak into the backtest and make the street comparison circular.')
 i_analyst_growth = input.float(10.0, 'Manual forward growth %', group = group_iv, tooltip = 'Used when the source is Manual, or as the last fallback in Auto.') / 100
 group_street = 'Street Consensus (analyst targets)'
 i_show_street = input.bool(true, 'Show street comparison', group = group_street, tooltip = 'Uses syminfo.target_price_* and syminfo.recommendations_* (0 request slots). Display only: never enters the blend, the plot or the backtest.')
@@ -1029,6 +1029,7 @@ type Firm
     float cl = na
     float re = na
     float eps_est = na
+    float rev_est = na
     float eps0 = na
     float interest = na
     float tax = 0.21
@@ -1230,11 +1231,11 @@ f_drivers(Firm f, Hist h, Market mk, Clock ck, Drv d, Claims c) =>
 // 3. DATA COLLECTION
 // =====================================================================
 // REQUEST LEDGER (hard cap = 40 per script)
-// request.financial     : 30 (one wrapper, see 3.2)
+// request.financial     : 31 (one wrapper, see 3.2)
 // request.security      : 6  (US10Y, local 10Y, benchmark, small-cap, value, growth ETF)
 // request.currency_rate : 1
 // request.earnings      : 1  (report dates)
-// TOTAL                 : 38 -> 2 slots free
+// TOTAL                 : 39 -> 1 slot free
 // RULES
 // R1. request.security() accepts TUPLES -> unlimited series per slot.
 // R2. request.financial() does NOT -> never spend a slot on anything an
@@ -1277,18 +1278,18 @@ int trading_days = syminfo.type == 'crypto' ? 365 : 252
 float session_sec = syminfo.type == 'crypto' ? 86400.0 : 23400.0
 int bpy = current_tf_sec < 86400 ? math.max(1, int(math.round(trading_days * session_sec / current_tf_sec))) : current_tf_sec < 604800 ? math.max(1, int(math.round(trading_days * 86400.0 / current_tf_sec))) : math.max(1, int(math.round(365.25 * 86400.0 / current_tf_sec)))
 // =====================================================================
-// 3.2 FUNDAMENTAL FETCH - 30 FIELDS, ONE request.financial WRAPPER
+// 3.2 FUNDAMENTAL FETCH - 31 FIELDS, ONE request.financial WRAPPER
 // =====================================================================
 // 31 calls to one wrapper, then one loop for the release logic. Field kind:
 // 0 flow (TTM, or FQ summed from the store when 'Request flows as TTM' is off),
 // 1 flow with no TTM field (always FQ + store: interest, R&D, preferred dividends),
-// 2 balance-sheet item (FQ), 3 fiscal-year consensus.
+// 2 balance-sheet item (FQ), 3 fiscal-year consensus (EPS, revenue).
 // [FIX TTM] Capex and cash-flow D&A have no TTM field: capex = FCF - OCF (the
 // solver's identity), D&A from the income statement.
 // [FIX EST] Fiscal-year consensus, not a sum of four quarterly estimates.
 f_fin(string id, string per) =>
     request.financial(syminfo.tickerid, id, per, ignore_invalid_symbol = true, currency = syminfo.currency)
-var array<int> FIN_KIND = array.from(0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3)
+var array<int> FIN_KIND = array.from(0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3)
 flow_per = i_flow_ttm ? 'TTM' : 'FQ'
 // Requests stay outside the loop: Pine rejects loop variables in a request's field/period.
 array<float> fin_raw = array.from(f_fin('TOTAL_REVENUE', flow_per), f_fin('COST_OF_GOODS', flow_per), f_fin('EBIT', flow_per),
@@ -1297,16 +1298,16 @@ array<float> fin_raw = array.from(f_fin('TOTAL_REVENUE', flow_per), f_fin('COST_
      f_fin('FREE_CASH_FLOW', flow_per), f_fin('DEP_AMORT_EXP_INCOME_S', flow_per), f_fin('NET_INCOME', flow_per), f_fin('MINORITY_INTEREST', 'FQ'),
      f_fin('DILUTED_SHARES_OUTSTANDING', 'FQ'), f_fin('TOTAL_SHARES_OUTSTANDING', 'FQ'), f_fin('TOTAL_ASSETS', 'FQ'), f_fin('TOTAL_LIABILITIES', 'FQ'),
      f_fin('TOTAL_CURRENT_ASSETS', 'FQ'), f_fin('TOTAL_CURRENT_LIABILITIES', 'FQ'), f_fin('TOTAL_DEBT', 'FQ'), f_fin('CASH_N_SHORT_TERM_INVEST', 'FQ'),
-     f_fin('TOTAL_INVENTORY', 'FQ'), f_fin('ACCOUNTS_RECEIVABLES_NET', 'FQ'), f_fin('RETAINED_EARNINGS', 'FQ'), f_fin('PPE_TOTAL_GROSS', 'FQ'),
-     f_fin('ACCUM_DEPREC_TOTAL', 'FQ'), f_fin('INTANGIBLES_NET', 'FQ'), f_fin('EARNINGS_ESTIMATE', 'FY'))
+     f_fin('SHORT_TERM_DEBT', 'FQ'), f_fin('ACCOUNTS_RECEIVABLES_NET', 'FQ'), f_fin('RETAINED_EARNINGS', 'FQ'), f_fin('PPE_TOTAL_GROSS', 'FQ'),
+     f_fin('ACCUM_DEPREC_TOTAL', 'FQ'), f_fin('INTANGIBLES_NET', 'FQ'), f_fin('EARNINGS_ESTIMATE', 'FY'), f_fin('SALES_ESTIMATES', 'FY'))
 // [FIX LOOKAHEAD] request.financial returns a quarter's numbers from the START of the
 // next period, weeks before publication. A new value is released on the next report
 // date, or i_report_lag days after it first appeared at most, and always on the last bar.
-var array<float> fin_pend = array.new_float(30, na)
-var array<float> fin_known = array.new_float(30, na)
-var array<int> fin_seen = array.new_int(30, 0)
+var array<float> fin_pend = array.new_float(31, na)
+var array<float> fin_known = array.new_float(31, na)
+var array<int> fin_seen = array.new_int(31, 0)
 fin_changed = false
-for i = 0 to 29
+for i = 0 to 30
     float raw = fin_raw.get(i)
     float pend = fin_pend.get(i)
     if not na(raw) and (na(pend) or raw != pend)
@@ -1425,6 +1426,7 @@ if CK.dirty
     float ppe_gross_fq = fin.get(26)
     float accum_dep_fq = fin.get(27)
     float eps_est_ttm = fin.get(29)
+    float rev_est = fin.get(30)
     // Year-ago (and one-quarter-ago) rows of the store, one read per column.
     array<float> Y1 = ST.back(1)
     array<float> Y4 = ST.back(4)
@@ -1599,8 +1601,8 @@ if CK.dirty
         if not na(_pio_in.get(k))
             _n += 1
             _f += int(_pio.get(k))
-    // --- Forward growth anchor from the FY consensus estimate ---
-    float fwd_eps_growth = eps_ttm > 0 ? eps_est_ttm / eps_ttm - 1 : na
+    // --- Forward growth anchor from the FY consensus: EPS, else revenue (loss makers) ---
+    float fwd_eps_growth = eps_ttm > 0 and not na(eps_est_ttm) ? eps_est_ttm / eps_ttm - 1 : calc_rev > 0 ? rev_est / calc_rev - 1 : na
     fwd_eps_growth := na(fwd_eps_growth) ? na : math.max(math.min(fwd_eps_growth, 0.60), -0.50)
     // --- MARGIN & RETURN ADJUSTMENTS ---
     float ebit_1y_ago = Y4.get(Q_EBIT)
@@ -1629,7 +1631,9 @@ if CK.dirty
     // Unlevered FCF for the firm-value DCFs: OCF is after interest paid, so the after-tax
     // interest goes back in (else the debt is charged once in the cash flow and again as claims).
     float fcff = true_fcf + nz(interest_expense_ttm) * (1 - effective_tax)
-    float working_capital_proxy = nz(receiv_fq, nz(calc_rev) * 0.1) + nz(fin.get(23), nz(calc_rev) * 0.1) - nz(calc_rev) * 0.15
+    // Operating working capital (McKinsey): current assets less cash, less the current
+    // liabilities that are not debt, as reported (na when either side is missing).
+    float working_capital_proxy = fin.get(19) - fin.get(22) - (curr_liab_fq - nz(fin.get(23)))
     float ic_equity_method = calc_equity + total_debt_latest - nz(cash_latest)
     // Operating assets at NET PPE: NOPAT is after depreciation, so the capital it earns on is too
     // (gross PPE keeps fully depreciated assets in the base and understates ROIC).
@@ -1701,7 +1705,7 @@ if CK.dirty
         ST.write(Q_RV0 + k, x)
     F := Firm.new(sh = calc_shares, rev = calc_rev, gp = calc_gp, ebit = calc_ebit, ebitda = calc_ebitda, ocf = calc_ocf, ni_c = calc_ni, ni = net_income_ttm, eps = eps_ttm, eq = calc_equity, debt = calc_debt, assets = calc_assets, tl = calc_total_liab, ca = calc_curr_assets, fcf = true_fcf, nd = net_debt_robust,
          t_rev = t_rev, t_ni = t_ni, t_eps = t_eps, t_ebit = t_ebit, t_ebitda = t_ebitda, t_ocf = t_ocf, t_cfo = t_cfo, t_eq = t_equity,
-         minority = minority_fq, pref_div = pref_div_ttm, dps = fin.get(9), intang = fin.get(28), cl = curr_liab_fq, re = fin.get(25), eps_est = eps_est_ttm, eps0 = raw_eps, interest = interest_expense_ttm,
+         minority = minority_fq, pref_div = pref_div_ttm, dps = fin.get(9), intang = fin.get(28), cl = curr_liab_fq, re = fin.get(25), eps_est = eps_est_ttm, eps0 = raw_eps, interest = interest_expense_ttm, rev_est = rev_est,
          tax = effective_tax, ebit_n = ebit_normalized, nopat = nopat_adjusted, nopat_n = nopat_norm, fcff = fcff, ic = invested_capital_adj, roic = roic_adj, netco_sh = netco_sh, netco_rab = netco_sh * invested_capital_adj, oe_ps = oe_per_share,
          pipe = nz(rnd_ttm) * 5.0 * 0.15, shield = nz(total_debt_latest) * effective_tax, rev_g = rev_growth, asset_g = asset_growth, ebitda_g = ebitda_growth, inv_dummy = investment_dummy, deter = is_deteriorating, fwd_g = fwd_eps_growth,
          pio = has_any_real_fundamental and _n >= 5 ? math.round(_f * 9.0 / _n) : na, m_score = m_score, manip = is_manipulator, sh_1y = _sh_prev, debt_1y = total_debt_1y_ago, suspect = data_suspect, has = has_any_real_fundamental)
@@ -1936,7 +1940,7 @@ if CK.dirty
     // then sales CAGR, then the manual value. Replaces the fixed 10% input.
     g_manual = i_growth_src == 'Manual'
     float fwd_growth_leg = g_manual ? i_analyst_growth : not na(F.fwd_g) ? F.fwd_g : not na(sales_cagr_3y) ? sales_cagr_3y : i_analyst_growth
-    fwd_growth_src = g_manual ? 'Manual' : not na(F.fwd_g) ? 'Consensus EPS' : not na(sales_cagr_3y) ? 'Sales CAGR' : 'Manual (fallback)'
+    fwd_growth_src = g_manual ? 'Manual' : not na(F.fwd_g) ? (F.eps > 0 and not na(F.eps_est) ? 'Consensus EPS' : 'Consensus sales') : not na(sales_cagr_3y) ? 'Sales CAGR' : 'Manual (fallback)'
     // Triangulation: sustainable growth 15%, ROIC x reinvestment 40%, the forward leg 15%, the
     // 3-year sales CAGR 30%. A leg with no data leaves and the others are re-weighted (the sales
     // leg used to enter at a guessed 5%). The forward leg always exists, so the blend does too.
@@ -1951,9 +1955,10 @@ if CK.dirty
     float calc_growth_triangulated = math.min(math.max(g_num / g_den, -0.10), 0.35)
     // [FIX G-FLOOR] shrinking firms may shrink
     float g1 = math.max(math.min(calc_growth_triangulated, dynamic_growth_cap), -0.05)
-    // No sales CAGR on record -> no forward EBITDA leg (TTM only), not a guessed 5%.
+    // Next-year sales: the FY revenue consensus, else the sales CAGR; neither -> no forward
+    // EBITDA leg (TTM only), not a guessed 5%.
     float sales_cagr = ST.cagr(Q_REV, F.rev, i_cagr_years)
-    float final_sales_f1 = F.rev * (1 + sales_cagr)
+    float final_sales_f1 = nz(F.rev_est, F.rev * (1 + sales_cagr))
     float ebitda_margin_ttm = F.rev > 0 ? F.ebitda / F.rev : na
     float est_ebitda_fwd = not na(ebitda_margin_ttm) ? final_sales_f1 * ebitda_margin_ttm : na
     // On an advance (and on bar 0): each own-history multiple's statistics from its stored
