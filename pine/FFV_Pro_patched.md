@@ -1238,24 +1238,24 @@ f_drivers(Firm f, Hist h, Market mk, Clock ck, Drv d, Claims c) =>
     int cap = ck.cap
     int te = math.min(f.t_eps, cap)
     int tr = math.min(f.t_rev, cap)
-    int to = math.min(f.t_ocf, cap)
+    int t_o = math.min(f.t_ocf, cap)
     int tq = math.min(f.t_eq, cap)
     int tb = math.min(f.t_ebit, cap)
     int tn = math.min(f.t_ni, cap)
     d.stream(Sx.eps_b, h.eps_b, te)
     d.stream(Sx.eps_f, h.eps_f, te)
     d.stream(Sx.sales_ps, f.sh > 0 ? f.rev / f.sh : na, tr)
-    d.stream(Sx.fcf_ps, f.sh > 0 ? f.fcf / f.sh : na, to)
+    d.stream(Sx.fcf_ps, f.sh > 0 ? f.fcf / f.sh : na, t_o)
     d.stream(Sx.bvps, bvps, tq)
     d.stream(Sx.tbvps, f.sh > 0 ? (book - nz(f.intang)) / f.sh : na, tq)
     d.stream(Sx.ebitda, f.ebitda, math.min(f.t_ebitda, cap))
     d.stream(Sx.ebitda_f, h.ebitda_f, math.min(f.t_ebitda, cap))
     d.stream(Sx.ocf_ps, f.sh > 0 ? f.ocf / f.sh : na, math.min(f.t_cfo, cap))
-    d.stream(Sx.fcff, f.fcff, to)
+    d.stream(Sx.fcff, f.fcff, t_o)
     d.stream(Sx.nopat, f.nopat, tb)
     d.stream(Sx.ic, f.ic, 3)
     d.stream(Sx.roic, f.roic, 3)
-    d.stream(Sx.fcff_s, f.fcff * (1 - f.netco_sh), to)
+    d.stream(Sx.fcff_s, f.fcff * (1 - f.netco_sh), t_o)
     d.stream(Sx.nopat_s, f.nopat * (1 - f.netco_sh), tb)
     d.stream(Sx.ni, f.ni, tn)
     d.stream(Sx.book, book, tq)
@@ -1263,7 +1263,7 @@ f_drivers(Firm f, Hist h, Market mk, Clock ck, Drv d, Claims c) =>
     // Equity Cash Flow: a normalised ROE (the 5-year median, else today's).
     d.stream(Sx.roe_n, nz(h.roe_med, roe), tq)
     d.stream(Sx.dps, f.dps, cap)
-    d.stream(Sx.oe_ps, f.oe_ps > 0 and coe > 0 ? f.oe_ps : na, to)
+    d.stream(Sx.oe_ps, f.oe_ps > 0 and coe > 0 ? f.oe_ps : na, t_o)
     d.stream(Sx.nopat_n, f.nopat_n, tb)
     // [FIX GRAHAM] Graham needs real positive earnings; growth held to 0-15% (Graham meant a
     // 7-10 year rate); 4.4 / Y rescales for bond yields, capped at 1.0 so it only penalises.
@@ -1272,7 +1272,7 @@ f_drivers(Firm f, Hist h, Market mk, Clock ck, Drv d, Claims c) =>
     d.stream(Sx.yadj, math.min(4.4 / (mk.rf > 0 ? mk.rf : 4.0), 1.0), 3)
     d.stream(Sx.rev, f.rev, tr)
     d.stream(Sx.rev_g, f.rev_g, tr)
-    d.stream(Sx.fcf_margin, f.fcf / f.rev, to)
+    d.stream(Sx.fcf_margin, f.fcf / f.rev, t_o)
     d.stream(Sx.ebit, f.ebit, tb)
     // Discount rates: one base per level (a row's level picks one). WACC for the firm is floored
     // at 2%, so Bull is never above Base.
