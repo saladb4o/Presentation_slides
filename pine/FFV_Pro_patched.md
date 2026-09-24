@@ -129,22 +129,25 @@ type PeriodStats
     array<float> closed_ann_returns
     array<float> closed_discounts
     array<float> closed_holds
+// One open trade: entry price, lowest low since entry, entry bar, entry discount, period, dividends accrued.
+type Trade
+    float px
+    float mn
+    int bar
+    float disc
+    int per
+    float div = 0.0
 type ModelStats
     PeriodStats is_stats
     PeriodStats oos_stats
     PeriodStats fwd_stats
-    array<float> entry_prices
-    array<float> floating_min_prices
-    array<int> entry_bars
-    array<float> entry_discounts
-    array<int> entry_periods
-    array<float> entry_divs
+    array<Trade> tr
     int straddled = 0
     int last_entry = -999
 f_new_period() =>
     PeriodStats.new(0, 0, 0.0, 0.0, array.new_float(), array.new_float(), array.new_float(), array.new_float(), array.new_float())
 f_new_model() =>
-    ModelStats.new(f_new_period(), f_new_period(), f_new_period(), array.new_float(), array.new_float(), array.new_int(), array.new_float(), array.new_int(), array.new_float())
+    ModelStats.new(f_new_period(), f_new_period(), f_new_period(), array.new<Trade>())
 // =====================================================================
 // THE MODEL STAGE: named rows, engines, one inputs path, one claim bridge
 // =====================================================================
@@ -3083,19 +3086,19 @@ else
     bt_period := time >= i_is_start and time <= i_is_end ? 1 : (time >= i_oos_start and time <= i_oos_end ? 2 : (time > i_oos_end ? 3 : 0))
 int bt_cooldown = math.max(1, int(bpy / 12))
 f_rolling_update(ModelStats stats_obj, current_fv, current_close, current_low, exit_prem, max_hold, max_open, int current_period) =>
-    int open_trades = stats_obj.entry_prices.size()
+    int open_trades = stats_obj.tr.size()
     bool target_hit = current_fv > 0 and current_close >= current_fv * (1.0 + exit_prem)
     // Dividends accrue per bar at the trailing DPS known on that bar (not the exit-day yield).
     float dps_bar = nz(F.dps) / bpy
     if open_trades > 0
         for i = open_trades - 1 to 0
-            float e_price = stats_obj.entry_prices.get(i)
-            int e_bar = stats_obj.entry_bars.get(i)
-            int e_period = stats_obj.entry_periods.get(i)
-            stats_obj.entry_divs.set(i, stats_obj.entry_divs.get(i) + dps_bar)
-            float new_min = math.min(stats_obj.floating_min_prices.get(i), current_low)
-            stats_obj.floating_min_prices.set(i, new_min)
-            int bars_held = bar_index - e_bar
+            Trade t = stats_obj.tr.get(i)
+            float e_price = t.px
+            int e_period = t.per
+            t.div += dps_bar
+            t.mn := math.min(t.mn, current_low)
+            float new_min = t.mn
+            int bars_held = bar_index - t.bar
             if target_hit or bars_held >= max_hold
                 bool straddles = (current_period > 0) and (current_period != e_period)
                 bool skip_trade = straddles and i_bt_drop_straddle
@@ -3104,8 +3107,7 @@ f_rolling_update(ModelStats stats_obj, current_fv, current_close, current_low, e
                 PeriodStats active_stats = e_period == 1 ? stats_obj.is_stats : (e_period == 2 ? stats_obj.oos_stats : stats_obj.fwd_stats)
                 active_stats.total += skip_trade ? 0 : 1
                 float years_held = math.max(bars_held / float(bpy), 0.083)
-                float collected_dividends = stats_obj.entry_divs.get(i)
-                float raw_exit_price = current_close + collected_dividends
+                float raw_exit_price = current_close + t.div
                 float net_return_pct = ((raw_exit_price - e_price) / e_price) - i_bt_fees
                 float ann_ret_pct = (math.pow(1.0 + math.max(net_return_pct, -0.999), 1.0 / years_held) - 1.0) * 100
                 float max_dd_pct = ((new_min - e_price) / e_price) * 100
@@ -3119,34 +3121,17 @@ f_rolling_update(ModelStats stats_obj, current_fv, current_close, current_low, e
                     active_stats.closed_returns.push(net_return_pct)
                     active_stats.closed_drawdowns.push(max_dd_pct)
                     active_stats.closed_ann_returns.push(ann_ret_pct)
-                    active_stats.closed_discounts.push(stats_obj.entry_discounts.get(i))
+                    active_stats.closed_discounts.push(t.disc)
                     active_stats.closed_holds.push(years_held)
                 // [PERF] SWAP-AND-POP (loop runs descending, order is never read).
-                int lastx = stats_obj.entry_prices.size() - 1
-                if i != lastx
-                    stats_obj.entry_prices.set(i, stats_obj.entry_prices.get(lastx))
-                    stats_obj.floating_min_prices.set(i, stats_obj.floating_min_prices.get(lastx))
-                    stats_obj.entry_bars.set(i, stats_obj.entry_bars.get(lastx))
-                    stats_obj.entry_discounts.set(i, stats_obj.entry_discounts.get(lastx))
-                    stats_obj.entry_periods.set(i, stats_obj.entry_periods.get(lastx))
-                    stats_obj.entry_divs.set(i, stats_obj.entry_divs.get(lastx))
-                stats_obj.entry_prices.pop()
-                stats_obj.floating_min_prices.pop()
-                stats_obj.entry_bars.pop()
-                stats_obj.entry_discounts.pop()
-                stats_obj.entry_periods.pop()
-                stats_obj.entry_divs.pop()
+                stats_obj.tr.set(i, stats_obj.tr.last())
+                stats_obj.tr.pop()
     // Entry Logic (max_open 0 = unlimited)
-    int n_open = stats_obj.entry_prices.size()
+    int n_open = stats_obj.tr.size()
     if current_period > 0 and current_fv > 0 and (max_open <= 0 or n_open < max_open)
         float buy_limit = current_fv * (1.0 - entry_margin)
         if current_close <= buy_limit and (n_open == 0 or (bar_index - stats_obj.last_entry) >= bt_cooldown)
-            stats_obj.entry_prices.push(current_close)
-            stats_obj.floating_min_prices.push(current_close)
-            stats_obj.entry_bars.push(bar_index)
-            stats_obj.entry_discounts.push((current_fv - current_close) / current_close)
-            stats_obj.entry_periods.push(current_period)
-            stats_obj.entry_divs.push(0.0)
+            stats_obj.tr.push(Trade.new(current_close, current_close, bar_index, (current_fv - current_close) / current_close, current_period))
             stats_obj.last_entry := bar_index
 // The backtest deliberately IGNORES the allocation matrix: it is the evidence you use
 // to DECIDE an allocation. Every model row trades; the Composite row trades the final blend.
@@ -3234,11 +3219,11 @@ f_fill_focus_row(int row, string name, ModelStats m, int which) =>
     f_btc(1, row, p.n == 0 ? "-" : str.tostring(p.n), base, txt, m.straddled > 0 ? "straddling trades excluded: " + str.tostring(m.straddled) : "")
     f_btc(2, row, na(p.ic) ? "-" : str.tostring(p.ic, "#.00"), not na(grey) ? grey : na(p.ic) ? C_GR80 : p.ic > 0.3 ? C_GN30 : p.ic > 0 ? C_GN70 : C_RD60, txt, "Correlation between entry discount and realised return. Near zero = the fair value carries no predictive information.")
     f_btc(3, row, na(p.expectancy) ? "-" : str.tostring(p.expectancy * 100, "#.0") + "%", not na(grey) ? grey : na(p.expectancy) ? C_GR80 : p.expectancy > 0 ? C_GN60 : C_RD60, txt)
-    f_btc(4, row, na(p.med_ret) ? "-" : str.tostring(p.med_ret * 100, "#.0") + "%", base, txt)
-    f_btc(5, row, na(p.wr) ? "-" : str.tostring(p.wr, "#.0") + "%", base, txt)
-    f_btc(6, row, na(p.avg_hold) ? "-" : str.tostring(p.avg_hold, "#.1") + "y", base, txt)
-    f_btc(7, row, na(p.mae) ? "-" : str.tostring(p.mae, "#.0") + "%", base, txt)
-    f_btc(8, row, na(p.vacagr) ? "-" : str.tostring(p.vacagr, "#.0") + "%", base, txt, "VACAGR floors holding period at 1 month. Read with Median and Hold.")
+    // Median, Win%, Hold (years), MAE, VACAGR
+    array<float> fx = array.from(p.med_ret * 100, p.wr, p.avg_hold, p.mae, p.vacagr)
+    for c = 4 to 8
+        float x = fx.get(c - 4)
+        f_btc(c, row, na(x) ? "-" : str.tostring(x, c == 6 ? "#.1" : "#.0") + (c == 6 ? "y" : "%"), base, txt, c == 8 ? "VACAGR floors holding period at 1 month. Read with Median and Hold." : "")
 // --- VIEW 3: ROBUSTNESS VERDICT (vs the always-in baseline) ---
 f_fill_robust_row(int row, string name, ModelStats m, ModelStats b) =>
     array<float> v = array.new_float(0)
@@ -3259,33 +3244,12 @@ f_fill_robust_row(int row, string name, ModelStats m, ModelStats b) =>
     float edge = edge_sum / 3.0
     bool enough = n.min() >= i_bt_min_n
     float spread = math.max(nz(v1), nz(v2), nz(v3)) - math.min(nz(v1), nz(v2), nz(v3))
-    string verdict = "Insufficient"
-    color vcol = color.new(color.gray, 60)
-    string vtip = str.format('Fewer than {0} trades in at least one period. No verdict is defensible.', str.tostring(i_bt_min_n))
-    if enough
-        bool all_pos = nz(v1, -1) > 0 and nz(v2, -1) > 0 and nz(v3, -1) > 0
-        bool monotone_down = v1 > v2 and v2 > v3
-        bool front_loaded = v1 > 0 and (nz(v2) <= 0 or nz(v3) <= 0)
-        if front_loaded
-            verdict := "Overfit"
-            vcol := color.new(color.red, 20)
-            vtip := "Strong in period 1, weak or negative later. The parameters fit the first window, not the phenomenon."
-        else if monotone_down and spread > 10
-            verdict := "Decaying"
-            vcol := color.new(color.orange, 30)
-            vtip := "Monotonically falling across periods. The edge may be closing."
-        else if all_pos and spread < 20 and beats_all
-            verdict := "Stable"
-            vcol := color.new(color.green, 20)
-            vtip := "Positive in all three periods, contained dispersion, and ahead of the always-in baseline in each."
-        else if all_pos and spread < 20
-            verdict := "No edge"
-            vcol := C_OR40
-            vtip := "Stable and positive, but not better than simply being invested."
-        else
-            verdict := "Mixed"
-            vcol := color.new(color.gray, 40)
-            vtip := "No clean pattern. Treat as unproven rather than broken."
+    bool all_pos = nz(v1, -1) > 0 and nz(v2, -1) > 0 and nz(v3, -1) > 0
+    // Insufficient, Overfit (strong in period 1, weak later), Decaying, Stable, No edge, Mixed
+    int vk = not enough ? 0 : v1 > 0 and (nz(v2) <= 0 or nz(v3) <= 0) ? 1 : v1 > v2 and v2 > v3 and spread > 10 ? 2 : all_pos and spread < 20 ? (beats_all ? 3 : 4) : 5
+    string verdict = array.from("Insufficient", "Overfit", "Decaying", "Stable", "No edge", "Mixed").get(vk)
+    color vcol = array.from(color.new(color.gray, 60), color.new(color.red, 20), color.new(color.orange, 30), color.new(color.green, 20), C_OR40, color.new(color.gray, 40)).get(vk)
+    string vtip = array.from(str.format('Fewer than {0} trades in at least one period. No verdict is defensible.', str.tostring(i_bt_min_n)), "Strong in period 1, weak or negative later. The parameters fit the first window, not the phenomenon.", "Monotonically falling across periods. The edge may be closing.", "Positive in all three periods, contained dispersion, and ahead of the always-in baseline in each.", "Stable and positive, but not better than simply being invested.", "No clean pattern. Treat as unproven rather than broken.").get(vk)
     f_btn(row, name)
     for c = 1 to 3
         float vc = v.get(c - 1)
