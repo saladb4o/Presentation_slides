@@ -4,8 +4,8 @@ indicator('Fundamental Fair Value Pro (FF4 + McKinsey/Rev DCF) [Real-Time + Back
 // ARCHITECTURE: one top-to-bottom pass per bar
 //   1. Helpers and types   pure maths, backtest state, the model registry
 //   2. Inputs
-//   3. Data                macro feeds; 31 financial fields through ONE dynamic request
-//                          loop with report-date release; TTM vault
+//   3. Data                macro feeds; 31 financial fields through one request
+//                          wrapper, released on report dates; TTM vault
 //   4. Imputation engine   identity solver + firm-ratio carry, provenance tiers
 //   5. Fundamentals        scores, NOPAT, invested capital, beta, cost of capital, growth
 //   6. Models              registry of 23: Standard Composite, 8 multiples, 7 sector and
@@ -286,11 +286,14 @@ f_new_model() =>
 // =====================================================================
 // Index: 0 Standard Composite | 1-8 relative multiples | 9-15 sector models |
 // 16-22 absolute models. The order is load-bearing: framework codes, the Standard
-// blend (1-15), the Omnibus toggles (0-22) and the tier list all follow it.
+// blend (1-15 + the framework's named absolute models), the Omnibus toggles (0-22) and
+// the tier list all follow it.
 // Multiples only: dflt (ratio with no history), is_ev (EV form), rkv (Rhodes-Kropf
 // filter, P/B), hist (ratio history), drv/drv_f (TTM/forward driver), avg/syn/plo/phi.
 // fvh   stored fair values, aligned with hist_px (one entry per quarter)
 // fw    the framework allocates it; on = allocated AND computable this bar
+// std   in the Standard blend's scope: an allocated multiple or sector model, or an
+//       absolute model the framework is named after (third field of its row)
 // trk   track-record weight, recomputed only when fvh changes (once a quarter)
 // w     normalised Standard-blend weight (0 outside it); om/om_w = Omnibus member/weight
 type Model
@@ -305,6 +308,7 @@ type Model
     ModelStats bt
     bool fw = false
     bool on = false
+    bool std = false
     int tier = 3
     float drv = na
     float drv_f = na
@@ -423,7 +427,7 @@ i_beta_tf = input.timeframe('W', 'Regression Timeframe', group = group_proxies)
 group_calc = 'Calculation Parameters'
 i_weighting_algo = input.string('IVW (Error Variance)', 'Weighting Algorithm', options = ['IVW (Error Variance)', 'SMAPE (Symmetric Error)', 'MALE (Log Error)', 'WMAPE (Weighted Error)', 'RMSLE (Root Mean Sq Log)'], group = group_calc, tooltip = 'Every model is scored on how well its stored fair value predicted the price N quarters later (see horizon below).\nIVW: inverse mean squared log error.\nSMAPE/MALE/WMAPE/RMSLE: inverse of that error metric.')
 i_w_horizon = input.int(4, 'Weighting: forecast horizon (quarters)', minval = 0, maxval = 8, group = group_calc, tooltip = 'Each model is scored on how well its fair value at quarter t predicted the price at t + N. 0 = same-quarter fit.')
-i_blend_mode = input.string('Standard (Relative + Sector)', 'Composite Blend Mode', options = ['Standard (Relative + Sector)', 'Omnibus (All Available Models)'], group = group_calc, tooltip = 'Standard: blends the relative multiples and the sector-specific models only. The absolute intrinsic models still render in the table for reference.\n\nOmnibus: blends every model the Valuation Framework enables (multiples, sector and absolute models), each weighted on its own track record.')
+i_blend_mode = input.string('Standard (Relative + Sector)', 'Composite Blend Mode', options = ['Standard (Relative + Sector)', 'Omnibus (All Available Models)'], group = group_calc, tooltip = 'Standard: blends the relative multiples, the sector-specific models and the absolute models a framework is named after (Technology: DCF, RIM and Rule of 40; Financials: RIM). The other absolute models still render in the table for reference.\n\nOmnibus: blends every model the Valuation Framework enables (multiples, sector and absolute models), each weighted on its own track record.')
 bool is_omnibus = i_blend_mode == 'Omnibus (All Available Models)'
 // ==============================================================
 // === OMNIBUS MEMBERSHIP (only read when Blend Mode = Omnibus) ==
@@ -434,7 +438,7 @@ group_omni_s = 'Omnibus: Sector Models'
 group_omni_a = 'Omnibus: Absolute Models'
 i_omni_mode = input.string('Auto (Framework Allocation)', 'Member Selection', options = ['Auto (Framework Allocation)', 'Manual (Tick Models Below)'], group = group_omni, tooltip = 'Auto: every model the sector framework enables, each a member in its own right.\n\nManual: the boxes you tick. All are ticked by default, so Manual starts equal to Auto; untick to remove a model.\n\nEither way rNPV replaces the DCF it contains, P/AFFO (an FCF proxy) gives way to P/FCF, and a member is dropped if its model returns na or a non-positive value. The table row "Omnibus Members" reports what survived.')
 i_omni_strict = input.bool(true, 'Manual: still require framework approval', group = group_omni, tooltip = 'ON (default): a ticked model is used only if the sector framework ALSO enables it.\n\nOFF: the ticks override the framework; a ticked sector model is computed even outside its sector.')
-i_om_comp = input.bool(false, 'Standard Composite (the whole relative + sector blend)', group = group_omni, tooltip = 'The Standard blend entered as a SINGLE member. Off by default: Standard and Omnibus are alternatives.\n\nWARNING: it already contains every relative multiple and sector model below. Ticking it alongside any of them counts those models twice. The Omnibus Members row flags this as DOUBLE-COUNT.')
+i_om_comp = input.bool(false, 'Standard Composite (the whole Standard blend)', group = group_omni, tooltip = 'The Standard blend entered as a SINGLE member. Off by default: Standard and Omnibus are alternatives.\n\nWARNING: it already contains the relative multiples and sector models below, plus the absolute models the framework is named after (Technology: DCF, RIM, Rule of 40; Financials: RIM). Ticking it alongside any of them counts those models twice. The Omnibus Members row flags this as DOUBLE-COUNT.')
 i_omni_sanity_x = input.float(10.0, 'Drop members beyond Nx / (1/N)x price', minval = 0, maxval = 50, step = 1, group = group_omni, tooltip = 'A member whose fair value exceeds N times the current price, or falls below 1/N of it, is excluded.\n\n0 = off. The Standard Composite member is never dropped by this test.')
 i_om_pe = input.bool(true, 'Blended P/E', group = group_omni_r, inline = 'r1')
 i_om_ps = input.bool(true, 'P/S', group = group_omni_r, inline = 'r1')
@@ -1187,14 +1191,16 @@ if i_industry == 'Auto-Detect'
         selected_industry := 'Utilities'
     else
         selected_industry := 'General/Diversified'
-// THE ALLOCATION MATRIX: 'description|codes'. Codes are the registry codes (see
+// THE ALLOCATION MATRIX: 'description|codes|named'. Codes are the registry codes (see
 // f_build_models) plus the quality filters (GPA gross profit / assets, ROIC
 // ROIC - WACC, SLN Sloan accruals, SHY shareholder yield) and CAPE (the P/E
-// driver becomes 10-year inflation-adjusted EPS).
+// driver becomes 10-year inflation-adjusted EPS). Named (optional): the absolute
+// models in the description, which the Standard blend takes alongside the multiples
+// and sector models.
 string fw_row = switch selected_industry
-    'Technology' => 'Growth: Rule of 40, DCF & RIM|PE PS FCF EV DCF RIM R40 ROIC SLN SHY'
+    'Technology' => 'Growth: Rule of 40, DCF & RIM|PE PS FCF EV DCF RIM R40 ROIC SLN SHY|DCF RIM R40'
     'Healthcare (Pharma/Biotech)' => 'rNPV & Pipeline Focus|PE PS FCF PB EV DCF EPV ACQ RNPV ROIC SLN SHY'
-    'Financials (Bank/Insurance)' => 'RIM & Equity Cash Flow|PE PB TBV RIM GRA ECF SHY'
+    'Financials (Bank/Insurance)' => 'RIM & Equity Cash Flow|PE PB TBV RIM GRA ECF SHY|RIM'
     'REITs' => 'AFFO DCF & Property Multiples|PB EV CF AFFO ADCF SHY'
     'Energy/Materials' => 'Cyclically-Adjusted Value (CAPE)|PE FCF PB TBV EV CF EPV GRA ACQ OE CAPE ROIC SHY'
     'Capital Goods/Industrials' => 'APV & Cyclical Quality|PE FCF PB EV CF DCF EPV GRA ACQ OE APV CAPE GPA ROIC SLN'
@@ -1206,15 +1212,17 @@ string fw_row = switch selected_industry
 array<string> fw_parts = str.split(fw_row, '|')
 string active_model_desc = array.get(fw_parts, 0)
 string fw_codes = ' ' + array.get(fw_parts, 1) + ' '
+string fw_named = ' ' + (array.size(fw_parts) > 2 ? array.get(fw_parts, 2) : '') + ' '
 bool use_cape = str.contains(fw_codes, ' CAPE ')
 bool show_gpa = str.contains(fw_codes, ' GPA ')
 bool show_roic_wacc = str.contains(fw_codes, ' ROIC ')
 bool show_sloan = str.contains(fw_codes, ' SLN ')
 bool show_shareholder = str.contains(fw_codes, ' SHY ')
 if barstate.isfirst
-    for m in MD
+    for [k, m] in MD
         m.fw := m.code == 'COMP' or str.contains(fw_codes, ' ' + m.code + ' ')
         m.on := m.fw
+        m.std := m.fw and k >= 1 and (k <= 15 or str.contains(fw_named, ' ' + m.code + ' '))
 bool is_financial_sector = selected_industry == 'Financials (Bank/Insurance)'
 float cyclically_adjusted_eps = na
 if use_cape
@@ -1537,7 +1545,7 @@ for s = 0 to 2
     if oe_ok
         f_set3(M_OE, s, oe_per_share / ce)
 // ==============================================================
-// === STANDARD BLEND (registry 1-15: multiples + sector models) =
+// === STANDARD BLEND: multiples + sector models + named absolute =
 // ==============================================================
 // Provenance tier of each model's main input, registry order.
 array<int> tiers = array.from(3, t_eps, t_rev, t_ocf, t_equity, t_equity, t_ebitda, t_ocf, t_ocf, t_ocf, t_ni, t_ocf, t_ocf, t_ocf, t_ebit, 3, t_ocf, use_bank_model ? t_ni : t_ebit, t_ebit, t_eps, math.min(t_rev, t_ocf), t_ebit, t_ocf)
@@ -1549,15 +1557,15 @@ for k = 0 to 22
 // Weight = track record x provenance. Weight 0 = no track record yet: if NO model
 // has one (young listing), fall back to equal weights x provenance.
 float blend_sc_sum = 0.0
-for k = 1 to 15
+for k = 1 to 22
     Model m = array.get(MD, k)
-    m.w := m.on and m.fv > 0 ? m.trk * f_tier_q(m.tier) : 0.0
+    m.w := m.on and m.std and m.fv > 0 ? m.trk * f_tier_q(m.tier) : 0.0
     blend_sc_sum += m.w
 bool blend_eq = blend_sc_sum <= 0
 float blend_w_tot = 0.0
-for k = 1 to 15
+for k = 1 to 22
     Model m = array.get(MD, k)
-    m.w := m.fv > 0 ? (blend_eq ? (m.on ? f_tier_q(m.tier) : 0.0) : m.w) : 0.0
+    m.w := m.fv > 0 ? (blend_eq ? (m.on and m.std ? f_tier_q(m.tier) : 0.0) : m.w) : 0.0
     blend_w_tot += m.w
 float compositeFairValue = na
 float compositeLo = na
@@ -1566,12 +1574,12 @@ array<float> blend_vals = array.new_float(0)
 array<float> blend_ws = array.new_float(0)
 if blend_w_tot > 0
     array<float> bw = array.new_float(23, 0.0)
-    for k = 1 to 15
+    for k = 1 to 22
         Model m = array.get(MD, k)
         array.set(bw, k, m.w)
     f_fam_cap(bw)
     compositeFairValue := 0.0, compositeLo := 0.0, compositeHi := 0.0
-    for k = 1 to 15
+    for k = 1 to 22
         Model m = array.get(MD, k)
         m.w := array.get(bw, k) // normalised, family-capped share, read by the table
         if m.w > 0
@@ -1614,8 +1622,8 @@ float finalFairValue = compositeFairValue > 0 ? compositeFairValue : na
 // ==============================================================
 // Every model is a member in its own right, weighted on its own track record. Auto: every
 // model the framework enables (1-22). Manual: the ticked boxes, gated by the framework
-// unless strict is off. The Standard Composite (0) holds 1-15: only Manual can tick it,
-// and it is flagged as a double count next to any of them.
+// unless strict is off. The Standard Composite (0) holds every model with a Standard
+// weight: only Manual can tick it, and it is flagged as a double count next to any of them.
 array<bool> om_pick = array.from(i_om_comp, i_om_pe, i_om_ps, i_om_pfcf, i_om_pb, i_om_ptbv, i_om_ev, i_om_pcf, i_om_paffo, i_om_rnpv, i_om_ecf, i_om_affo, i_om_unb, i_om_apv, i_om_eva, i_om_ddm, i_om_dcf, i_om_rim, i_om_epv, i_om_graham, i_om_r40, i_om_acq, i_om_oe)
 bool omni_sane_on = i_omni_sanity_x >= 1.5 and close > 0
 float omni_w_sum = 0.0
@@ -1647,7 +1655,7 @@ for k = 0 to 22
     m.om := m.om and m.om_w > 0
     if m.om
         omni_n += 1
-        omni_sub += k >= 1 and k <= 15 ? 1 : 0
+        omni_sub += m.w > 0 ? 1 : 0
         raw_omnibus_fv += m.fv * m.om_w
         raw_omnibus_lo += math.max(nz(m.lo, m.fv), 0.0) * m.om_w
         raw_omnibus_hi += nz(m.hi, m.fv) * m.om_w
@@ -1886,7 +1894,7 @@ f_street_calc() =>
     int our_n_models = omni_active ? omni_n : 0
     bool our_track = omni_active ? omni_w_sum > 0 : not blend_eq
     if not omni_active
-        for k = 1 to 15
+        for k = 1 to 22
             Model m = array.get(MD, k)
             our_n_models += m.fv > 0 and m.w > 0 ? 1 : 0
     float oc_agree = finalFairValue > 0 ? f_clamp01(1 - (nz(fv_stddev, finalFairValue * 0.15) / finalFairValue) / 0.5) : na
@@ -2050,7 +2058,7 @@ f_members_tt() =>
     string t = ''
     for k = 0 to 22
         Model m = array.get(MD, k)
-        if omni_active ? m.om : k >= 1 and k <= 15 and m.w > 0
+        if omni_active ? m.om : m.w > 0
             float sh = omni_active ? m.om_w : m.w
             t += '\n' + m.name + ': ' + f_px(m.fv) + '  (' + str.tostring(sh * 100, '#') + '%)'
     t
