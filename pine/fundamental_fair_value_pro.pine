@@ -76,6 +76,9 @@ f_push_s(array<float> a, float v, int max_n, float cap) =>
         array.push(a, math.max(math.min(v, cap), -cap))
         if array.size(a) > max_n
             array.shift(a)
+// 0 below a, 1 above b, linear between: a premium phases in instead of stepping.
+f_ramp(float x, float a, float b) =>
+    math.min(math.max((x - a) / (b - a), 0.0), 1.0)
 // Damodaran synthetic credit spread from interest cover (EBIT / interest).
 f_synthetic_spread(float ebit, float interest) =>
     var array<float> cut = array.from(8.5, 6.5, 5.5, 4.25, 3.0, 2.5, 2.25, 2.0, 1.75, 1.5, 1.25, 0.8)
@@ -205,15 +208,17 @@ f_calculate_rab_model(rab_base, allowed_return, wacc, growth, net_debt, shares) 
         rab_multiple := math.max(math.min(rab_multiple, 2.0), 0.5)
         rab_ev := rab_base * rab_multiple
     shares > 0 and not na(rab_ev) ? (rab_ev - net_debt) / shares : na
-// Gordon growth DDM on the long-run terminal rate.
+// Gordon growth DDM on the long-run terminal rate, held 1.5pt under the rate as in every
+// other perpetuity here.
 f_calculate_ddm(dps, coe, terminal_growth) =>
-    float g = math.min(nz(terminal_growth, 0.02), coe - 0.01)
+    float g = math.min(nz(terminal_growth, 0.02), coe - 0.015)
     not na(dps) and dps > 0 and coe > g ? (dps * (1 + g)) / (coe - g) : na
 // [FIX EVA] Invested capital + PV(EVA) is FIRM value; subtract net debt for
-// equity. Growth is the terminal rate.
+// equity. Growth is the terminal rate, held 1.5pt under WACC like the DCF's.
 f_calculate_eva(nopat, invested_capital, wacc, g_term, net_debt, shares) =>
+    float g = math.min(g_term, wacc - 0.015)
     float current_eva = nopat - (invested_capital * wacc)
-    float pv_eva = (current_eva * (1 + g_term)) / math.max(wacc - g_term, 0.01)
+    float pv_eva = (current_eva * (1 + g)) / (wacc - g)
     shares > 0 ? (invested_capital + pv_eva - nz(net_debt)) / shares : na
 // ==============================================================
 // === UNIFIED MODEL WEIGHT (predictive, scale-free) ============
@@ -416,12 +421,12 @@ i_growth_etf = input.symbol('VUG', 'Growth ETF', group = group_factors)
 i_mom_prem = input.float(1.0, 'Max Momentum Premium %', group = group_factors) / 100
 i_liq_prem = input.float(2.0, 'Max Liquidity Premium %', group = group_factors) / 100
 group_risk = 'Cost of Equity (CAPM)'
-i_auto_calc_erp_crp = input.bool(true, '✨ Auto-Calculate Risk Premiums', group = group_risk, tooltip = 'ERP: half the market proxy 5-year return over the risk-free rate plus half a 5% long-run anchor, held to 4.5-8% (trailing returns alone overshoot after bull markets). CRP: the local-minus-US sovereign spread.')
+i_auto_calc_erp_crp = input.bool(true, '✨ Auto-Calculate Risk Premiums', group = group_risk, tooltip = 'ERP: half the market proxy 5-year return over its own currency 10Y (US 10Y for SPY, VN 10Y for VNINDEX) plus half a 5% long-run anchor, held to 4.5-8% (trailing returns alone overshoot after bull markets). CRP: the local-minus-US sovereign spread.')
 i_erp_manual = input.float(5.0, 'Manual ERP %', group = group_risk) / 100
 i_crp_manual = input.float(3.5, 'Manual Country Risk %', group = group_risk) / 100
 i_rf_base = input.string('Local 10Y', 'Risk-free base', options = ['Local 10Y', 'US 10Y + CRP'], group = group_risk, tooltip = 'Local 10Y: discount local-currency cash flows at the local sovereign yield. Country risk is already inside that yield, so auto-CRP is 0 (manual CRP is still added when Auto is off).\n\nUS 10Y + CRP: a USD build -- US yield plus the local-minus-US spread (or the manual CRP). Use it when the local curve is thin or administered.')
 group_proxies = 'Market Proxy (Used for Beta & Auto-ERP)'
-i_mkt_bench = input.symbol('SPY', 'Market Proxy', group = group_proxies)
+i_mkt_bench = input.symbol('SPY', 'Market Proxy', group = group_proxies, tooltip = 'Beta is regressed on this proxy. Auto-ERP reads it as a USD index and pairs it with the US 10Y. VND charts use VNINDEX and the VN 10Y instead.')
 i_beta_lookback = input.int(104, 'Regression Lookback (periods of the timeframe below)', minval = 30, group = group_proxies)
 i_beta_tf = input.timeframe('W', 'Regression Timeframe', group = group_proxies)
 group_calc = 'Calculation Parameters'
@@ -567,18 +572,18 @@ float us10y_smooth = f_locf(us_sm_r)
 // >>> SECURITY SLOT 2/6 : Local risk-free curve
 [rf_spot_r, rf_sm_r] = request.security(final_rf_ticker, 'D', [close, ta.sma(close, 90)], ignore_invalid_symbol = true)
 float local_rf_raw = f_locf(rf_spot_r)
-float us10y_yield = f_locf(rf_sm_r) // NOTE: 90d avg of the LOCAL yield; name kept for compatibility
+float rf_local_avg = f_locf(rf_sm_r) // 90-day average of the LOCAL 10Y yield, in %
 // Cascade: thin sovereign curves (VN10Y etc.) frequently print nothing.
 if na(local_rf_raw)
     local_rf_raw := us10y_true_raw
-if na(us10y_yield)
-    us10y_yield := nz(us10y_smooth, local_rf_raw)
-if na(us10y_yield)
-    us10y_yield := 4.0
+if na(rf_local_avg)
+    rf_local_avg := nz(us10y_smooth, local_rf_raw)
+if na(rf_local_avg)
+    rf_local_avg := 4.0
 if na(local_rf_raw)
-    local_rf_raw := us10y_yield
+    local_rf_raw := rf_local_avg
 if na(us10y_true_raw)
-    us10y_true_raw := us10y_yield
+    us10y_true_raw := rf_local_avg
 // ---------------------------------------------------------------------
 // 3.2b MACRO ASSUMPTIONS (replaces the CPI + GDP requests -- 0 slots)
 // ---------------------------------------------------------------------
@@ -875,6 +880,7 @@ t_ni := f_tg(iNI)
 t_ebit := f_tg(iEB)
 t_ebitda := f_tg(iED)
 t_ocf := na(f_g(iCX)) ? f_tg(iOC) : math.min(f_tg(iOC), f_tg(iCX)) // FCF models: the weaker of OCF and capex
+int t_cfo = f_tg(iOC) // P/CF reads operating cash flow alone
 t_eps := math.min(not na(eps_ttm) ? 3 : math.min(math.min(t_ni, t_shares), 2), stale_cap)
 shares_out_latest := calc_shares
 total_revenue_ttm := calc_rev
@@ -901,7 +907,7 @@ float net_debt_robust = calc_debt - nz(calc_cash, 0)
 // strict capital structure. Every model that values the whole firm subtracts this exactly
 // once. Preferred has no balance field in the request budget: its dividends capitalised at
 // the local 10Y + 2% stand in for it.
-float pref_equity = nz(pref_div_ttm) / math.max(us10y_yield / 100 + 0.02, 0.04)
+float pref_equity = nz(pref_div_ttm) / math.max(rf_local_avg / 100 + 0.02, 0.04)
 float claims = net_debt_robust + (i_strict_cap ? nz(minority_fq) + pref_equity : 0.0)
 string claims_txt = i_strict_cap ? 'net debt, minority interest and preferred' : 'net debt' // tooltips
 // Equity of the parent's shareholders (ex minority interest; ex preferred when the strict
@@ -1023,9 +1029,12 @@ float nopat_norm = (ebit_normalized + safe_rnd - rnd_amortization) * (1 - effect
 float fcff = true_fcf + nz(interest_expense_ttm) * (1 - effective_tax)
 float working_capital_proxy = nz(receiv_fq, nz(calc_rev) * 0.1) + nz(inventory_fq, nz(calc_rev) * 0.1) - nz(calc_rev) * 0.15
 float ic_equity_method = total_equity_latest + total_debt_latest - nz(cash_latest, 0)
-float invested_capital_adj = total_equity_latest < 0 ? ppe_gross_fq + math.max(working_capital_proxy, 0) : ic_equity_method
+// Operating assets at NET PPE: NOPAT is after depreciation, so the capital it earns on is too
+// (gross PPE keeps fully depreciated assets in the base and understates ROIC).
+float ppe_ic = nz(ppe_net_fq, nz(ppe_gross_fq, 0))
+float invested_capital_adj = total_equity_latest < 0 ? ppe_ic + math.max(working_capital_proxy, 0) : ic_equity_method
 // [FIX HGM-2] Invested capital floored at the operating assets deployed.
-float ic_operating_floor = math.max(nz(ppe_gross_fq, 0) + math.max(nz(working_capital_proxy, 0), 0), nz(total_assets_fq, 0) * 0.05, 1.0)
+float ic_operating_floor = math.max(ppe_ic + math.max(nz(working_capital_proxy, 0), 0), nz(total_assets_fq, 0) * 0.05, 1.0)
 invested_capital_adj := math.max(nz(invested_capital_adj, ic_operating_floor), nz(total_debt_latest, 0), ic_operating_floor) + research_asset
 float roic_adj = nopat_adjusted / invested_capital_adj
 roic_adj := na(roic_adj) ? na : math.max(math.min(roic_adj, 1.50), -1.50)
@@ -1125,8 +1134,12 @@ float cagr_growth = f_get_cagr_optimized(growth_p, bars_in_5y)
 float live_hml_spread = na(value_p) or na(growth_p) ? 0.015 : (cagr_value - cagr_growth) * 0.5
 live_hml_spread := math.max(math.min(live_hml_spread, 0.05), -0.02)
 // Trailing returns run high after bull markets, the opposite of forward returns: half the
-// 5-year excess return plus half a 5% long-run anchor, held to 4.5-8%.
-float auto_erp = math.min(math.max(0.5 * (cagr_mkt - us10y_yield / 100) + 0.025, 0.045), 0.08)
+// 5-year excess return plus half a 5% long-run anchor, held to 4.5-8%. The excess is over
+// the proxy's OWN currency's 10Y (VNINDEX: VN 10Y; the default SPY: US 10Y): a USD return
+// less a local yield overstated the premium in low-yield currencies and understated it in
+// high-yield ones. The premium then sits on the local base rate.
+float erp_rf = curr == 'VND' ? rf_local_avg : nz(us10y_smooth, us10y_true_raw)
+float auto_erp = math.min(math.max(0.5 * (cagr_mkt - erp_rf / 100) + 0.025, 0.045), 0.08)
 float auto_crp_raw = local_rf_raw > us10y_true_raw ? (local_rf_raw - us10y_true_raw) / 100 : 0.0
 bool rf_local = i_rf_base == 'Local 10Y'
 // [FIX CRP-1] In the local build the spread is already inside the base rate.
@@ -1269,7 +1282,8 @@ if is_new_quarter
     float ev_hist = price_at_period_end * shares_out_latest[1] + claims[1]
     float op_val = not na(ebit_ttm[1]) and not na(total_equity_latest[1]) and total_equity_latest[1] > 0 ? ebit_ttm[1] / total_equity_latest[1] : na
     // --- RHODES-KROPF (RKV) HISTORICAL FILTER --- (P/B row only, via m.rkv)
-    float hist_coe_proxy = (not na(us10y_true_raw[1]) ? us10y_true_raw[1] / 100 : 0.04) + 0.05
+    // Cost-of-equity proxy on the LOCAL 10Y (+5%): the US yield misjudged every other market.
+    float hist_coe_proxy = nz(rf_local_avg[1], 4.0) / 100 + 0.05
     bool rkv_trip = i_use_rkv and not na(roe_avg[1]) and roe_avg[1] < hist_coe_proxy
     array<float> hdrv = array.from(earnings_base[1], sales_ps_ttm[1], fcf_ps_ttm[1], bvps_ttm[1], tbvps_ttm[1], na, ocf_ps_ttm[1], affo_ps_ttm[1])
     for k = 1 to 8
@@ -1318,7 +1332,7 @@ bool is_deteriorating = not na(asset_growth) and not na(ebitda_growth) and asset
 // COST OF EQUITY: VN LIQUIDITY-AUGMENTED 4-FACTOR MODEL
 // ==========================================
 // [FIX RF] One base: local 10Y (90d avg) for local-currency cash flows, or US 10Y + CRP.
-float base_rf_for_calc = rf_local ? us10y_yield / 100 : us10y_true_raw / 100
+float base_rf_for_calc = rf_local ? rf_local_avg / 100 : us10y_true_raw / 100
 float standard_capm_coe = base_rf_for_calc + (beta_mkt * calc_erp) + calc_crp
 // [FIX FX] Live rate (1 request slot) instead of a hardcoded 25000 / 0.93 / 0.79.
 // fx_rate = local currency units per 1 USD.
@@ -1333,58 +1347,56 @@ if i_use_factors
         size_premium := live_smb_spread * (1.0 - ((mc_usd_billions - 1.0) / 3.0))
 float hml_premium = 0.0
 float current_bm = not na(bvps_ttm) and close > 0 ? bvps_ttm / close : 0.0
-if i_use_factors and current_bm > 0.8
-    // Loading = B/M / 2 (0.4-1.0): even the deepest value decile loads about 1 on HML.
-    hml_premium := live_hml_spread * math.min(current_bm, 2.0) / 2
+// Each factor premium phases in over a band around its threshold (f_ramp): B/M and the
+// 11-month return move with the price on every bar, so a step made the fair value jump
+// whenever either crossed its line.
+if i_use_factors
+    // Loading = B/M / 2 (0.4-1.0: even the deepest value decile loads about 1 on HML),
+    // phasing in from B/M 0.7 to 0.9.
+    hml_premium := live_hml_spread * math.min(current_bm, 2.0) / 2 * f_ramp(current_bm, 0.7, 0.9)
 float px_1m_ago = close[math.min(math.max(1, int(bpy / 12)), 4900)]
 float px_12m_ago = close[math.min(bpy, 4900)]
 float mom_premium = 0.0
 float mom_hurdle = (curr == 'VND') ? 0.45 : 0.30
 if i_use_factors and not na(px_1m_ago) and not na(px_12m_ago) and px_12m_ago > 0
     float trailing_11m_ret = (px_1m_ago - px_12m_ago) / px_12m_ago
-    if trailing_11m_ret > mom_hurdle
-        mom_premium := i_mom_prem
-    else if trailing_11m_ret < -mom_hurdle
-        mom_premium := -i_mom_prem
+    // None inside 0.8x the hurdle, the full premium beyond 1.2x.
+    mom_premium := i_mom_prem * (f_ramp(trailing_11m_ret, 0.8 * mom_hurdle, 1.2 * mom_hurdle) - f_ramp(-trailing_11m_ret, 0.8 * mom_hurdle, 1.2 * mom_hurdle))
 float microstructure_premium = 0.0
+// Liquidity on a DAILY basis whatever the chart timeframe: a bar spans days_per_bar trading
+// days, so per-bar turnover is divided by it and the per-bar Amihud ratio scaled by its
+// square root (|return| grows with the square root of time, volume in proportion to it).
+// The windows are in days too (90 days, 1 year), so a daily chart is unchanged.
+float days_per_bar = trading_days / float(bpy)
+int liq_n90 = math.max(math.min(int(math.round(90 / days_per_bar)), 4900), 5)
+int liq_n252 = math.max(math.min(int(math.round(252 / days_per_bar)), 4900), 5)
 if i_use_factors
     float safe_vol = nz(volume, 1.0)
     float dollar_vol_usd = (close * safe_vol) / fx_rate
-    float daily_ret_abs = math.abs(ta.change(close) / nz(close[1], close))
-    float amihud_raw = dollar_vol_usd > 0 ? (daily_ret_abs / dollar_vol_usd) * 1e6 : 0.0
-    float amihud_90d = ta.sma(amihud_raw, 90)
-    float illiq_penalty = 0.0
-    if not na(amihud_90d)
-        if amihud_90d > 0.5
-            illiq_penalty := i_liq_prem
-        else if amihud_90d > 0.1
-            illiq_penalty := i_liq_prem * (amihud_90d / 0.5)
-    float spec_penalty = 0.0
+    float bar_ret_abs = math.abs(ta.change(close) / nz(close[1], close))
+    float amihud_raw = dollar_vol_usd > 0 ? (bar_ret_abs / dollar_vol_usd) * 1e6 * math.sqrt(days_per_bar) : 0.0
+    float amihud_90d = ta.sma(amihud_raw, liq_n90)
+    float illiq_penalty = i_liq_prem * nz(f_ramp(amihud_90d, 0.1, 0.5))
     // ta.sma runs on every bar: inside the share-count condition it averaged only qualifying bars.
-    float avg_turnover_12m = ta.sma(shares_out_latest > 0 ? nz(volume) / shares_out_latest : na, 252)
-    if not na(volume) and shares_out_latest > 0
-        if avg_turnover_12m > 0.01
-            spec_penalty := i_liq_prem * math.min((avg_turnover_12m - 0.01) / 0.01, 1.0)
+    float avg_turnover_12m = ta.sma(shares_out_latest > 0 ? nz(volume) / shares_out_latest : na, liq_n252) / days_per_bar
+    float spec_penalty = not na(volume) and shares_out_latest > 0 ? i_liq_prem * nz(f_ramp(avg_turnover_12m, 0.01, 0.02)) : 0.0
     microstructure_premium := math.max(illiq_penalty, spec_penalty)
 float rmw_premium = 0.0
 float current_op = not na(ebit_ttm) and total_equity_latest > 0 ? ebit_ttm / total_equity_latest : 0.0
 if i_use_factors
-    // [FIX RMW] In Fama-French 5 robust profitability earns a POSITIVE premium:
-    // a robust firm loads positively on RMW, so its required return goes up.
-    if current_op > 0.20
-        rmw_premium := 0.015
-    else if current_op < 0.05
-        rmw_premium := -0.015
+    // [FIX RMW] In Fama-French 5 robust profitability earns a POSITIVE premium: a robust
+    // firm loads positively on RMW, so its required return goes up. +1.5% phases in as
+    // operating profitability goes from 17.5% to 22.5%, -1.5% as it falls from 7.5% to 2.5%.
+    rmw_premium := 0.015 * (f_ramp(current_op, 0.175, 0.225) - f_ramp(-current_op, -0.075, -0.025))
 float cost_of_equity = standard_capm_coe + size_premium + hml_premium + mom_premium + rmw_premium + microstructure_premium
 float min_equity_return = base_rf_for_calc + 0.03
 cost_of_equity := math.max(cost_of_equity, min_equity_return)
-float effective_tax_rate = effective_tax // [FIX TAX] same 0-35% clamp as NOPAT
 float equity_weight = not na(market_cap_latest) and not na(total_debt_latest) and market_cap_latest + total_debt_latest > 0 ? market_cap_latest / (market_cap_latest + total_debt_latest) : 1.0
 float debt_weight = 1.0 - equity_weight
 float auto_credit_spread = f_synthetic_spread(ebit_normalized, interest_expense_ttm)
 // [FIX CRP-2] CRP is charged once, in the cost of equity. Debt = same base + synthetic spread.
 float cost_of_debt_synthetic = base_rf_for_calc + auto_credit_spread + (rf_local ? 0.0 : calc_crp)
-float final_wacc_auto = equity_weight * cost_of_equity + debt_weight * nz(cost_of_debt_synthetic, 0.05) * (1 - effective_tax_rate)
+float final_wacc_auto = equity_weight * cost_of_equity + debt_weight * nz(cost_of_debt_synthetic, 0.05) * (1 - effective_tax)
 float final_discount_rate = nz(final_wacc_auto, cost_of_equity)
 // ==============================================
 // 4. TRIANGULATED ROBUST GROWTH & TERMINAL RATES
@@ -1401,10 +1413,10 @@ if not na(div_per_share_ttm) and not na(eps_ttm) and eps_ttm > 0
 float median_roe = f_median(hist_roe)
 float median_op = f_median(hist_op)
 // [FIX SGR] Sustainable growth = ROE x retention. EBIT/equity is pre-interest and pre-tax.
-float base_profitability = not na(median_roe) and median_roe > 0 ? median_roe : (not na(median_op) and median_op > 0 ? median_op * (1 - effective_tax) : 0.05)
+// No positive profitability on record -> no sustainable-growth leg (it was a 5% guess).
+float base_profitability = median_roe > 0 ? median_roe : median_op > 0 ? median_op * (1 - effective_tax) : na
 float normalized_sgr = base_profitability * retention_ratio
 float sales_cagr_3y = f_calculate_cagr_from_series(total_revenue_ttm, 3)
-float effective_sgr = base_profitability > 0 ? normalized_sgr : nz(sales_cagr_3y, 0.05)
 // Reinvestment = NOPAT - FCFF: both unlevered (the levered FCF also nets out interest).
 // A bank's operating cash flow swings with loans and deposits, so its fundamental growth
 // is ROE x retention, not ROIC x reinvestment.
@@ -1416,7 +1428,18 @@ float roic_sgr = use_bank_model ? normalized_sgr : math.max(roic_adj * reinvestm
 bool g_manual = i_growth_src == 'Manual'
 float fwd_growth_leg = g_manual ? i_analyst_growth : not na(fwd_eps_growth) ? fwd_eps_growth : not na(sales_cagr_3y) ? sales_cagr_3y : i_analyst_growth
 string fwd_growth_src = g_manual ? 'Manual' : not na(fwd_eps_growth) ? 'Consensus EPS' : not na(sales_cagr_3y) ? 'Sales CAGR' : 'Manual (fallback)'
-float base_triangulated_growth = (effective_sgr * 0.15) + (roic_sgr * 0.40) + (fwd_growth_leg * 0.15) + (nz(sales_cagr_3y, 0.05) * 0.30)
+// Triangulation: sustainable growth 15%, ROIC x reinvestment 40%, the forward leg 15%, the
+// 3-year sales CAGR 30%. A leg with no data leaves and the others are re-weighted (the sales
+// leg used to enter at a guessed 5%). The forward leg always exists, so the blend does too.
+array<float> g_leg = array.from(normalized_sgr, roic_sgr, fwd_growth_leg, sales_cagr_3y)
+array<float> g_wt = array.from(0.15, 0.40, 0.15, 0.30)
+float g_num = 0.0
+float g_den = 0.0
+for [i, x] in g_leg
+    if not na(x)
+        g_num += x * array.get(g_wt, i)
+        g_den += array.get(g_wt, i)
+float base_triangulated_growth = g_num / g_den
 float calc_growth_triangulated = math.min(math.max(base_triangulated_growth, -0.10), 0.35)
 float dynamic_growth_cap = 0.25
 if selected_industry == 'Technology' or selected_industry == 'Healthcare (Pharma/Biotech)' or selected_industry == 'Consumer Discretionary'
@@ -1425,7 +1448,7 @@ else if selected_industry == 'Utilities' or selected_industry == 'REITs' or sele
     dynamic_growth_cap := 0.15
 float final_growth_rate = math.min(calc_growth_triangulated, dynamic_growth_cap)
 final_growth_rate := math.max(final_growth_rate, -0.05) // [FIX G-FLOOR] shrinking firms may shrink
-float nominal_gdp_ceiling = math.max(nz(us10y_yield / 100, 0.04), lr_infl + lr_rgdp)
+float nominal_gdp_ceiling = math.max(nz(rf_local_avg / 100, 0.04), lr_infl + lr_rgdp)
 float unbiased_dynamic_g = lr_infl + 0.005
 unbiased_dynamic_g := math.max(unbiased_dynamic_g, 0.015)
 unbiased_dynamic_g := math.min(unbiased_dynamic_g, 0.035)
@@ -1441,7 +1464,8 @@ float final_terminal_growth = math.min(unbiased_dynamic_g, nominal_gdp_ceiling)
 bool rs_dirty = is_new_quarter or barstate.isfirst
 float fwd_disc = 1 + math.max(cost_of_equity - nz(div_yield, 0), 0.0)
 float eps_f1_proj = not na(final_growth_rate) and not cape_on ? earnings_base * (1 + final_growth_rate) : na
-float sales_cagr = nz(f_calculate_cagr_from_series(total_revenue_ttm, i_cagr_years), 0.05)
+// No sales CAGR on record -> no forward EBITDA leg (TTM only), not a guessed 5%.
+float sales_cagr = f_calculate_cagr_from_series(total_revenue_ttm, i_cagr_years)
 float final_sales_f1 = total_revenue_ttm * (1 + sales_cagr)
 float ebitda_margin_ttm = total_revenue_ttm > 0 ? ebitda_ttm / total_revenue_ttm : na
 float est_ebitda_fwd = not na(final_sales_f1) and not na(ebitda_margin_ttm) ? final_sales_f1 * ebitda_margin_ttm : na
@@ -1470,8 +1494,11 @@ for k = 1 to 8
 // unlevered cash flow at WACC (APV: the unlevered cost of capital) and subtract the claims
 // ahead of common once; equity models (ECF, AFFO DCF, DDM, Owners' Earnings, bank RIM)
 // discount equity cash flow at CoE.
-float wacc_bear = final_wacc_auto + i_scen_wacc_bps
-float wacc_bull = math.max(final_wacc_auto - i_scen_wacc_bps, 0.02)
+// One discount rate for every firm-value model, floored at 2% in all three cases, so Bull is
+// never above Base (the floors were 1% for the base case and 2% for Bull).
+float wacc_base = math.max(final_discount_rate, 0.02)
+float wacc_bear = wacc_base + i_scen_wacc_bps
+float wacc_bull = math.max(wacc_base - i_scen_wacc_bps, 0.02)
 float coe_bear = cost_of_equity + i_scen_wacc_bps
 float coe_bull = math.max(cost_of_equity - i_scen_wacc_bps, 0.02)
 float tg_bear = math.max(final_terminal_growth - i_scen_g_bps, 0.0)
@@ -1484,12 +1511,12 @@ float g_bull = math.min(final_growth_rate + i_scen_growth_bps, dynamic_growth_ca
 // value, liquidity ...) and strips only the leverage part of beta.
 float de_mkt = nz(total_debt_latest) / (market_cap_latest > 0 ? market_cap_latest : math.max(nz(total_equity_latest), 1.0))
 float unlevered_beta = beta_mkt / (1 + (1 - effective_tax) * de_mkt)
-float unlevered_coe = math.max(cost_of_equity - (beta_mkt - unlevered_beta) * calc_erp, math.min(nz(cost_of_debt_synthetic, base_rf_for_calc + 0.01), cost_of_equity))
+float unlevered_coe = math.max(cost_of_equity - (beta_mkt - unlevered_beta) * calc_erp, math.min(nz(cost_of_debt_synthetic, base_rf_for_calc + 0.01), cost_of_equity), 0.02)
 float total_debt_1y_ago = ta.valuewhen(is_new_quarter, total_debt_latest, 4)
 // RIM inputs: the Equity model for banks and insurers, the Entity model for the rest.
 float rim_nopat_proxy = use_bank_model ? net_income_ttm : nopat_adjusted
 float rim_capital_proxy = use_bank_model ? book_value : invested_capital_adj
-float rim_discount_proxy = use_bank_model ? math.min(cost_of_equity, 0.15) : final_discount_rate
+float rim_discount_proxy = use_bank_model ? math.min(cost_of_equity, 0.15) : wacc_base
 float rim_debt_proxy = use_bank_model ? 0.0 : claims
 float nopat_ps = nopat_adjusted / shares_out_latest
 // Equity Cash Flow: net income per share and a normalised ROE (5-year median, else today's).
@@ -1504,16 +1531,17 @@ float claims_ps = claims / shares_out_latest
 // firm values: the claims come off once.
 float netco_sh = ppe_net_fq > 0 ? math.min(math.max(ppe_net_fq / invested_capital_adj, 0.3), 0.9) : na
 float netco_rab = netco_sh * invested_capital_adj
-// Reverse DCF input (median unlevered FCF margin) and the Rule of 40 margin.
-float median_fcf_margin = nz(f_median(hist_fcff_margins), 0.10)
+// Reverse DCF input (median unlevered FCF margin; no history -> N/A, not a guessed 10%) and
+// the Rule of 40 margin.
+float median_fcf_margin = f_median(hist_fcff_margins)
 float dcf_input_fcf_total_rev = total_revenue_ttm * median_fcf_margin
 float true_fcf_margin_ttm = true_fcf / total_revenue_ttm
 // [FIX GRAHAM] No revenue-based EPS fallback: Graham needs real positive earnings.
 float base_eps = eps_ttm > 0 ? eps_ttm : na
-float safe_us10y = us10y_yield > 0 ? us10y_yield : 4.0
+float graham_y = rf_local_avg > 0 ? rf_local_avg : 4.0
 // 4.4 / Y rescales for bond yields. Below 4.4% it multiplied value UP (x4.4
 // at a 1% yield), so it is capped at 1.0: it may only penalise high yields.
-float graham_yield_adj = math.min(4.4 / safe_us10y, 1.0)
+float graham_yield_adj = math.min(4.4 / graham_y, 1.0)
 // Graham meant a 7-10 year growth rate; cap at 15% so the 2g term cannot run away.
 float graham_g = math.max(math.min(final_growth_rate, 0.15), 0.0)
 bool acq_ok = ebit_ttm > 0 and shares_out_latest > 0
@@ -1531,14 +1559,13 @@ bool omni_manual = i_omni_mode == 'Manual (Tick Models Below)'
 bool om_free = is_omnibus and omni_manual and not i_omni_strict
 float implied_exit_multiple = na
 for s = 0 to 2
-    float wc = f_sc(s, final_wacc_auto, wacc_bear, wacc_bull)
+    float wc = f_sc(s, wacc_base, wacc_bear, wacc_bull)
     float ce = f_sc(s, cost_of_equity, coe_bear, coe_bull)
     float gs = f_sc(s, final_growth_rate, g_bear, g_bull)
     float tg = f_sc(s, final_terminal_growth, tg_bear, tg_bull)
-    float dr = f_sc(s, math.max(final_discount_rate, 0.01), math.max(final_discount_rate + i_scen_wacc_bps, 0.01), math.max(final_discount_rate - i_scen_wacc_bps, 0.02))
     // Extended value-driver DCF (McKinsey) on unlevered FCF, less the claims; the base case
     // also reports the implied exit multiple. rNPV adds the pipeline to this same DCF.
-    [dcf_v, dcf_m] = f_calculate_dcf_value_driver_extended(fcff_ps, nopat_ps, roic_adj, dr, gs, tg, i_dcf_stage1_yrs)
+    [dcf_v, dcf_m] = f_calculate_dcf_value_driver_extended(fcff_ps, nopat_ps, roic_adj, wc, gs, tg, i_dcf_stage1_yrs)
     float dcf_eq = dcf_v - claims_ps
     f_set3(M_DCF, s, dcf_eq)
     if s == 0
@@ -1572,11 +1599,13 @@ for s = 0 to 2
     // --- Absolute models (the DCF is above) ---
     f_set3(M_RIM, s, f_calculate_rim(rim_nopat_proxy, rim_capital_proxy, shares_out_latest, rim_debt_proxy, f_sc(s, rim_discount_proxy, rim_discount_proxy + i_scen_wacc_bps, math.max(rim_discount_proxy - i_scen_wacc_bps, 0.02)), gs, tg, i_iv_projection_period))
     // EPV (Greenwald): no-growth perpetuity of NORMALISED NOPAT, less the claims.
-    f_set3(M_EPV, s, (nopat_norm / dr - claims) / shares_out_latest)
+    f_set3(M_EPV, s, (nopat_norm / wc - claims) / shares_out_latest)
     // Graham: Bear/Bull halve / add half the growth term.
     f_set3(M_GRA, s, base_eps * (8.5 + 2 * (graham_g * f_sc(s, 1.0, 0.5, 1.5)) * 100) * graham_yield_adj)
     // Rule of 40 needs a year-ago revenue: no guessed growth (the old fallback was 10%).
-    f_set3(M_R40, s, na(rev_growth) ? na : f_calculate_rule_of_x_fv(f_sc(s, rev_growth, math.max(rev_growth - i_scen_r40_bps, 0.0), rev_growth + i_scen_r40_bps), true_fcf_margin_ttm, total_revenue_ttm, claims, shares_out_latest))
+    // Bear = growth less the shift, not floored at 0: the floor lifted a shrinking firm's
+    // Bear case above its Base.
+    f_set3(M_R40, s, na(rev_growth) ? na : f_calculate_rule_of_x_fv(f_sc(s, rev_growth, rev_growth - i_scen_r40_bps, rev_growth + i_scen_r40_bps), true_fcf_margin_ttm, total_revenue_ttm, claims, shares_out_latest))
     // 🌟 THE ACQUIRER'S MULTIPLE (EV / EBIT): Bear/Bull move the target multiple.
     if acq_ok
         f_set3(M_ACQ, s, (ebit_ttm * f_sc(s, i_acquirer_mult, math.max(i_acquirer_mult - i_scen_acq_delta, 1.0), i_acquirer_mult + i_scen_acq_delta) - claims) / shares_out_latest)
@@ -1587,7 +1616,7 @@ for s = 0 to 2
 // === STANDARD BLEND: multiples + sector models + named absolute =
 // ==============================================================
 // Provenance tier of each model's main input, registry order.
-array<int> tiers = array.from(3, t_eps, t_rev, t_ocf, t_equity, t_equity, t_ebitda, t_ocf, t_ocf, t_ocf, math.min(t_ni, t_equity), t_ocf, t_ocf, t_ocf, t_ebit, 3, t_ocf, use_bank_model ? math.min(t_ni, t_equity) : t_ebit, t_ebit, t_eps, math.min(t_rev, t_ocf), t_ebit, t_ocf)
+array<int> tiers = array.from(3, t_eps, t_rev, t_ocf, t_equity, t_equity, t_ebitda, t_cfo, t_ocf, t_ocf, math.min(t_ni, t_equity), t_ocf, t_ocf, t_ocf, t_ebit, stale_cap, t_ocf, use_bank_model ? math.min(t_ni, t_equity) : t_ebit, t_ebit, t_eps, math.min(t_rev, t_ocf), t_ebit, t_ocf)
 for k = 0 to 22
     Model m = array.get(MD, k)
     m.tier := array.get(tiers, k)
@@ -1744,8 +1773,8 @@ float implied_market_growth = na
 // price is judged against a like-for-like horizon, not a one-year growth rate.
 float our_path_g = na
 if barstate.islast
-    implied_market_growth := f_calculate_reverse_dcf(close, dcf_input_fcf_total_rev, claims, shares_out_latest, math.max(final_discount_rate, 0.01), final_terminal_growth, 10)
-    float g_t = math.min(final_terminal_growth, math.max(final_discount_rate, 0.01) - 0.015)
+    implied_market_growth := f_calculate_reverse_dcf(close, dcf_input_fcf_total_rev, claims, shares_out_latest, wacc_base, final_terminal_growth, 10)
+    float g_t = math.min(final_terminal_growth, wacc_base - 0.015)
     float prod = 1.0
     for t = 1 to 10
         float w = t / (i_dcf_stage1_yrs + 1.0)
@@ -1769,7 +1798,7 @@ f_pct_rank(array<float> a, float x) =>
         r := below / float(n)
     r
 f_st_growth(float pv) =>
-    barstate.islast and pv > 0 ? f_calculate_reverse_dcf(pv, dcf_input_fcf_total_rev, claims, shares_out_latest, math.max(final_discount_rate, 0.01), final_terminal_growth, 10) : na
+    barstate.islast and pv > 0 ? f_calculate_reverse_dcf(pv, dcf_input_fcf_total_rev, claims, shares_out_latest, wacc_base, final_terminal_growth, 10) : na
 f_st_pe(float t) =>
     not na(t) and eps_est_ttm > 0 ? t / eps_est_ttm : na
 // ==============================================================
@@ -2043,7 +2072,7 @@ f_health_calc() =>
     string rkv_tt = 'Rhodes-Kropf M/B decomposition:\n\nGrowth options (V/B): ' + str.tostring(rkv_growth_vb, '#.##') + 'x -- fair value vs book. Below 1.0x the business is worth less than its balance sheet.\n\nMispricing (P/V): ' + str.tostring(rkv_mispricing_mv, '#.##') + 'x -- price vs fair value.'
     // Discount rate (+ the macro assumptions behind terminal growth)
     string wacc_flag = final_discount_rate < 0.05 ? 'Too Low' : final_discount_rate > 0.20 ? 'Extreme' : 'Normal'
-    string wacc_tt = 'CAPM Beta: ' + str.tostring(beta_mkt, '#.##') + '\nDownside Beta: ' + (na(downside_beta) ? 'N/A' : str.tostring(downside_beta, '#.##')) + '\nRisk-free base: ' + i_rf_base + ' = ' + str.tostring(base_rf_for_calc * 100, '#.##') + '%\nERP: ' + str.tostring(calc_erp * 100, '#.#') + '%\nCRP: ' + str.tostring(calc_crp * 100, '#.#') + '% (local-US spread: ' + str.tostring(auto_crp_raw * 100, '#.#') + '%)\nCost of Debt (synthetic): ' + str.tostring(cost_of_debt_synthetic * 100, '#.#') + '%\nEffective tax: ' + str.tostring(effective_tax_rate * 100, '#.#') + '%\n\nMacro (manual): inflation ' + str.tostring(lr_infl * 100, '#.##') + '%, real GDP ' + str.tostring(lr_rgdp * 100, '#.##') + '% -> terminal growth ' + str.tostring(final_terminal_growth * 100, '#.##') + '%.'
+    string wacc_tt = 'CAPM Beta: ' + str.tostring(beta_mkt, '#.##') + '\nDownside Beta: ' + (na(downside_beta) ? 'N/A' : str.tostring(downside_beta, '#.##')) + '\nRisk-free base: ' + i_rf_base + ' = ' + str.tostring(base_rf_for_calc * 100, '#.##') + '%\nERP: ' + str.tostring(calc_erp * 100, '#.#') + '%\nCRP: ' + str.tostring(calc_crp * 100, '#.#') + '% (local-US spread: ' + str.tostring(auto_crp_raw * 100, '#.#') + '%)\nCost of Debt (synthetic): ' + str.tostring(cost_of_debt_synthetic * 100, '#.#') + '%\nEffective tax: ' + str.tostring(effective_tax * 100, '#.#') + '%\n\nMacro (manual): inflation ' + str.tostring(lr_infl * 100, '#.##') + '%, real GDP ' + str.tostring(lr_rgdp * 100, '#.##') + '% -> terminal growth ' + str.tostring(final_terminal_growth * 100, '#.##') + '%.'
     // Quality: Piotroski + the quant filters the framework switches on
     int q_pass = 0
     int q_tot = 0
@@ -2277,10 +2306,10 @@ f_det_health1(HealthView h, int r0) =>
     row_idx += 1
     if M_OE.on
         float oe_yield_pct = close > 0 ? nz(oe_per_share) / close * 100 : 0.0
-        float yield_spread = oe_yield_pct - us10y_yield
+        float yield_spread = oe_yield_pct - rf_local_avg
         string coupon_status = yield_spread >= 3.0 ? 'SCREAMING BUY' : yield_spread > 0 ? 'BUY (Positive Carry)' : 'PASS (Yield < Bond)'
         color coupon_color = yield_spread >= 3.0 ? color.new(color.green, 0) : yield_spread > 0 ? color_under : color_over
-        string coupon_tt = 'Owner Earnings yield: ' + str.tostring(oe_yield_pct, '#.##') + '%\n10Y hurdle: ' + str.tostring(us10y_yield, '#.##') + '%\nSpread: ' + (yield_spread > 0 ? '+' : '') + str.tostring(yield_spread, '#.##') + '%'
+        string coupon_tt = 'Owner Earnings yield: ' + str.tostring(oe_yield_pct, '#.##') + '%\n10Y hurdle: ' + str.tostring(rf_local_avg, '#.##') + '%\nSpread: ' + (yield_spread > 0 ? '+' : '') + str.tostring(yield_spread, '#.##') + '%'
         f_row4(row_idx, 'Buffett Coupon vs 10Y', coupon_tt, str.tostring(oe_yield_pct, '#.##') + '%', (yield_spread > 0 ? '+' : '') + str.tostring(yield_spread, '#.##') + '%', coupon_status, b1 = color_value, c2 = yield_spread > 0 ? color.green : color.red, c3 = color.white, b3 = coupon_color, stt = coupon_tt)
         row_idx += 1
     bool is_crazy_exit = implied_exit_multiple > 30.0
