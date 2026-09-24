@@ -34,8 +34,8 @@ f_median(array<float> a) =>
 f_blend2(float a, float b) =>
     not na(a) and not na(b) ? (a + b) / 2 : nz(a, b)
 f_harmonic_mean(array<float> a) =>
-    float sr = 0.0
-    int k = 0
+    sr = 0.0
+    k = 0
     for v in a
         if v > 0
             sr += 1.0 / v
@@ -71,7 +71,7 @@ f_synthetic_spread(float ebit, float interest) =>
     var array<float> spr = array.from(0.0063, 0.0078, 0.0098, 0.0108, 0.0122, 0.0156, 0.0200, 0.0240, 0.0351, 0.0417, 0.0600, 0.0800, 0.1200)
     // Unknown EBIT or unknown interest: a mid (BBB) bucket, not the distressed or the AAA one.
     float icr = na(interest) ? 3.5 : interest > 0 ? nz(ebit / interest, 3.5) : 100.0
-    int k = 0
+    k = 0
     while k < 12 and not (icr > cut.get(k))
         k += 1
     spr.get(k)
@@ -84,13 +84,13 @@ f_synthetic_spread(float ebit, float interest) =>
 // No track record -> 0, never the maximum; callers equal-weight when nobody has one.
 // algo: 0 IVW (inverse mean squared log error), 1 SMAPE, 2 MALE, 3 WMAPE, 4 RMSLE.
 f_model_weight(array<float> fv, array<float> px, int algo, int h) =>
-    float w = 0.0
+    w = 0.0
     float e = na
     int np = math.min(fv.size(), px.size()) - h
     if np >= 4
-        float se = 0.0
-        float sp = 0.0
-        int k = 0
+        se = 0.0
+        sp = 0.0
+        k = 0
         for i = 0 to np - 1
             float f = fv.get(i)
             float p = px.get(i + h)
@@ -383,7 +383,7 @@ method bridge(Claims c, float v, bool firm, bool per_share) =>
 // 'net debt, minority interest and preferred': the claims counted, for the tooltips.
 method txt(Claims c) =>
     array<Claim> k = c.amt.keys()
-    string t = ''
+    t = ''
     for [i, x] in k
         t += (i == 0 ? '' : i == k.size() - 1 ? ' and ' : ', ') + str.tostring(x)
     t
@@ -422,7 +422,7 @@ method stream(Drv d, Sx k, float v, int tier) =>
 // ---------- ENGINES: pure functions, declared above every input and data series ----------
 // Terminal growth reaches an engine already held TCAP under its rate (f_kin), so no engine
 // caps it again.
-float TCAP = 0.015
+TCAP = 0.015
 f_mult(float drv, float mult) =>
     na(drv) or drv <= 0 or na(mult) ? na : drv * mult
 // Value-driver DCF: FCF = NOPAT x (1 - g / RONIC). Year by year, FCF moves from today's
@@ -435,8 +435,8 @@ f_mult(float drv, float mult) =>
 // the discount rate (a high-rate market must not turn every unit of growth into value
 // destruction). The cap binds at the terminal, not in the high-growth years.
 f_vdcf(float cf, float earn, float ret, float rate, float g1, float gT, int yrs) =>
-    float pv = 0.0
-    float cum = 1.0
+    pv = 0.0
+    cum = 1.0
     float r0 = math.max(ret, rate)
     float rT = math.max(math.min(ret, 0.20), rate)
     for i = 1 to yrs by 1
@@ -458,7 +458,7 @@ f_rim(float earn, float cap, float rate, float g1, float gT, int yrs) =>
     float v = na
     if not na(earn) and cap > 0 and rate > gT
         float ep = earn - cap * rate
-        float pv = 0.0
+        pv = 0.0
         for i = 1 to yrs by 1
             float w = i / (yrs + 1.0)
             ep := ep * (1 + g1 * (1 - w) + gT * w)
@@ -594,14 +594,14 @@ f_addon(AddOn a, KIn x, Drv d) =>
 // the add-on, then each leg through the one claim bridge and the legs blended. The result
 // lands in the row's Res record k (0 Base, 1 Bear, 2 Bull, 3 the readouts' scratch).
 f_eval(Model m, Drv d, Claims c, Pos p, int k) =>
-    Res r = m.res.get(k)
-    KIn x = f_kin(m, d, p, r.x)
+    r = m.res.get(k)
+    x = f_kin(m, d, p, r.x)
     if m.eng == Eng.ref
-        Res sr = MD.get(m.src_i).res.get(k)
+        sr = MD.get(m.src_i).res.get(k)
         x.ref := sr.bar == bar_index ? sr.core : na
     if k == 0
         m.drv := x.drv
-    bool firm = m.level == Level.firm or m.level == Level.unlev
+    firm = m.level == Level.firm or m.level == Level.unlev
     r.bar := bar_index
     r.cl := firm ? c.sum : 0.0
     r.sh := m.ps ? na : c.shares
@@ -611,7 +611,7 @@ f_eval(Model m, Drv d, Claims c, Pos p, int k) =>
     r.spot := na
     r.fwd := na
     r.value := na
-    bool ok = (m.need1 == Sx.none or d.s.get(m.need1) > 0) and (m.need2 == Sx.none or d.s.get(m.need2) > 0)
+    ok = (m.need1 == Sx.none or d.s.get(m.need1) > 0) and (m.need2 == Sx.none or d.s.get(m.need2) > 0)
     if ok
         [v, aux] = f_engine(m.eng, x)
         r.core := v
@@ -639,7 +639,7 @@ f_same_streams(Model a, Model b) =>
 f_rows_check() =>
     for m in MD
         if m.eng != Eng.comp
-            int u = -1
+            u = -1
             for x in array.from(m.s_cf, m.s_earn, m.s_cap, m.s_drv, m.s_fwd)
                 int ux = f_sunit(x)
                 if ux == 0 or ux == 1
@@ -654,7 +654,7 @@ f_rows_check() =>
     // P/AFFO). The Omnibus drops the held row once its holder carries weight.
     for [i, a] in MD
         if a.eng == Eng.ref
-            Model sm = MD.get(a.src_i)
+            sm = MD.get(a.src_i)
             sm.held_by := i
         else if a.eng != Eng.comp
             for [j, b] in MD
@@ -666,19 +666,19 @@ f_rows_check() =>
 f_fam_cap(array<float> w) =>
     float tot = w.sum()
     if tot > 0
-        array<float> fs = array.new_float(7, 0.0)
+        fs = array.new_float(7, 0.0)
         for i = 0 to w.size() - 1
             float x = w.get(i) / tot
             w.set(i, x)
             int f = FAM.get(i)
             fs.set(f, fs.get(f) + x)
-        int nf = 0
+        nf = 0
         for y in fs
             nf += y > 0 ? 1 : 0
         float cap = math.max(0.4, 1.0 / nf)
         for it = 0 to 5
-            float over = 0.0
-            float room = 0.0
+            over = 0.0
+            room = 0.0
             // A family at (or within 1e-12 of) the cap is frozen there; the rest absorb the excess.
             for y in fs
                 over += math.max(y - cap, 0.0)
@@ -696,8 +696,8 @@ f_fam_cap(array<float> w) =>
 // one-model default / sqrt(effective member count): a blend that is effectively one
 // model keeps the one-model band instead of collapsing to zero.
 f_wsd(array<float> v, array<float> w, float mu) =>
-    float ss = 0.0
-    float w2 = 0.0
+    ss = 0.0
+    w2 = 0.0
     for [i, x] in v
         float wi = w.get(i)
         ss += wi * (x - mu) * (x - mu)
@@ -744,7 +744,7 @@ i_weighting_algo = input.string('IVW (Error Variance)', 'Weighting Algorithm', o
 i_w_horizon = input.int(4, 'Weighting: forecast horizon (quarters)', minval = 0, maxval = 8, group = group_calc, tooltip = 'Each model is scored on how well its fair value at quarter t predicted the price at t + N. 0 = same-quarter fit.')
 i_blend_mode = input.string('Standard (Relative + Sector)', 'Composite Blend Mode', options = ['Standard (Relative + Sector)', 'Omnibus (All Available Models)'], group = group_calc, tooltip = 'Standard: blends the relative multiples, the sector-specific models and the absolute models a framework is named after (Technology: DCF, RIM and Rule of 40; Financials: RIM). The other absolute models still render in the table for reference.\n\nOmnibus: blends every model the Valuation Framework enables (multiples, sector and absolute models), each weighted on its own track record.')
 i_view_cap = input.float(100, 'Cap own-history multiples at (% of the blend)', minval = 20, maxval = 100, step = 5, group = group_calc, tooltip = "A second cap on top of the family cap, for Standard and Omnibus alike: the own-history multiples (P/E, P/S, P/FCF, P/B, P/TBV, EV/EBITDA, P/CF, P/AFFO) may hold at most this share of the blend. Their weights are scaled down together, and the family cap is re-applied, so both caps hold. 100 = off (default). The table's view mix shows the share today.") / 100
-bool is_omnibus = i_blend_mode == 'Omnibus (All Available Models)'
+is_omnibus = i_blend_mode == 'Omnibus (All Available Models)'
 // ==============================================================
 // === OMNIBUS MEMBERSHIP (only read when Blend Mode = Omnibus) ==
 // ==============================================================
@@ -809,9 +809,9 @@ method claim(Claims c, Claim k, float v) =>
 // ==========================================
 // FRAMEWORK: sector -> the models it allocates
 // ==========================================
-string selected_industry = i_industry
+selected_industry = i_industry
 if i_industry == 'Auto-Detect'
-    string fin_ind = syminfo.industry
+    fin_ind = syminfo.industry
     selected_industry := switch syminfo.sector
         'Electronic Technology' => 'Technology'
         'Technology Services' => 'Technology'
@@ -841,7 +841,7 @@ if i_industry == 'Auto-Detect'
 // driver becomes 10-year inflation-adjusted EPS). Named (optional): the absolute
 // models in the description, which the Standard blend takes alongside the multiples
 // and sector models.
-string fw_row = switch selected_industry
+fw_row = switch selected_industry
     'Technology' => 'Growth: Rule of 40, DCF & RIM|PE PS FCF EV DCF RIM R40 ROIC SLN SHY|DCF RIM R40'
     'Healthcare (Pharma/Biotech)' => 'rNPV & Pipeline Focus|PE PS FCF PB EV DCF EPV ACQ RNPV ROIC SLN SHY'
     'Financials (Bank/Insurance)' => 'RIM & Equity Cash Flow|PE PB TBV RIM GRA ECF SHY|RIM'
@@ -853,23 +853,23 @@ string fw_row = switch selected_industry
     'Telecom' => 'Telecom Unbundling (NetCo + ServeCo)|PE FCF PB EV CF DCF EPV GRA ACQ OE UNB ROIC SHY'
     'Utilities' => 'DDM & Regulated Returns|PE PB EV CF EPV RIM GRA ACQ OE DDM ROIC SHY'
     => 'General (All Models Active)|PE PS FCF PB TBV EV CF DCF GRA EPV RIM ACQ OE GPA ROIC SLN SHY'
-array<string> fw_parts = str.split(fw_row, '|')
-string active_model_desc = fw_parts.get(0)
-string fw_codes = ' ' + fw_parts.get(1) + ' '
-string fw_named = ' ' + (fw_parts.size() > 2 ? fw_parts.get(2) : '') + ' '
-bool use_cape = str.contains(fw_codes, ' CAPE ')
-bool show_gpa = str.contains(fw_codes, ' GPA ')
-bool show_roic_wacc = str.contains(fw_codes, ' ROIC ')
-bool show_sloan = str.contains(fw_codes, ' SLN ')
-bool show_shareholder = str.contains(fw_codes, ' SHY ')
-bool is_financial_sector = selected_industry == 'Financials (Bank/Insurance)'
+fw_parts = str.split(fw_row, '|')
+active_model_desc = fw_parts.get(0)
+fw_codes = ' ' + fw_parts.get(1) + ' '
+fw_named = ' ' + (fw_parts.size() > 2 ? fw_parts.get(2) : '') + ' '
+use_cape = str.contains(fw_codes, ' CAPE ')
+show_gpa = str.contains(fw_codes, ' GPA ')
+show_roic_wacc = str.contains(fw_codes, ' ROIC ')
+show_sloan = str.contains(fw_codes, ' SLN ')
+show_shareholder = str.contains(fw_codes, ' SHY ')
+is_financial_sector = selected_industry == 'Financials (Bank/Insurance)'
 // Banks and insurers use the Equity models (RIM: NI / book at CoE; growth from ROE), the
 // rest the Entity models (RIM: NOPAT / invested capital at WACC; growth from ROIC).
-string _fin_ind = syminfo.industry
-bool fin_bank_like = (str.contains(_fin_ind, 'Banks') and not str.contains(_fin_ind, 'Brokers')) or str.contains(_fin_ind, 'Insurance')
-bool use_bank_model = is_financial_sector and (i_financial_model_type == 'Equity Model (Bank/Insurer)' or (i_financial_model_type == 'Auto (by industry)' and fin_bank_like))
+_fin_ind = syminfo.industry
+fin_bank_like = (str.contains(_fin_ind, 'Banks') and not str.contains(_fin_ind, 'Brokers')) or str.contains(_fin_ind, 'Insurance')
+use_bank_model = is_financial_sector and (i_financial_model_type == 'Equity Model (Bank/Insurer)' or (i_financial_model_type == 'Auto (by industry)' and fin_bank_like))
 // Stage-1 growth cap by framework.
-float dynamic_growth_cap = 0.25
+dynamic_growth_cap = 0.25
 if selected_industry == 'Technology' or selected_industry == 'Healthcare (Pharma/Biotech)' or selected_industry == 'Consumer Discretionary'
     dynamic_growth_cap := 0.40
 else if selected_industry == 'Utilities' or selected_industry == 'REITs' or selected_industry == 'Consumer Staples'
@@ -882,32 +882,34 @@ else if selected_industry == 'Utilities' or selected_industry == 'REITs' or sele
 // model is comes from its row: level (rate and claims), engine, the streams it reads, the
 // inputs it needs positive, its tier source, add-on, private scenario lever and family.
 // Adding a model: one row here (and its code in the Members default).
-var Model M_COMP = f_add(Model.new(code = 'COMP', name = 'Standard Composite', bt_name = 'Composite (Final Blend)', grp = Group.comp, eng = Eng.comp))
-var Model M_PE = f_add(Model.new(code = 'PE', name = 'Blended P/E', bt_name = 'Blended PE', grp = Group.rel, level = Level.equity, fam = 1, s_drv = Sx.eps_b, s_fwd = Sx.eps_f, need1 = Sx.eps_b, lk = Lever.pctl, dflt = 15.0))
-var Model M_PS = f_add(Model.new(code = 'PS', name = 'P/S', bt_name = 'Price / Sales', grp = Group.rel, level = Level.equity, fam = 2, s_drv = Sx.sales_ps, lk = Lever.pctl, dflt = 2.0))
-var Model M_PFCF = f_add(Model.new(code = 'FCF', name = 'P/FCF', bt_name = 'Price / FCF', grp = Group.rel, level = Level.equity, fam = 3, s_drv = Sx.fcf_ps, need1 = Sx.fcf_ps, lk = Lever.pctl, dflt = 15.0))
-var Model M_PB = f_add(Model.new(code = 'PB', name = 'P/B', bt_name = 'Price / Book', grp = Group.rel, level = Level.equity, fam = 4, s_drv = Sx.bvps, lk = Lever.pctl, dflt = 1.5, rkv = true))
-var Model M_TBV = f_add(Model.new(code = 'TBV', name = 'P/TBV', bt_name = 'Price / TBV', grp = Group.rel, level = Level.equity, fam = 4, s_drv = Sx.tbvps, lk = Lever.pctl, dflt = 2.0))
-var Model M_EV = f_add(Model.new(code = 'EV', name = 'Blended EV/EBITDA', bt_name = 'EV / EBITDA', grp = Group.rel, fam = 5, s_drv = Sx.ebitda, s_fwd = Sx.ebitda_f, lk = Lever.pctl, dflt = 10.0))
-var Model M_PCF = f_add(Model.new(code = 'CF', name = 'P/CF', bt_name = 'Price / OCF', grp = Group.rel, level = Level.equity, fam = 3, s_drv = Sx.ocf_ps, lk = Lever.pctl, dflt = 10.0))
-var Model M_PAFFO = f_add(Model.new(code = 'AFFO', name = 'P/AFFO', bt_name = 'Price / AFFO', grp = Group.rel, level = Level.equity, fam = 3, s_drv = Sx.fcf_ps, lk = Lever.pctl, dflt = 12.0))
-var Model M_RNPV = f_add(Model.new(code = 'RNPV', name = 'rNPV (Risk-Adjusted)', bt_name = 'Risk-Adj NPV', grp = Group.sect, eng = Eng.ref, fam = 3, src = 'DCF', addon = AddOn.pipeline, t1 = Sx.fcff))
-var Model M_ECF = f_add(Model.new(code = 'ECF', name = 'Equity Cash Flow', bt_name = 'Equity Cash Flow', grp = Group.sect, level = Level.equity, eng = Eng.vdcf, fam = 1, s_cf = Sx.fcfe, s_earn = Sx.ni_ps, s_ret = Sx.roe_n, need1 = Sx.ni_ps, need2 = Sx.roe_n, t1 = Sx.ni_ps, t2 = Sx.roe_n))
-var Model M_ADCF = f_add(Model.new(code = 'ADCF', name = 'AFFO DCF', bt_name = 'AFFO DCF', grp = Group.sect, level = Level.equity, eng = Eng.vdcf, fam = 3, s_cf = Sx.fcf_ps, s_earn = Sx.fcf_ps))
-var Model M_UNB = f_add(Model.new(code = 'UNB', name = 'Unbundled (SOTP)', bt_name = 'Unbundled SOTP', grp = Group.sect, eng = Eng.vdcf, fam = 3, s_cf = Sx.fcff_s, s_earn = Sx.nopat_s, s_ret = Sx.roic, addon = AddOn.netco))
-var Model M_APV = f_add(Model.new(code = 'APV', name = 'Adjusted PV (APV)', bt_name = 'Adjusted PV', grp = Group.sect, level = Level.unlev, eng = Eng.vdcf, fam = 3, s_cf = Sx.fcff, s_earn = Sx.nopat, s_ret = Sx.roic, addon = AddOn.shield))
-var Model M_EVA = f_add(Model.new(code = 'EVA', name = 'Economic Value Added', bt_name = 'Econ Value Added', grp = Group.sect, eng = Eng.eva, fam = 1, s_earn = Sx.nopat, s_cap = Sx.ic))
-var Model M_DDM = f_add(Model.new(code = 'DDM', name = 'Dividend Discount (DDM)', bt_name = 'Dividend Discount', grp = Group.sect, level = Level.equity, eng = Eng.gperp, fam = 6, s_cf = Sx.dps, need1 = Sx.dps))
-var Model M_DCF = f_add(Model.new(code = 'DCF', name = 'DCF (McKinsey/ROIC)', bt_name = 'DCF (McKinsey)', eng = Eng.vdcf, fam = 3, s_cf = Sx.fcff, s_earn = Sx.nopat, s_ret = Sx.roic))
+var Model M_COMP = f_add(Model.new('COMP', 'Standard Composite', 'Composite (Final Blend)', Group.comp, eng = Eng.comp))
+var Model M_PE = f_add(Model.new('PE', 'Blended P/E', 'Blended PE', Group.rel, Level.equity, fam = 1, s_drv = Sx.eps_b, s_fwd = Sx.eps_f, need1 = Sx.eps_b, lk = Lever.pctl, dflt = 15.0))
+if barstate.isfirst
+    f_add(Model.new('PS', 'P/S', 'Price / Sales', Group.rel, Level.equity, fam = 2, s_drv = Sx.sales_ps, lk = Lever.pctl, dflt = 2.0))
+    f_add(Model.new('FCF', 'P/FCF', 'Price / FCF', Group.rel, Level.equity, fam = 3, s_drv = Sx.fcf_ps, need1 = Sx.fcf_ps, lk = Lever.pctl, dflt = 15.0))
+    f_add(Model.new('PB', 'P/B', 'Price / Book', Group.rel, Level.equity, fam = 4, s_drv = Sx.bvps, lk = Lever.pctl, dflt = 1.5, rkv = true))
+    f_add(Model.new('TBV', 'P/TBV', 'Price / TBV', Group.rel, Level.equity, fam = 4, s_drv = Sx.tbvps, lk = Lever.pctl, dflt = 2.0))
+    f_add(Model.new('EV', 'Blended EV/EBITDA', 'EV / EBITDA', Group.rel, fam = 5, s_drv = Sx.ebitda, s_fwd = Sx.ebitda_f, lk = Lever.pctl, dflt = 10.0))
+    f_add(Model.new('CF', 'P/CF', 'Price / OCF', Group.rel, Level.equity, fam = 3, s_drv = Sx.ocf_ps, lk = Lever.pctl, dflt = 10.0))
+    f_add(Model.new('AFFO', 'P/AFFO', 'Price / AFFO', Group.rel, Level.equity, fam = 3, s_drv = Sx.fcf_ps, lk = Lever.pctl, dflt = 12.0))
+    f_add(Model.new('RNPV', 'rNPV (Risk-Adjusted)', 'Risk-Adj NPV', Group.sect, eng = Eng.ref, fam = 3, src = 'DCF', addon = AddOn.pipeline, t1 = Sx.fcff))
+    f_add(Model.new('ECF', 'Equity Cash Flow', 'Equity Cash Flow', Group.sect, Level.equity, Eng.vdcf, fam = 1, s_cf = Sx.fcfe, s_earn = Sx.ni_ps, s_ret = Sx.roe_n, need1 = Sx.ni_ps, need2 = Sx.roe_n, t1 = Sx.ni_ps, t2 = Sx.roe_n))
+    f_add(Model.new('ADCF', 'AFFO DCF', 'AFFO DCF', Group.sect, Level.equity, Eng.vdcf, fam = 3, s_cf = Sx.fcf_ps, s_earn = Sx.fcf_ps))
+    f_add(Model.new('UNB', 'Unbundled (SOTP)', 'Unbundled SOTP', Group.sect, eng = Eng.vdcf, fam = 3, s_cf = Sx.fcff_s, s_earn = Sx.nopat_s, s_ret = Sx.roic, addon = AddOn.netco))
+    f_add(Model.new('APV', 'Adjusted PV (APV)', 'Adjusted PV', Group.sect, Level.unlev, Eng.vdcf, fam = 3, s_cf = Sx.fcff, s_earn = Sx.nopat, s_ret = Sx.roic, addon = AddOn.shield))
+    f_add(Model.new('EVA', 'Economic Value Added', 'Econ Value Added', Group.sect, eng = Eng.eva, fam = 1, s_earn = Sx.nopat, s_cap = Sx.ic))
+    f_add(Model.new('DDM', 'Dividend Discount (DDM)', 'Dividend Discount', Group.sect, Level.equity, Eng.gperp, fam = 6, s_cf = Sx.dps, need1 = Sx.dps))
+var Model M_DCF = f_add(Model.new('DCF', 'DCF (McKinsey/ROIC)', 'DCF (McKinsey)', eng = Eng.vdcf, fam = 3, s_cf = Sx.fcff, s_earn = Sx.nopat, s_ret = Sx.roic))
 // Banks and insurers: the Equity variant (net income on book value at the bank rate, nothing
 // comes off). Everyone else: the Entity variant (NOPAT on invested capital at WACC, less the
 // claims). Decided once from the framework and the industry.
-var Model M_RIM = f_add(Model.new(code = 'RIM', name = 'Residual Income (RIM)', bt_name = 'Residual Income', level = use_bank_model ? Level.bank : Level.firm, eng = Eng.rim, fam = 1, s_earn = use_bank_model ? Sx.ni : Sx.nopat, s_cap = use_bank_model ? Sx.book : Sx.ic, t2 = use_bank_model ? Sx.book : Sx.none))
-var Model M_EPV = f_add(Model.new(code = 'EPV', name = 'EPV (Greenwald)', bt_name = 'EPV (Greenwald)', eng = Eng.perp, fam = 1, s_cf = Sx.nopat_n))
-var Model M_GRA = f_add(Model.new(code = 'GRA', name = 'Graham', bt_name = 'Graham Number', level = Level.equity, eng = Eng.graham, fam = 1, s_earn = Sx.eps_pos, s_gx = Sx.g_gra, s_adj = Sx.yadj, need1 = Sx.eps_pos, lk = Lever.scale, lv_bear = 0.5, lv_bull = 1.5))
-var Model M_R40 = f_add(Model.new(code = 'R40', name = 'Rule of 40', bt_name = 'Rule of 40', eng = Eng.rulex, fam = 2, s_drv = Sx.rev, s_gx = Sx.rev_g, s_adj = Sx.fcf_margin, t2 = Sx.fcf_margin, lk = Lever.step, lv_bear = -i_scen_r40_bps, lv_bull = i_scen_r40_bps))
-var Model M_ACQ = f_add(Model.new(code = 'ACQ', name = "Acquirer's Multiple", bt_name = "Acquirer's Mult", fam = 5, s_drv = Sx.ebit, need1 = Sx.ebit, lk = Lever.step, lv_bear = -i_scen_acq_delta, lv_bull = i_scen_acq_delta, lv_floor = 1.0, m0 = i_acquirer_mult))
-var Model M_OE = f_add(Model.new(code = 'OE', name = "Owners' Earnings", bt_name = "Owners' Earnings", level = Level.equity, eng = Eng.perp, fam = 3, s_cf = Sx.oe_ps, need1 = Sx.oe_ps))
+if barstate.isfirst
+    f_add(Model.new('RIM', 'Residual Income (RIM)', 'Residual Income', level = use_bank_model ? Level.bank : Level.firm, eng = Eng.rim, fam = 1, s_earn = use_bank_model ? Sx.ni : Sx.nopat, s_cap = use_bank_model ? Sx.book : Sx.ic, t2 = use_bank_model ? Sx.book : Sx.none))
+    f_add(Model.new('EPV', 'EPV (Greenwald)', 'EPV (Greenwald)', eng = Eng.perp, fam = 1, s_cf = Sx.nopat_n))
+    f_add(Model.new('GRA', 'Graham', 'Graham Number', level = Level.equity, eng = Eng.graham, fam = 1, s_earn = Sx.eps_pos, s_gx = Sx.g_gra, s_adj = Sx.yadj, need1 = Sx.eps_pos, lk = Lever.scale, lv_bear = 0.5, lv_bull = 1.5))
+    f_add(Model.new('R40', 'Rule of 40', 'Rule of 40', eng = Eng.rulex, fam = 2, s_drv = Sx.rev, s_gx = Sx.rev_g, s_adj = Sx.fcf_margin, t2 = Sx.fcf_margin, lk = Lever.step, lv_bear = -i_scen_r40_bps, lv_bull = i_scen_r40_bps))
+    f_add(Model.new('ACQ', "Acquirer's Multiple", "Acquirer's Mult", fam = 5, s_drv = Sx.ebit, need1 = Sx.ebit, lk = Lever.step, lv_bear = -i_scen_acq_delta, lv_bull = i_scen_acq_delta, lv_floor = 1.0, m0 = i_acquirer_mult))
+var Model M_OE = f_add(Model.new('OE', "Owners' Earnings", "Owners' Earnings", level = Level.equity, eng = Eng.perp, fam = 3, s_cf = Sx.oe_ps, need1 = Sx.oe_ps))
 // Bar 0: what the framework allocates, the Standard scope (every allocated multiple and
 // sector model, plus the absolute models the framework is named after), then the row checks.
 if barstate.isfirst
@@ -970,7 +972,7 @@ method back(QStore s, int lag) =>
     lag >= 0 and lag <= s.q and lag < 128 ? s.v.row((s.q - lag) % 128) : array.new_float(s.v.columns(), na)
 // The last n valid values from lag0 back, oldest first: a quarter with no value does not count.
 method lastn(QStore s, int c, int n, int lag0) =>
-    array<float> a = array.new_float()
+    a = array.new_float()
     int lag = lag0
     while a.size() < n and lag <= math.min(s.q, 127)
         float x = s.at(c, lag)
@@ -981,7 +983,7 @@ method lastn(QStore s, int c, int n, int lag0) =>
 // The n quarters from lag0 back, oldest first. keep_na: index i is the same quarter in every
 // column (the track records pair two columns); else only the values.
 method window(QStore s, int c, int n, int lag0, bool keep_na) =>
-    array<float> a = array.new_float()
+    a = array.new_float()
     for lag = lag0 + n - 1 to lag0
         float x = s.at(c, lag)
         if lag <= math.min(s.q, 127) and (keep_na or not na(x))
@@ -1131,9 +1133,9 @@ f_drivers(Firm f, Hist h, Market mk, Clock ck, Drv d, Claims c) =>
     // COST OF EQUITY: CAPM on the base + size, value, momentum, profitability and liquidity.
     // Each premium phases in over a band around its threshold (f_ramp): B/M moves with the
     // price on every bar, so a step made the fair value jump whenever it crossed its line.
-    float size_p = 0.0
-    float hml_p = 0.0
-    float rmw_p = 0.0
+    size_p = 0.0
+    hml_p = 0.0
+    rmw_p = 0.0
     if i_use_factors
         float mc_usd_b = not na(mc) ? mc / mk.fx / 1e9 : 100.0
         size_p := mc_usd_b < 1.0 ? mk.smb : mc_usd_b < 4.0 ? mk.smb * (1.0 - ((mc_usd_b - 1.0) / 3.0)) : 0.0
@@ -1250,12 +1252,12 @@ f_fresh(float v) =>
 // [FIX RDQ] request.earnings prints on the publication bar (1 slot): new fundamentals
 // are released on the actual report date, with the fixed lag as the fallback cap.
 float earn_raw = request.earnings(syminfo.tickerid, earnings.actual, ignore_invalid_symbol = true)
-bool report_bar = f_fresh(earn_raw)
+report_bar = f_fresh(earn_raw)
 // ---------------------------------------------------------------------
 // 3.1 SYMBOL ROUTING
 // ---------------------------------------------------------------------
-string curr = syminfo.currency
-string rf_ticker_auto = switch curr
+curr = syminfo.currency
+rf_ticker_auto = switch curr
     'VND' => 'TVC:VN10Y'
     'EUR' => 'TVC:DE10Y'
     'GBP' => 'TVC:GB10Y'
@@ -1266,7 +1268,7 @@ string rf_ticker_auto = switch curr
     'CAD' => 'TVC:CA10Y'
     'AUD' => 'TVC:AU10Y'
     => 'TVC:US10Y'
-string final_rf_ticker = i_rf_ticker_manual != '' ? i_rf_ticker_manual : rf_ticker_auto
+final_rf_ticker = i_rf_ticker_manual != '' ? i_rf_ticker_manual : rf_ticker_auto
 int current_tf_sec = timeframe.in_seconds(timeframe.period) > 0 ? timeframe.in_seconds(timeframe.period) : 86400
 // [FIX BPY] Bars per year from the trading calendar, not 365 calendar days.
 // A daily stock chart has ~252 bars a year, so "5 years" of 365-bar years
@@ -1287,7 +1289,7 @@ int bpy = current_tf_sec < 86400 ? math.max(1, int(math.round(trading_days * ses
 f_fin(string id, string per) =>
     request.financial(syminfo.tickerid, id, per, ignore_invalid_symbol = true, currency = syminfo.currency)
 var array<int> FIN_KIND = array.from(0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3)
-string flow_per = i_flow_ttm ? 'TTM' : 'FQ'
+flow_per = i_flow_ttm ? 'TTM' : 'FQ'
 // Requests stay outside the loop: Pine rejects loop variables in a request's field/period.
 array<float> fin_raw = array.from(f_fin('TOTAL_REVENUE', flow_per), f_fin('COST_OF_GOODS', flow_per), f_fin('EBIT', flow_per),
      f_fin('PRETAX_INCOME', flow_per), f_fin('INCOME_TAX', flow_per), f_fin('EARNINGS_PER_SHARE_DILUTED', flow_per), f_fin('INTEREST_EXPENSE_ON_DEBT', 'FQ'),
@@ -1303,7 +1305,7 @@ array<float> fin_raw = array.from(f_fin('TOTAL_REVENUE', flow_per), f_fin('COST_
 var array<float> fin_pend = array.new_float(30, na)
 var array<float> fin_known = array.new_float(30, na)
 var array<int> fin_seen = array.new_int(30, 0)
-bool fin_changed = false
+fin_changed = false
 for i = 0 to 29
     float raw = fin_raw.get(i)
     float pend = fin_pend.get(i)
@@ -1328,7 +1330,7 @@ var int last_trig_bar = -100000
 // Every witness runs on every bar: 'or' is lazy in v6 and f_fresh keeps its own history.
 bool fr_rv = f_fresh(rev_fq), bool fr_pt = f_fresh(pretax_fq), bool fr_as = f_fresh(total_assets_fq)
 bool fr_ep = f_fresh(eps_fq), bool fr_oc = f_fresh(ocf_fq)
-bool is_new_quarter = (fr_rv or fr_pt or fr_as or fr_ep or fr_oc) and (bar_index - last_trig_bar) >= min_gap_bars
+is_new_quarter = (fr_rv or fr_pt or fr_as or fr_ep or fr_oc) and (bar_index - last_trig_bar) >= min_gap_bars
 if is_new_quarter
     last_trig_bar := bar_index
 var Clock CK = Clock.new()
@@ -1473,14 +1475,14 @@ if CK.dirty
     // quarter (no latch); NI far from EPS x shares flags a unit or share-count problem.
     float rv_prev = Y1.get(Q_RV0)
     float as_prev = Y1.get(Q_AS0)
-    bool jump_rv = rv_prev > 0 and total_revenue_ttm > 0 and math.abs(math.log(total_revenue_ttm / rv_prev)) > math.log(10)
-    bool jump_as = as_prev > 0 and total_assets_fq > 0 and math.abs(math.log(total_assets_fq / as_prev)) > math.log(10)
+    jump_rv = rv_prev > 0 and total_revenue_ttm > 0 and math.abs(math.log(total_revenue_ttm / rv_prev)) > math.log(10)
+    jump_as = as_prev > 0 and total_assets_fq > 0 and math.abs(math.log(total_assets_fq / as_prev)) > math.log(10)
     if jump_rv
         eng_t.set(iRV, math.min(f_tg(iRV), 1))
     if jump_as
         eng_t.set(iAS, math.min(f_tg(iAS), 1))
-    bool ni_eps_gap = not na(ni_rep_ttm) and not na(eps_ttm) and not na(calc_shares) and ni_rep_ttm != 0 and math.abs(eps_ttm * calc_shares / ni_rep_ttm - 1) > 0.5
-    bool data_suspect = jump_rv or jump_as or ni_eps_gap
+    ni_eps_gap = not na(ni_rep_ttm) and not na(eps_ttm) and not na(calc_shares) and ni_rep_ttm != 0 and math.abs(eps_ttm * calc_shares / ni_rep_ttm - 1) > 0.5
+    data_suspect = jump_rv or jump_as or ni_eps_gap
     if na(f_g(iNI)) and not na(eps_ttm) and not na(calc_shares)
         f_put(iNI, eps_ttm * calc_shares, math.min(t_shares, 2))
     // --- 3-7. FILL STAGES, one pass each: 0 identities only, 1 firm's own last ratios
@@ -1489,7 +1491,7 @@ if CK.dirty
     // near-exact EBIT ~ pretax + interest, capex ~ 1y change in net PPE + D&A; from stage 1
     // also rough D&A ~ OCF - NI and OCF ~ NI + D&A. All rule output is tier <= 1.
     float pn_1y = Y4.get(Q_PN0)
-    bool has_any_real_fundamental = not na(total_assets_fq) or not na(rev_fq) or not na(eps_fq) or not na(ocf_fq)
+    has_any_real_fundamental = not na(total_assets_fq) or not na(rev_fq) or not na(eps_fq) or not na(ocf_fq)
     for st = 0 to 4
         if st == 1 or st == 2
             f_put(iRV, eng_mem.get(iRV), 1)
@@ -1651,17 +1653,17 @@ if CK.dirty
     float ebitda_growth = na
     if not na(calc_ebitda) and ebitda_prev > 0
         ebitda_growth := (calc_ebitda - ebitda_prev) / ebitda_prev
-    bool investment_dummy = false
+    investment_dummy = false
     if not na(asset_growth)
         if not na(ebitda_growth)
             // [FIX HGM-1] Empire building requires the asset base to actually GROW.
             investment_dummy := asset_growth > 0 and asset_growth > ebitda_growth
         else if calc_ebitda <= 0 and asset_growth > 0
             investment_dummy := true
-    bool is_deteriorating = asset_growth < 0 and ebitda_growth < asset_growth
+    is_deteriorating = asset_growth < 0 and ebitda_growth < asset_growth
     float total_debt_1y_ago = Y4.get(Q_DEBT)
     // --- BENEISH M-SCORE (5-variable adjusted) on the year-ago quarter ---
-    bool is_manipulator = false
+    is_manipulator = false
     float m_score = na
     if i_useBeneishCheck
         float rec_prev = Y4.get(Q_REC)
@@ -1735,14 +1737,14 @@ float lr_rgdp = i_lr_rgdp > 0 ? i_lr_rgdp : dflt_rgdp
 // Dividend yield on the trailing DPS, carried while the price or DPS is missing.
 float div_yield = f_locf(close > 0 and not na(F.dps) ? F.dps / close : na)
 // === MARKET DATA FETCHING ===
-string final_mkt_bench = (curr == 'VND') ? 'HOSE:VNINDEX' : i_mkt_bench
+final_mkt_bench = (curr == 'VND') ? 'HOSE:VNINDEX' : i_mkt_bench
 // [FIX BETA-ALIGN] Both legs are sampled on the SAME bar: the first chart bar
 // of each new beta-timeframe period, holding the PREVIOUS period's close.
 // Before, the stock leg updated on the first bar of the week and the benchmark
 // (lookahead_off) on the last bar, so the two return series never moved on the
 // same bar: beta -> ~0 (0.33 after Blume), downside beta -> 0.
-string beta_tf = timeframe.in_seconds(i_beta_tf) <= timeframe.in_seconds(timeframe.period) ? timeframe.period : i_beta_tf
-bool beta_sample = ta.change(time(beta_tf)) != 0
+beta_tf = timeframe.in_seconds(i_beta_tf) <= timeframe.in_seconds(timeframe.period) ? timeframe.period : i_beta_tf
+beta_sample = ta.change(time(beta_tf)) != 0
 float asset_p = f_locf(close[1])
 // >>> SECURITY SLOT 3/6 : benchmark, non-repainting (close[1] + lookahead_on)
 float bench_c = request.security(final_mkt_bench, beta_tf, close[1], lookahead = barmerge.lookahead_on, ignore_invalid_symbol = true)
@@ -1765,9 +1767,9 @@ if beta_sample and not na(asset_p) and not na(mkt_bench_p)
     beta_last_b := mkt_bench_p
 // Full beta and downside beta from the same sampled pairs. Needs 12+ pairs.
 f_beta_pair(array<float> ra, array<float> rb, bool downside_only) =>
-    float sa = 0.0
-    float sb = 0.0
-    int n = 0
+    sa = 0.0
+    sb = 0.0
+    n = 0
     int sz = rb.size()
     float out = na
     if sz > 0
@@ -1780,8 +1782,8 @@ f_beta_pair(array<float> ra, array<float> rb, bool downside_only) =>
         if n >= 12
             float ma = sa / n
             float mb = sb / n
-            float cov = 0.0
-            float vb = 0.0
+            cov = 0.0
+            vb = 0.0
             for i = 0 to sz - 1
                 float b = rb.get(i)
                 if not downside_only or b < 0
@@ -1806,7 +1808,7 @@ f_get_cagr_optimized(current_price_series, bars_back_5y) =>
         0.08
 int bars_in_5y = math.min(5 * bpy, 4900)
 cagr_mkt = f_get_cagr_optimized(mkt_bench_p, bars_in_5y)
-string auto_small_etf = (curr == 'VND') ? 'HOSE:VNSML' : i_small_etf
+auto_small_etf = (curr == 'VND') ? 'HOSE:VNSML' : i_small_etf
 // >>> SECURITY SLOT 4/6 : size factor
 float small_c = request.security(auto_small_etf, i_beta_tf, close, ignore_invalid_symbol = true)
 float small_p = f_locf(small_c)
@@ -1836,7 +1838,7 @@ live_hml_spread := math.max(math.min(live_hml_spread, 0.05), -0.02)
 float erp_rf = curr == 'VND' ? rf_local_avg : nz(us10y_smooth, us10y_true_raw)
 float auto_erp = math.min(math.max(0.5 * (cagr_mkt - erp_rf / 100) + 0.025, 0.045), 0.08)
 float auto_crp_raw = local_rf_raw > us10y_true_raw ? (local_rf_raw - us10y_true_raw) / 100 : 0.0
-bool rf_local = i_rf_base == 'Local 10Y'
+rf_local = i_rf_base == 'Local 10Y'
 // [FIX CRP-1] In the local build the spread is already inside the base rate.
 float auto_crp = (curr == 'USD' or rf_local) ? 0.0 : auto_crp_raw
 float calc_erp = i_auto_calc_erp_crp ? auto_erp : i_erp_manual
@@ -1851,13 +1853,13 @@ float fx_to_usd = request.currency_rate(curr, 'USD', ignore_invalid_currency = t
 float fx_rate = fx_to_usd > 0 ? 1.0 / fx_to_usd : ((curr == 'VND') ? 25000.0 : (curr == 'EUR' ? 0.93 : (curr == 'GBP' ? 0.79 : 1.0)))
 float px_1m_ago = close[math.min(math.max(1, int(bpy / 12)), 4900)]
 float px_12m_ago = close[math.min(bpy, 4900)]
-float mom_premium = 0.0
+mom_premium = 0.0
 float mom_hurdle = (curr == 'VND') ? 0.45 : 0.30
 if i_use_factors and not na(px_1m_ago) and px_12m_ago > 0
     float trailing_11m_ret = (px_1m_ago - px_12m_ago) / px_12m_ago
     // None inside 0.8x the hurdle, the full premium beyond 1.2x.
     mom_premium := i_mom_prem * (f_ramp(trailing_11m_ret, 0.8 * mom_hurdle, 1.2 * mom_hurdle) - f_ramp(-trailing_11m_ret, 0.8 * mom_hurdle, 1.2 * mom_hurdle))
-float microstructure_premium = 0.0
+microstructure_premium = 0.0
 // Liquidity on a DAILY basis whatever the chart timeframe: a bar spans days_per_bar trading
 // days, so per-bar turnover is divided by it and the per-bar Amihud ratio scaled by its
 // square root (|return| grows with the square root of time, volume in proportion to it).
@@ -1876,7 +1878,7 @@ if i_use_factors
     float avg_turnover_12m = ta.sma(F.sh > 0 ? nz(volume) / F.sh : na, liq_n252) / days_per_bar
     float spec_penalty = not na(volume) and F.sh > 0 ? i_liq_prem * nz(f_ramp(avg_turnover_12m, 0.01, 0.02)) : 0.0
     microstructure_premium := math.max(illiq_penalty, spec_penalty)
-Market MK = Market.new(close, rf_local_avg, base_rf_for_calc, calc_erp, calc_crp, beta_mkt, live_smb_spread, live_hml_spread, mom_premium, microstructure_premium, fx_rate, div_yield, lr_infl, lr_rgdp)
+MK = Market.new(close, rf_local_avg, base_rf_for_calc, calc_erp, calc_crp, beta_mkt, live_smb_spread, live_hml_spread, mom_premium, microstructure_premium, fx_rate, div_yield, lr_infl, lr_rgdp)
 // =====================================================================
 // 3.6 HIST: statistics of the stored quarters, rebuilt with Firm
 // =====================================================================
@@ -1906,19 +1908,19 @@ if CK.dirty
     // multiple and the driver always match.
     float cyclically_adjusted_eps = na
     if use_cape
-        float s = 0.0
-        int n = 0
+        s = 0.0
+        n = 0
         for i = 0 to 9
             float e = ST.at(Q_EPS0, 4 * i)
             if not na(e)
                 s += e * math.pow(1 + MK.infl, i)
                 n += 1
         cyclically_adjusted_eps := n > 0 ? s / n : na
-    bool cape_on = use_cape and not na(cyclically_adjusted_eps)
+    cape_on = use_cape and not na(cyclically_adjusted_eps)
     float earnings_base = cape_on ? cyclically_adjusted_eps : F.eps
     // [FIX SGR] Sustainable growth = ROE x retention. EBIT/equity is pre-interest and pre-tax.
     // No positive profitability on record -> no sustainable-growth leg (it was a 5% guess).
-    float retention_ratio = 1.0
+    retention_ratio = 1.0
     if not na(F.dps) and F.eps > 0
         retention_ratio := 1.0 - math.min(F.dps / F.eps, 1.0)
     float base_profitability = median_roe > 0 ? median_roe : median_op > 0 ? median_op * (1 - F.tax) : na
@@ -1932,16 +1934,16 @@ if CK.dirty
     float roic_sgr = use_bank_model ? normalized_sgr : math.max(F.roic * reinvestment_rate, 0.0)
     // [STREET-1] Forward growth leg: consensus EPS growth (historical, lag-gated),
     // then sales CAGR, then the manual value. Replaces the fixed 10% input.
-    bool g_manual = i_growth_src == 'Manual'
+    g_manual = i_growth_src == 'Manual'
     float fwd_growth_leg = g_manual ? i_analyst_growth : not na(F.fwd_g) ? F.fwd_g : not na(sales_cagr_3y) ? sales_cagr_3y : i_analyst_growth
-    string fwd_growth_src = g_manual ? 'Manual' : not na(F.fwd_g) ? 'Consensus EPS' : not na(sales_cagr_3y) ? 'Sales CAGR' : 'Manual (fallback)'
+    fwd_growth_src = g_manual ? 'Manual' : not na(F.fwd_g) ? 'Consensus EPS' : not na(sales_cagr_3y) ? 'Sales CAGR' : 'Manual (fallback)'
     // Triangulation: sustainable growth 15%, ROIC x reinvestment 40%, the forward leg 15%, the
     // 3-year sales CAGR 30%. A leg with no data leaves and the others are re-weighted (the sales
     // leg used to enter at a guessed 5%). The forward leg always exists, so the blend does too.
     array<float> g_leg = array.from(normalized_sgr, roic_sgr, fwd_growth_leg, sales_cagr_3y)
     array<float> g_wt = array.from(0.15, 0.40, 0.15, 0.30)
-    float g_num = 0.0
-    float g_den = 0.0
+    g_num = 0.0
+    g_den = 0.0
     for [i, x] in g_leg
         if not na(x)
             g_num += x * g_wt.get(i)
@@ -1999,8 +2001,8 @@ float _x4b = _tl > 0 ? F.eq / _tl : na
 float altman_z_dd = na
 if not na(_x1) and not na(_x2) and not na(_x3) and not na(_x4b)
     altman_z_dd := 3.25 + 6.56 * _x1 + 3.26 * _x2 + 6.72 * _x3 + 1.05 * _x4b
-bool _is_bank_like = _ta > 0 and (_tl / _ta) > 0.80
-bool altman_is_em = false
+_is_bank_like = _ta > 0 and (_tl / _ta) > 0.80
+altman_is_em = false
 if _is_bank_like and not na(altman_z_dd)
     altman_z := altman_z_dd
     altman_is_em := true
@@ -2015,8 +2017,8 @@ float z_gold_cut = z_is_em ? 5.85 : 3.0
 // ==============================================================
 // === THE MODEL STAGE: every row on one path (the stream table is Drivers', 3.7)
 // ==============================================================
-bool omni_manual = i_omni_mode == 'Manual (Members List)'
-bool om_free = is_omnibus and omni_manual and not i_omni_strict
+omni_manual = i_omni_mode == 'Manual (Members List)'
+om_free = is_omnibus and omni_manual and not i_omni_strict
 // Every row through f_eval at Base, on every bar; Bear, Bull and the readouts run once, on the
 // last bar, below the blends. Reference rows (rNPV) run after the rows they build on. A sector
 // model runs where the framework allocates it, or where a non-strict Manual Omnibus ticks it.
@@ -2031,7 +2033,7 @@ for pass = 0 to 1
             if m.live
                 m.fv := f_eval(m, D, CL, P0, 0)
             else
-                Res r0 = m.res.get(0)
+                r0 = m.res.get(0)
                 r0.value := na
                 r0.why := 'not allocated by the framework'
 float implied_exit_multiple = M_DCF.res.get(0).aux
@@ -2059,17 +2061,17 @@ for m in MD
 // share (m.w, or m.om / m.om_w) and returns [value, band half-width, members, equal-weighted,
 // members that also hold a Standard share, own-history share].
 f_blend(bool omni) =>
-    bool sane = omni and i_omni_sanity_x >= 1.5 and close > 0
-    array<float> p = array.new_float(0)
-    float tot = 0.0
+    sane = omni and i_omni_sanity_x >= 1.5 and close > 0
+    p = array.new_float(0)
+    tot = 0.0
     for m in MD
-        bool comp = m.grp == Group.comp
-        bool ok = (omni ? (omni_manual ? m.tick and (not i_omni_strict or m.on) : not comp and m.on) : not comp and m.on and m.std) and m.fv > 0
+        comp = m.grp == Group.comp
+        ok = (omni ? (omni_manual ? m.tick and (not i_omni_strict or m.on) : not comp and m.on) : not comp and m.on and m.std) and m.fv > 0
         ok := ok and (not sane or comp or (m.fv <= close * i_omni_sanity_x and m.fv * i_omni_sanity_x >= close))
         p.push(ok ? m.trk * f_tier_q(m.tier) : -1.0)
         tot += ok ? p.last() : 0.0
-    array<float> w0 = array.new_float(MD.size(), 0.0)
-    int n_oth = 0
+    w0 = array.new_float(MD.size(), 0.0)
+    n_oth = 0
     for [k, m] in MD
         if p.get(k) >= 0 and not (m.held_by >= 0 and w0.get(m.held_by) > 0)
             w0.set(k, tot > 0 ? p.get(k) : f_tier_q(m.tier))
@@ -2096,11 +2098,11 @@ f_blend(bool omni) =>
         else if it > 1 and it < nit - 1
             lo := own <= eff ? x : lo
             hi := own <= eff ? hi : x
-    float fv = 0.0
-    int n = 0
-    int nsub = 0
-    array<float> vs = array.new_float(0)
-    array<float> ws = array.new_float(0)
+    fv = 0.0
+    n = 0
+    nsub = 0
+    vs = array.new_float(0)
+    ws = array.new_float(0)
     for [k, m] in MD
         float x = w.get(k)
         if omni
@@ -2121,13 +2123,13 @@ float compositeFairValue = na
 float fv_stddev = na
 float compositeLo = na
 float compositeHi = na
-bool blend_eq = true
+blend_eq = true
 float std_own = na
 float raw_omnibus_fv = na
 float omni_sd = na
-int omni_n = 0
-int omni_sub = 0
-bool omni_eq = true
+omni_n = 0
+omni_sub = 0
+omni_eq = true
 float omni_own = na
 for sc = 0 to 1
     [bf, bs, bn, be, bsub, bown] = f_blend(sc == 1)
@@ -2137,9 +2139,9 @@ for sc = 0 to 1
     else
         raw_omnibus_fv := bf, omni_sd := bs, omni_n := bn, omni_eq := be, omni_sub := bsub, omni_own := bown
 float finalFairValue = compositeFairValue > 0 ? compositeFairValue : na
-bool omni_dupe = M_COMP.om and omni_sub > 0
-string omni_dupe_tt = omni_dupe ? str.format('WARNING: the Standard Composite is in the blend alongside {0} of the models it already contains. Those are counted twice.', str.tostring(omni_sub)) : ''
-bool omni_active = is_omnibus and omni_n > 0
+omni_dupe = M_COMP.om and omni_sub > 0
+omni_dupe_tt = omni_dupe ? str.format('WARNING: the Standard Composite is in the blend alongside {0} of the models it already contains. Those are counted twice.', str.tostring(omni_sub)) : ''
+omni_active = is_omnibus and omni_n > 0
 if omni_active
     finalFairValue := raw_omnibus_fv
     fv_stddev := omni_sd
@@ -2157,18 +2159,18 @@ if omni_active
 // Analyst targets (syminfo, 0 requests): 12-month targets, discounted to today at CoE less the
 // dividend carry so they compare with our value.
 float st_md_t = nz(syminfo.target_price_median, syminfo.target_price_average)
-bool st_has = st_md_t > 0
+st_has = st_md_t > 0
 float st_lo_t = st_has ? nz(syminfo.target_price_low, st_md_t) : na
 float st_hi_t = st_has ? nz(syminfo.target_price_high, st_md_t) : na
-array<float> B = array.new_float(16, na)
-array<float> att = array.new_float(4, na)
-array<float> rdcf = array.new_float(5, na)
+B = array.new_float(16, na)
+att = array.new_float(4, na)
+rdcf = array.new_float(5, na)
 array<string> AXN = array.from('rate', 'growth', 'terminal', 'multiple')
 float sens = na
-bool sens_one = false
+sens_one = false
 float ipos = na
-string ipos_txt = 'N/A'
-int n_inv = 0
+ipos_txt = 'N/A'
+n_inv = 0
 if barstate.islast
     int J_IP = 18, int N_IP = 14, int J_RD = J_IP + N_IP, int N_RD = 22
     matrix<float> AX = matrix.new<float>(MD.size(), 4, na)
@@ -2176,15 +2178,15 @@ if barstate.islast
     float ip_a = -1.0, float ip_b = 1.0
     float rd_a = na, float rd_b = na, float rd_va = na
     float bump = na
-    int dcf_k = -1
+    dcf_k = -1
     for [k, m] in MD
         dcf_k := m.code == 'DCF' ? k : dcf_k
     for j = 0 to J_RD + 5 * N_RD - 1
-        Pos p = Pos.new()
+        p = Pos.new()
         int rd_i = int((j - J_RD) / N_RD)
         int rd_s = (j - J_RD) % N_RD
         float q = (ip_a + ip_b) / 2
-        bool skip = false
+        skip = false
         if j < 16
             int mask = j < 2 ? 15 : j - 1
             float sg = j == 1 ? -1.0 : 1.0
@@ -2205,8 +2207,8 @@ if barstate.islast
             skip := not (t > 0) or (rd_s > 1 and na(rd_va))
             p.g1 := rd_s == 0 ? rd_a : rd_s == 1 ? rd_b : (rd_a + rd_b) / 2
         if not skip
-            bool rd = j >= J_RD
-            array<float> vj = array.new_float(MD.size(), na)
+            rd = j >= J_RD
+            vj = array.new_float(MD.size(), na)
             for pass = 0 to 1
                 for [k, m] in MD
                     if m.live and (m.eng == Eng.ref) == (pass == 1) and (not rd or k == dcf_k)
@@ -2226,14 +2228,14 @@ if barstate.islast
             else
                 // The blend at this job: the Standard composite, then the Omnibus (which may hold
                 // the Standard composite as a member), on the Base shares.
-                bool up = j == 1 or (j >= J_IP and q > 0)
-                float sv = 0.0
+                up = j == 1 or (j >= J_IP and q > 0)
+                sv = 0.0
                 for [k, m] in MD
                     if m.grp != Group.comp and m.w > 0
                         float x = nz(vj.get(k), m.fv)
                         sv += (up ? x : math.max(x, 0.0)) * m.w
                 sv := not na(compositeFairValue) ? sv : na
-                float ov = 0.0
+                ov = 0.0
                 for [k, m] in MD
                     if m.om
                         float x = m.grp == Group.comp ? sv : nz(vj.get(k), m.fv)
@@ -2271,7 +2273,7 @@ if barstate.islast
     B.set(0, finalFairValue)
     for a = 0 to 3
         int bit = int(math.pow(2, a))
-        float phi = 0.0
+        phi = 0.0
         for s = 0 to 15
             if int(s / bit) % 2 == 0
                 int n = s % 2 + int(s / 2) % 2 + int(s / 4) % 2 + int(s / 8) % 2
@@ -2282,7 +2284,7 @@ if barstate.islast
     for [k, m] in MD
         m.inv := ''
         if m.fv > 0 and (m.lo > m.fv * (1 + 1e-9) or m.hi < m.fv * (1 - 1e-9))
-            int a = -1
+            a = -1
             for i = 0 to 3
                 a := AX.get(k, i) > m.fv and (a < 0 or AX.get(k, i) > AX.get(k, a)) ? i : a
             m.inv := a < 0 ? 'Bull below Base.' : 'Bear above Base on the ' + AXN.get(a) + ' axis: ' + array.get(array.from('a higher rate raises it (negative economic profit, or NOPAT below capital x growth).', 'growth destroys value here (the return on new capital is below its cost).', 'terminal growth destroys value (negative economic profit).', 'its multiple percentiles are inverted.'), a)
@@ -2292,8 +2294,8 @@ if barstate.islast
 // ==========================================
 float rkv_mispricing_mv = na
 float rkv_growth_vb = na
-bool is_rkv_value_trap = false
-bool is_rkv_deep_value = false
+is_rkv_value_trap = false
+is_rkv_deep_value = false
 float current_pb_val = bvps_ttm > 0 ? close / bvps_ttm : na
 if i_use_rkv and finalFairValue > 0 and bvps_ttm > 0
     rkv_mispricing_mv := close / finalFairValue
@@ -2311,13 +2313,13 @@ float lowerBound = na(finalFairValue) ? na : finalFairValue - nz(fv_stddev, fina
 upperBound := upperBound > 0 ? upperBound : na
 lowerBound := lowerBound > 0 ? lowerBound : na
 float fv_band = math.max(nz(finalFairValue) * 0.03, 0.0)
-string valuation_status = na(finalFairValue) ? 'N/A' : close > upperBound ? 'Very Overvalued' : close > finalFairValue + fv_band ? 'Overvalued' : close < lowerBound ? 'Very Undervalued' : close < finalFairValue - fv_band ? 'Undervalued' : 'Fairly Valued'
+valuation_status = na(finalFairValue) ? 'N/A' : close > upperBound ? 'Very Overvalued' : close > finalFairValue + fv_band ? 'Overvalued' : close < lowerBound ? 'Very Undervalued' : close < finalFairValue - fv_band ? 'Undervalued' : 'Fairly Valued'
 // CLOSE columns, on every bar, so a closed quarter keeps its last bar: the price, the value
 // shown (Omnibus or Standard, which the confidence score grades), each row's fair value (its
 // track record) and each own multiple's observation (its ratio history). [FIX RKV-FLOOR] A low
 // P/B earned by sub-CoE returns (CoE proxy: the local 10Y + 5%) is a deserved discount: the
 // observation is dropped (flooring it at 1.0 pushed the average P/B UP).
-bool rkv_trip = i_use_rkv and D.roe < nz(rf_local_avg, 4.0) / 100 + 0.05
+rkv_trip = i_use_rkv and D.roe < nz(rf_local_avg, 4.0) / 100 + 0.05
 ST.write(Q_PX, close > 0 ? close : na)
 ST.write(Q_FFV, finalFairValue > 0 ? finalFairValue : na)
 if CK.adv
@@ -2342,7 +2344,7 @@ f_pct_rank(array<float> a, float x) =>
     int n = a.size()
     float r = na
     if n >= 4 and not na(x)
-        int below = 0
+        below = 0
         for v in a
             below += v < x ? 1 : 0
         r := below / float(n)
@@ -2367,21 +2369,21 @@ float shareholder_yield = nz(div_yield) + math.max(buyback_yield, 0.0) + math.ma
 var int bt_first_data_bar = na
 if na(bt_first_data_bar) and F.has and not na(finalFairValue)
     bt_first_data_bar := bar_index
-color C_OR40 = color.new(color.orange, 40)
-color C_GR80 = color.new(color.gray, 80)
-color C_BK70 = color.new(color.black, 70)
-color C_BK100 = color.new(color.black, 100)
-color C_RD60 = color.new(color.red, 60)
-color C_WH100 = color.new(color.white, 100)
-color C_GN70 = color.new(color.green, 70)
-color C_GN60 = color.new(color.green, 60)
-color C_GN30 = color.new(color.green, 30)
-color color_bg = i_theme == 'Dark' ? color.new(#1e222d, 0) : color.new(#f0f3fa, 0)
-color color_text = i_theme == 'Dark' ? color.white : color.black
-color color_header = i_theme == 'Dark' ? color.new(color.gray, 50) : C_GR80
-color color_value = color.new(color.orange, 20)
-color color_over = color.new(color.red, 40)
-color color_under = color.new(color.green, 40)
+C_OR40 = color.new(color.orange, 40)
+C_GR80 = color.new(color.gray, 80)
+C_BK70 = color.new(color.black, 70)
+C_BK100 = color.new(color.black, 100)
+C_RD60 = color.new(color.red, 60)
+C_WH100 = color.new(color.white, 100)
+C_GN70 = color.new(color.green, 70)
+C_GN60 = color.new(color.green, 60)
+C_GN30 = color.new(color.green, 30)
+color_bg = i_theme == 'Dark' ? color.new(#1e222d, 0) : color.new(#f0f3fa, 0)
+color_text = i_theme == 'Dark' ? color.white : color.black
+color_header = i_theme == 'Dark' ? color.new(color.gray, 50) : C_GR80
+color_value = color.new(color.orange, 20)
+color_over = color.new(color.red, 40)
+color_under = color.new(color.green, 40)
 var table T = table.new(position.top_right, 4, 80, border_width = 1)
 // 88,601 | 123 | 4.56
 f_px(float v) =>
@@ -2510,7 +2512,7 @@ f_qword(int j, bool p) =>
 f_street_calc() =>
     float md_t = st_md_t
     float st_n = nz(syminfo.target_price_estimates)
-    bool has = st_has
+    has = st_has
     float lo_t = st_lo_t
     float hi_t = st_hi_t
     // 12-month targets -> today: discount at CoE less the dividend carry (fwd_disc).
@@ -2524,7 +2526,7 @@ f_street_calc() =>
     float overlap = na(rng_union) ? na : rng_union <= 0 ? 1.0 : math.max(math.min(our_hi_r, st_hi) - math.max(our_lo_r, st_lo), 0.0) / rng_union
     // --- OUR confidence ---
     int our_n_models = omni_active ? omni_n : 0
-    bool our_track = omni_active ? not omni_eq : not blend_eq
+    our_track = omni_active ? not omni_eq : not blend_eq
     if not omni_active
         for m in MD
             our_n_models += m.fv > 0 and m.w > 0 ? 1 : 0
@@ -2551,9 +2553,9 @@ f_street_calc() =>
     float rc_score = rc_tot > 0 ? (1 * nz(syminfo.recommendations_buy_strong) + 2 * nz(syminfo.recommendations_buy) + 3 * rc_hold + 4 * nz(syminfo.recommendations_sell) + 5 * nz(syminfo.recommendations_sell_strong)) / rc_tot : na
     // --- Verdict + confidence-weighted value ---
     float gap = has and not na(finalFairValue) ? finalFairValue / st_md - 1 : na
-    string verdict = has ? 'No fair value' : 'No coverage'
+    verdict = has ? 'No fair value' : 'No coverage'
     if has and not na(our_conf)
-        bool agree_v = math.abs(gap) <= i_conf_gap
+        agree_v = math.abs(gap) <= i_conf_gap
         if our_conf >= 60 and st_conf >= 60
             verdict := agree_v ? 'High conviction' : 'Real disagreement'
         else if our_conf < 40 and st_conf < 40
@@ -2570,35 +2572,35 @@ f_street_calc() =>
     array<float> co = array.from(oc_agree, oc_depth, oc_rel, oc_qual)
     array<float> cs = array.from(sc_agree, sc_depth, sc_fresh, sc_conv)
     array<string> ctt = array.from('Ours: model dispersion (stdev / FV). Street: (high - low) / median.', 'Ours: ' + str.tostring(our_n_models) + ' models' + (our_track ? '' : ', no track record (x0.5)') + '. Street: sqrt(analysts) / sqrt(10).', 'Ours: exp(-log error / 0.3). Street: target age ' + (na(age_d) ? 'unknown' : str.tostring(age_d, '#') + ' days') + '.', 'Ours: data-quality tier less 0.2 per red flag (value trap, M-score, distress, data sanity). Street: share of ratings in the largest bucket.')
-    string conf_tt = 'Score 0-100 = Agreement 35% + Depth 20% + Reliability 25% + Quality 20%.\n\nComponent: ours / street'
+    conf_tt = 'Score 0-100 = Agreement 35% + Depth 20% + Reliability 25% + Quality 20%.\n\nComponent: ours / street'
     for j = 0 to 3
         conf_tt += str.format('\n{0}:  {1} / {2}', cl.get(j), f_stxt(co.get(j)), f_stxt(cs.get(j)))
     conf_tt += '\n'
     for j = 0 to 3
         conf_tt += str.format('\n{0} - {1}', cl.get(j), ctt.get(j))
     conf_tt += str.format('\n\nOur reliability is earned: composite log error vs price {0}Q later{1}. The street has no history, so FRESHNESS of the targets stands in.', str.tostring(i_w_horizon), (na(our_err) ? ' (not enough history, set to 0.3)' : str.format(' = {0,number,#.##}', our_err)))
-    string verdict_tt = str.format('Gap ours vs street PV: {0} (agree band +/-{1,number,#}%).{2}', (na(gap) ? 'N/A' : str.format('{0}{1,number,#}%', (gap > 0 ? '+' : ''), gap * 100)), i_conf_gap * 100, (na(rc_score) ? '' : str.format('\nRating score: {0,number,#.0} (1 strong buy - 5 strong sell), {1,number,#} ratings.', rc_score, rc_tot)))
+    verdict_tt = str.format('Gap ours vs street PV: {0} (agree band +/-{1,number,#}%).{2}', (na(gap) ? 'N/A' : str.format('{0}{1,number,#}%', (gap > 0 ? '+' : ''), gap * 100)), i_conf_gap * 100, (na(rc_score) ? '' : str.format('\nRating score: {0,number,#.0} (1 strong buy - 5 strong sell), {1,number,#} ratings.', rc_score, rc_tot)))
     float pe_md = f_st_pe(md_t)
     float pe_hi = f_st_pe(hi_t)
     StreetView.new(has = has, n = st_n, lo_t = lo_t, md_t = md_t, hi_t = hi_t, lo = st_lo, md = st_md, hi = st_hi, g_lo = rdcf.get(2), g_md = rdcf.get(3), g_hi = rdcf.get(4), our_g = rdcf.get(1), pe_lo = f_st_pe(lo_t), pe_md = pe_md, pe_hi = pe_hi, rank_md = f_pct_rank(M_PE.hist, pe_md), rank_hi = f_pct_rank(M_PE.hist, pe_hi), overlap = overlap, our_conf = our_conf, st_conf = st_conf, gap = gap, cw_fv = cw_fv, rc_buy = rc_buy, rc_hold = rc_hold, rc_sell = rc_sell, rc_score = rc_score, age_d = age_d, verdict = verdict, conf_tt = conf_tt, verdict_tt = verdict_tt, co = co, cs = cs, ctt = ctt)
 f_health_calc() =>
     // Leverage
     float nd = F.ebitda > 0 ? nz(F.nd) / F.ebitda : na
-    string nd_txt = 'N/A'
-    color nd_col = color_bg
+    nd_txt = 'N/A'
+    nd_col = color_bg
     if not na(nd)
         nd_txt := nd < 0 ? 'Net Cash' : nd <= 1.5 ? 'Conservative' : nd <= 3.0 ? 'Moderate' : nd <= 4.5 ? 'Elevated' : 'High'
         nd_col := nd <= 1.5 ? color_under : nd <= 3.0 ? color_bg : nd <= 4.5 ? C_OR40 : color_over
     // Piotroski
-    string pio_txt = na(F.pio) ? 'N/A' : F.pio >= 7 ? 'Strong' : F.pio <= 3 ? 'Weak' : 'Neutral'
-    color pio_col = na(F.pio) ? color_bg : F.pio >= 7 ? color_under : F.pio <= 3 ? color_over : color_bg
+    pio_txt = na(F.pio) ? 'N/A' : F.pio >= 7 ? 'Strong' : F.pio <= 3 ? 'Weak' : 'Neutral'
+    pio_col = na(F.pio) ? color_bg : F.pio >= 7 ? color_under : F.pio <= 3 ? color_over : color_bg
     // Z + M quadrant
-    bool zm_on = i_useBeneishCheck and not na(altman_z) and not na(F.m_score)
-    string zm_txt = 'N/A'
-    color zm_col = color_bg
-    string zm_tt = ''
+    zm_on = i_useBeneishCheck and not na(altman_z) and not na(F.m_score)
+    zm_txt = 'N/A'
+    zm_col = color_bg
+    zm_tt = ''
     if zm_on
-        bool z_ok = altman_z >= z_safe_cut
+        z_ok = altman_z >= z_safe_cut
         if z_ok and not F.manip
             zm_txt := altman_z >= z_gold_cut ? 'Golden Standard' : 'Safe & Honest'
             zm_col := color_under
@@ -2617,31 +2619,31 @@ f_health_calc() =>
             zm_tt := 'Quadrant 2: Desperation Spiral\nHigh distress AND accounting manipulation. Extreme Danger.'
         zm_tt += (z_is_em ? "\n\nScore is Z''-EM: safe > 5.85, distress < 4.35." : '\n\nScore is Altman Z: safe > 3.0, distress < 1.8.') + '\nM-Score cutoff: -1.78.'
     // Capital allocation
-    string inv_txt = F.inv_dummy ? 'Empire Builder' : F.deter ? 'Deteriorating' : 'Efficient'
-    color inv_col = F.inv_dummy or F.deter ? color_over : color_under
-    string inv_tt = str.format('Asset growth YoY {0} | EBITDA growth YoY {1}.\n\n{2}', f_gtxt(F.asset_g), f_gtxt(F.ebitda_g), (F.inv_dummy ? 'DANGER: asset growth strictly exceeds EBITDA growth.' : F.deter ? 'Assets are shrinking and EBITDA is shrinking faster.' : 'Core cash generation (EBITDA) is keeping pace with or exceeding asset expansion.'))
+    inv_txt = F.inv_dummy ? 'Empire Builder' : F.deter ? 'Deteriorating' : 'Efficient'
+    inv_col = F.inv_dummy or F.deter ? color_over : color_under
+    inv_tt = str.format('Asset growth YoY {0} | EBITDA growth YoY {1}.\n\n{2}', f_gtxt(F.asset_g), f_gtxt(F.ebitda_g), (F.inv_dummy ? 'DANGER: asset growth strictly exceeds EBITDA growth.' : F.deter ? 'Assets are shrinking and EBITDA is shrinking faster.' : 'Core cash generation (EBITDA) is keeping pace with or exceeding asset expansion.'))
     // Rhodes-Kropf
-    string rkv_txt = is_rkv_value_trap ? 'Value Trap' : is_rkv_deep_value ? 'True Deep Value' : 'Neutral'
-    color rkv_col = is_rkv_value_trap ? color_over : is_rkv_deep_value ? color_under : color_bg
-    string rkv_tt = str.format('Rhodes-Kropf M/B decomposition:\n\nGrowth options (V/B): {0,number,#.##}x -- fair value vs book. Below 1.0x the business is worth less than its balance sheet.\n\nMispricing (P/V): {1,number,#.##}x -- price vs fair value.', rkv_growth_vb, rkv_mispricing_mv)
+    rkv_txt = is_rkv_value_trap ? 'Value Trap' : is_rkv_deep_value ? 'True Deep Value' : 'Neutral'
+    rkv_col = is_rkv_value_trap ? color_over : is_rkv_deep_value ? color_under : color_bg
+    rkv_tt = str.format('Rhodes-Kropf M/B decomposition:\n\nGrowth options (V/B): {0,number,#.##}x -- fair value vs book. Below 1.0x the business is worth less than its balance sheet.\n\nMispricing (P/V): {1,number,#.##}x -- price vs fair value.', rkv_growth_vb, rkv_mispricing_mv)
     // Discount rate (+ the macro assumptions behind terminal growth)
-    string wacc_flag = final_discount_rate < 0.05 ? 'Too Low' : final_discount_rate > 0.20 ? 'Extreme' : 'Normal'
-    string wacc_tt = str.format('CAPM Beta: {0,number,#.##}\nDownside Beta: {1}\nRisk-free base: {2} = {3,number,#.##}%\nERP: {4,number,#.#}%\nCRP: {5,number,#.#}% (local-US spread: {6,number,#.#}%)\nCost of Debt (synthetic): {7,number,#.#}%\nEffective tax: {8,number,#.#}%\n\nMacro (manual): inflation {9,number,#.##}%, real GDP {10,number,#.##}% -> terminal growth {11,number,#.##}%.', beta_mkt, (na(downside_beta) ? 'N/A' : str.tostring(downside_beta, '#.##')), i_rf_base, base_rf_for_calc * 100, calc_erp * 100, calc_crp * 100, auto_crp_raw * 100, D.cod * 100, F.tax * 100, lr_infl * 100, lr_rgdp * 100, final_terminal_growth * 100)
+    wacc_flag = final_discount_rate < 0.05 ? 'Too Low' : final_discount_rate > 0.20 ? 'Extreme' : 'Normal'
+    wacc_tt = str.format('CAPM Beta: {0,number,#.##}\nDownside Beta: {1}\nRisk-free base: {2} = {3,number,#.##}%\nERP: {4,number,#.#}%\nCRP: {5,number,#.#}% (local-US spread: {6,number,#.#}%)\nCost of Debt (synthetic): {7,number,#.#}%\nEffective tax: {8,number,#.#}%\n\nMacro (manual): inflation {9,number,#.##}%, real GDP {10,number,#.##}% -> terminal growth {11,number,#.##}%.', beta_mkt, (na(downside_beta) ? 'N/A' : str.tostring(downside_beta, '#.##')), i_rf_base, base_rf_for_calc * 100, calc_erp * 100, calc_crp * 100, auto_crp_raw * 100, D.cod * 100, F.tax * 100, lr_infl * 100, lr_rgdp * 100, final_terminal_growth * 100)
     // Quality: Piotroski + the quant filters the framework switches on
-    int q_pass = 0
-    int q_tot = 0
-    string q_tt = str.format('Piotroski F-score: {0}\n', (na(F.pio) ? 'N/A' : str.format('{0,number,#} / 9 ({1})', F.pio, pio_txt)))
+    q_pass = 0
+    q_tot = 0
+    q_tt = str.format('Piotroski F-score: {0}\n', (na(F.pio) ? 'N/A' : str.format('{0,number,#} / 9 ({1})', F.pio, pio_txt)))
     [qon, qnm, qvl, qtg, qps] = f_qf()
     for j = 0 to 3
         if qon.get(j)
-            bool p = qps.get(j)
+            p = qps.get(j)
             q_tot += 1
             q_pass += p ? 1 : 0
             q_tt += str.format('\n{0} {1} ({2}): {3}', qnm.get(j), qvl.get(j), qtg.get(j), f_qword(j, p))
     // Red flags: one list, short names for the cell, full text for the tooltip.
-    array<string> fl = array.new_string(0)
-    string flags_tt = ''
-    bool severe = false
+    fl = array.new_string(0)
+    flags_tt = ''
+    severe = false
     if nd > 4.5
         fl.push('Leverage')
         flags_tt += str.format('\nLeverage: net debt {0,number,#.#}x EBITDA (> 4.5x).', nd)
@@ -2673,12 +2675,12 @@ f_health_calc() =>
         flags_tt += str.format('\nSloan accruals {0}: earnings running ahead of cash.', f_gtxt(sloan_ratio))
     int n_flags = fl.size()
     flags_tt := n_flags == 0 ? 'Nothing tripped. Checks: leverage, Z+M, Piotroski, capital allocation, RKV value trap, discount rate, exit multiple, accruals.' : str.format('{0} flag(s):{1}', str.tostring(n_flags), flags_tt)
-    HealthView.new(nd = nd, nd_txt = nd_txt, nd_col = nd_col, pio_txt = pio_txt, pio_col = pio_col, zm_on = zm_on, zm_txt = zm_txt, zm_col = zm_col, zm_tt = zm_tt, inv_txt = inv_txt, inv_col = inv_col, inv_tt = inv_tt, rkv_txt = rkv_txt, rkv_col = rkv_col, rkv_tt = rkv_tt, wacc_flag = wacc_flag, wacc_tt = wacc_tt, q_pass = q_pass, q_tot = q_tot, q_tt = q_tt, n_flags = n_flags, severe = severe, flag1 = n_flags > 0 ? fl.get(0) : '', flags_tt = flags_tt)
+    HealthView.new(nd, nd_txt, nd_col, pio_txt, pio_col, zm_on, zm_txt, zm_col, zm_tt, inv_txt, inv_col, inv_tt, rkv_txt, rkv_col, rkv_tt, wacc_flag, wacc_tt, q_pass, q_tot, q_tt, n_flags, severe, flag1 = n_flags > 0 ? fl.get(0) : '', flags_tt = flags_tt)
 // ---------- summary card ----------
 f_tbl_head() =>
     T.set_position(i_tablePos == 'top_right' ? position.top_right : i_tablePos == 'middle_right' ? position.middle_right : position.bottom_right)
     T.clear(0, 0, 3, 79)
-    color hc = color.new(color.purple, 20)
+    hc = color.new(color.purple, 20)
     f_cell(0, 0, active_model_desc, color.white, hc, str.format('Valuation framework in use (Industry-Specific Valuation). Values are live on the last bar.\n\nScenario cells: green = price below that case, amber = within +/-{0,number,#}%, red = price above it.\n\nMore rows: Display Options > Table detail.', i_scen_fair_band * 100))
     f_cell(1, 0, 'Price', color.white, hc)
     f_cell(2, 0, f_px(close), color.white, hc)
@@ -2688,8 +2690,8 @@ f_tbl_head() =>
 // Members of the live blend: value x share = contribution (they sum to the fair value), then
 // the view mix: own history, rules, intrinsic.
 f_members_tt() =>
-    string t = ''
-    array<float> vm = array.new_float(3, 0.0)
+    t = ''
+    vm = array.new_float(3, 0.0)
     for m in MD
         float sh = omni_active ? m.om_w : m.w
         if sh > 0
@@ -2700,8 +2702,8 @@ f_members_tt() =>
 f_sum_val(StreetView s) =>
     f_hdr('Fair Value', 'Bear', 'Base', 'Bull', '')
     // Ours
-    string lbl = omni_active ? 'Ours: Omnibus ' + str.tostring(omni_n) + '/' + str.tostring(MD.size()) + (omni_dupe ? ' (!)' : '') : is_omnibus ? 'Ours (Standard)' : 'Ours (composite)'
-    string tt = omni_active ? 'Omnibus blend. ' + (not omni_eq ? 'Weight = inverse prediction error against price ' + str.tostring(i_w_horizon) + ' quarters later, x data-quality tier.' : 'No member has 4+ paired quarters yet, so the weights are equal x data-quality tier.') : (is_omnibus ? 'Omnibus unavailable (no member survived gating), so this is the Standard composite.\n\n' : '') + (blend_eq ? 'No model has a predictive track record yet, so the blend is EQUAL-WEIGHTED (x data-quality tier).' : 'Weights = inverse error of each model fair value against the price ' + str.tostring(i_w_horizon) + ' quarters later, x data-quality tier.')
+    lbl = omni_active ? 'Ours: Omnibus ' + str.tostring(omni_n) + '/' + str.tostring(MD.size()) + (omni_dupe ? ' (!)' : '') : is_omnibus ? 'Ours (Standard)' : 'Ours (composite)'
+    tt = omni_active ? 'Omnibus blend. ' + (not omni_eq ? 'Weight = inverse prediction error against price ' + str.tostring(i_w_horizon) + ' quarters later, x data-quality tier.' : 'No member has 4+ paired quarters yet, so the weights are equal x data-quality tier.') : (is_omnibus ? 'Omnibus unavailable (no member survived gating), so this is the Standard composite.\n\n' : '') + (blend_eq ? 'No model has a predictive track record yet, so the blend is EQUAL-WEIGHTED (x data-quality tier).' : 'Weights = inverse error of each model fair value against the price ' + str.tostring(i_w_horizon) + ' quarters later, x data-quality tier.')
     if omni_dupe
         tt += '\n\n' + omni_dupe_tt
     // Since the last report: the step on its release bar, then prices, rates and time since.
@@ -2712,16 +2714,16 @@ f_sum_val(StreetView s) =>
     tt += str.format('\nBear/Bull apply the same weights to each model own bear and bull case.\n\nMembers (value x share = contribution):{0}\n\nEvery model: Table detail > Models.', f_members_tt())
     f_model_row(lbl, compositeLo, finalFairValue, compositeHi, tt)
     // Price vs ours
-    color valuation_color = valuation_status == 'Overvalued' or valuation_status == 'Very Overvalued' ? color_over : valuation_status == 'Undervalued' or valuation_status == 'Very Undervalued' ? color_under : color_bg
+    valuation_color = valuation_status == 'Overvalued' or valuation_status == 'Very Overvalued' ? color_over : valuation_status == 'Undervalued' or valuation_status == 'Very Undervalued' ? color_under : color_bg
     float variance_pct = na(finalFairValue) ? na : (close / finalFairValue - 1) * 100
     float band_w = finalFairValue > 0 ? (compositeHi - compositeLo) / finalFairValue * 100 : na
     f_row4('Price vs FV', 'Price against OUR base value above. Width = (Bull - Bear) / Base: under 30% tight, over 60% wide.', na(variance_pct) ? 'N/A' : (variance_pct > 0 ? '+' : '') + str.tostring(math.round(variance_pct)) + '%', valuation_status, na(band_w) ? 'N/A' : 'Width ' + str.tostring(math.round(band_w)) + '%', c1 = na(variance_pct) ? color_text : variance_pct > 0 ? color.red : color.green, b2 = valuation_color, c3 = na(band_w) ? color_text : band_w < 30 ? color.green : band_w < 60 ? color.orange : color.red)
     // Where the price sits on the Bear-Base-Bull path, the rate sensitivity, and what drives the
     // Bear gap (its largest axis).
-    int top = 0
+    top = 0
     for a = 1 to 3
         top := math.abs(nz(att.get(a))) > math.abs(nz(att.get(top))) ? a : top
-    string sc_tt = str.format('Pos: where the price sits on the path from Bear (-1) through Base (0) to Bull (+1), with every axis and lever moved the same share of the way.\n\nRate: the fair value change for +100bp on every discount rate{0}\n\nBear gap {1} of Base, by axis (Shapley: each axis averaged over every order of moving them):', (sens_one ? ' (one-sided: a rate is within 100bp of its 2% floor).' : '.'), (na(compositeLo) ? 'N/A' : str.format('{0,number,#.#}%', (compositeLo / finalFairValue - 1) * 100)))
+    sc_tt = str.format('Pos: where the price sits on the path from Bear (-1) through Base (0) to Bull (+1), with every axis and lever moved the same share of the way.\n\nRate: the fair value change for +100bp on every discount rate{0}\n\nBear gap {1} of Base, by axis (Shapley: each axis averaged over every order of moving them):', (sens_one ? ' (one-sided: a rate is within 100bp of its 2% floor).' : '.'), (na(compositeLo) ? 'N/A' : str.format('{0,number,#.#}%', (compositeLo / finalFairValue - 1) * 100)))
     for a = 0 to 3
         sc_tt += str.format('\n{0}: {1}', AXN.get(a), (na(att.get(a)) ? 'N/A' : str.format('{0,number,#.#}pp', att.get(a) / finalFairValue * 100)))
     sc_tt += n_inv > 0 ? str.format('\n\n{0} member(s) out of order (!): Table detail > Models.', str.tostring(n_inv)) : ''
@@ -2734,29 +2736,29 @@ f_sum_val(StreetView s) =>
                 f_row4('Conf-weighted FV', '(Ours x our score + Street PV x street score) / sum of scores. Display only.', '', f_px(s.cw_fv), 'Price ' + (cw_dev > 0 ? '+' : '') + str.tostring(cw_dev, '#') + '%', c2 = color.white, b2 = f_scen_col(s.cw_fv, close, true), c3 = cw_dev > 0 ? color.red : color.green)
         else
             f_row4('Street PV', 'TradingView has no analyst targets for this symbol.', 'No coverage', '', '')
-        bool v_plain = s.verdict == 'No coverage' or s.verdict == 'No fair value'
-        color vcol = v_plain ? color_bg : s.verdict == 'High conviction' or str.startswith(s.verdict, 'Agree') ? color_under : s.verdict == 'Real disagreement' or s.verdict == 'Low information' ? color_over : C_OR40
+        v_plain = s.verdict == 'No coverage' or s.verdict == 'No fair value'
+        vcol = v_plain ? color_bg : s.verdict == 'High conviction' or str.startswith(s.verdict, 'Agree') ? color_under : s.verdict == 'Real disagreement' or s.verdict == 'Low information' ? color_over : C_OR40
         f_row4('Confidence', s.conf_tt, 'Ours ' + f_ctxt(s.our_conf), 'Street ' + f_ctxt(s.st_conf), s.verdict, f_on(s.our_conf), f_ccol(s.our_conf), f_on(s.st_conf), f_ccol(s.st_conf), v_plain ? color_text : color.white, vcol, s.verdict_tt)
 f_sum_health(HealthView h) =>
     f_hdr('Health', 'Value', 'Detail', 'Status', 'Hover a row for its breakdown. Every row: Table detail > Health.')
     // Balance sheet: leverage value + status; Z / M in the middle, shaded by quadrant.
-    string zm_cell = h.zm_on ? 'Z ' + str.tostring(altman_z, '#.#') + ' | M ' + str.tostring(F.m_score, '#.#') : na(altman_z) ? 'Z -' : 'Z ' + str.tostring(altman_z, '#.#')
-    string bs_tt = str.format('Net debt / EBITDA: {0} ({1}).\n<0 net cash | <1.5 conservative | 1.5-3 moderate | 3-4.5 elevated | >4.5 high.{2}', (na(h.nd) ? 'N/A' : str.format('{0,number,#.#}x', h.nd)), h.nd_txt, (h.zm_on ? str.format('\n\nZ+M matrix: {0}\n{1}', h.zm_txt, h.zm_tt) : ''))
+    zm_cell = h.zm_on ? 'Z ' + str.tostring(altman_z, '#.#') + ' | M ' + str.tostring(F.m_score, '#.#') : na(altman_z) ? 'Z -' : 'Z ' + str.tostring(altman_z, '#.#')
+    bs_tt = str.format('Net debt / EBITDA: {0} ({1}).\n<0 net cash | <1.5 conservative | 1.5-3 moderate | 3-4.5 elevated | >4.5 high.{2}', (na(h.nd) ? 'N/A' : str.format('{0,number,#.#}x', h.nd)), h.nd_txt, (h.zm_on ? str.format('\n\nZ+M matrix: {0}\n{1}', h.zm_txt, h.zm_tt) : ''))
     f_row4('Balance sheet', bs_tt, na(h.nd) ? 'N/A' : str.tostring(h.nd, '#.#') + 'x', zm_cell, h.nd_txt, c1 = h.nd > 3.0 ? color.red : color_text, c2 = h.zm_on ? color.white : color_text, b2 = h.zm_on ? h.zm_col : color_bg, b3 = h.nd_col, stt = bs_tt)
     // Quality: Piotroski + pass count of the quant filters
-    color q_bg = h.q_tot == 0 ? color_bg : h.q_pass * 3 >= h.q_tot * 2 ? color_under : h.q_pass * 3 >= h.q_tot ? C_OR40 : color_over
+    q_bg = h.q_tot == 0 ? color_bg : h.q_pass * 3 >= h.q_tot * 2 ? color_under : h.q_pass * 3 >= h.q_tot ? C_OR40 : color_over
     f_row4('Quality', h.q_tt, 'F-score ' + (na(F.pio) ? '-' : str.tostring(F.pio, '#')), h.q_tot > 0 ? 'Filters ' + str.tostring(h.q_pass) + '/' + str.tostring(h.q_tot) : 'Filters -', h.pio_txt, c2 = h.q_tot > 0 ? color.white : color_text, b2 = q_bg, b3 = h.pio_col, stt = h.q_tt)
     // Discount rate
     f_row4('Discount rate', h.wacc_tt, 'WACC ' + str.tostring(final_discount_rate * 100, '#.#') + '%', 'CoE ' + str.tostring(cost_of_equity * 100, '#.#') + '% | g ' + str.tostring(final_terminal_growth * 100, '#.#') + '%', h.wacc_flag, b1 = color_value, c3 = color.white, b3 = h.wacc_flag == 'Normal' ? color_under : color_over, stt = h.wacc_tt)
     // Growth the price implies: the stage-1 growth at which our displayed DCF equals the price
     // (reverse DCF), against the stage-1 growth the DCF uses.
     float g_imp = rdcf.get(0)
-    bool g_na = na(g_imp)
-    bool demanding = not g_na and g_imp > final_growth_rate
-    string g_tt = str.format('Reverse DCF on the DCF shown: the stage-1 growth ({0} years, fading to terminal {1}) at which it equals the price, against the {2} it uses. N/A: no growth from -50% to +100% reaches the price.\n\nForward growth leg ({3}): {4}.\nImplied exit EV/NOPAT in year {0}: {5}.', str.tostring(i_dcf_stage1_yrs), f_gtxt(final_terminal_growth), f_gtxt(final_growth_rate), H.g_src, f_gtxt(H.g_fwd), f_petxt(implied_exit_multiple))
+    g_na = na(g_imp)
+    demanding = not g_na and g_imp > final_growth_rate
+    g_tt = str.format('Reverse DCF on the DCF shown: the stage-1 growth ({0} years, fading to terminal {1}) at which it equals the price, against the {2} it uses. N/A: no growth from -50% to +100% reaches the price.\n\nForward growth leg ({3}): {4}.\nImplied exit EV/NOPAT in year {0}: {5}.', str.tostring(i_dcf_stage1_yrs), f_gtxt(final_terminal_growth), f_gtxt(final_growth_rate), H.g_src, f_gtxt(H.g_fwd), f_petxt(implied_exit_multiple))
     f_row4('Growth priced in', g_tt, f_gtxt(g_imp), 'Ours ' + f_gtxt(final_growth_rate), g_na ? 'N/A' : demanding ? 'Demanding' : 'Achievable', b1 = color_value, c3 = g_na ? color_text : color.white, b3 = g_na ? color_bg : demanding ? color_over : color_under, stt = g_tt)
     // Red flags
-    color fl_bg = h.n_flags == 0 ? color_under : h.severe ? color.red : C_OR40
+    fl_bg = h.n_flags == 0 ? color_under : h.severe ? color.red : C_OR40
     f_row4('Red flags', h.flags_tt, str.tostring(h.n_flags), h.n_flags == 0 ? '-' : h.flag1 + (h.n_flags > 1 ? ' +' + str.tostring(h.n_flags - 1) : ''), h.n_flags == 0 ? 'Clean' : h.severe ? 'Danger' : 'Review', c3 = color.white, b3 = fl_bg, stt = h.flags_tt)
 // 5.2T | 41.2B | 88.6M, else as f_px: totals in a tooltip.
 f_big(float v) =>
@@ -2764,29 +2766,29 @@ f_big(float v) =>
     na(v) ? '-' : a >= 1e12 ? str.tostring(v / 1e12, '#.##') + 'T' : a >= 1e9 ? str.tostring(v / 1e9, '#.##') + 'B' : a >= 1e6 ? str.tostring(v / 1e6, '#.##') + 'M' : f_px(v)
 // 'net debt 8.4B, minority interest 0.6B, preferred 0.2B': the claims counted, with amounts.
 f_claims_brk() =>
-    string t = ''
+    t = ''
     for [k, v] in CL.amt
         t += (t == '' ? '' : ', ') + str.tostring(k) + ' ' + f_big(v)
     t
 // The Base result record in one line: from the engine's total through the claim bridge to
 // the value shown, and the rate and growths the engine was handed.
 f_res_tt(Model m) =>
-    Res r = m.res.get(0)
-    KIn x = r.x
-    bool firm = m.level == Level.firm or m.level == Level.unlev
-    string t = '\n\nBase: '
+    r = m.res.get(0)
+    x = r.x
+    firm = m.level == Level.firm or m.level == Level.unlev
+    t = '\n\nBase: '
     if na(r.value)
         t += str.format('N/A, {0}.', (r.why == '' ? 'inputs missing' : r.why))
     else if m.ps
         t += str.format('{0} per share{1}.', f_px(r.value), (na(r.fwd) ? '' : str.format(', the average of spot {0} and forward {1}', f_px(r.spot), f_px(r.fwd))))
     else
         t += str.format('{0}{1}{2}{3}, / {4} shares = {5}{6}.', (firm ? 'firm value ' : 'equity value '), f_big(r.core), (r.add != 0 ? str.format(' + {0} {1}', str.tostring(m.addon), f_big(r.add)) : ''), (firm ? ' - ' + f_claims_brk() : ''), f_big(r.sh), f_px(r.spot), (na(r.fwd) ? '' : str.format('; forward leg {0}, blended {1}', f_px(r.fwd), f_px(r.value))))
-    bool disc = m.eng == Eng.vdcf or m.eng == Eng.rim or m.eng == Eng.eva or m.eng == Eng.perp or m.eng == Eng.gperp
+    disc = m.eng == Eng.vdcf or m.eng == Eng.rim or m.eng == Eng.eva or m.eng == Eng.perp or m.eng == Eng.gperp
     t + (disc and not na(r.value) ? ' Rate (' + str.tostring(m.level) + ') ' + f_gtxt(x.rate) + (m.eng == Eng.perp ? '' : ', growth ' + f_gtxt(x.g1) + ' fading to ' + f_gtxt(x.gT)) + '.' : '') + (m.inv != '' ? '\n\n! ' + m.inv : '')
 // The rows in a display order given by their codes; rows the list leaves out follow in
 // declaration order, so a new model shows without editing the list.
 f_order(string codes) =>
-    array<Model> out = array.new<Model>()
+    out = array.new<Model>()
     for c in str.split(codes, ' ')
         for m in MD
             if m.code == c
@@ -2798,7 +2800,7 @@ f_order(string codes) =>
 // ---------- detail sections ----------
 f_det_models() =>
     // The view mix of the live blend (own history, rules, intrinsic), before the rows.
-    array<float> vm = array.new_float(3, 0.0)
+    vm = array.new_float(3, 0.0)
     for m in MD
         float sh = omni_active ? m.om_w : m.w
         vm.set(m.grp == Group.comp ? 2 : f_view(m), vm.get(m.grp == Group.comp ? 2 : f_view(m)) + nz(sh))
@@ -2812,15 +2814,15 @@ f_det_models() =>
     // Rule of 40, or Rule of 65 once growth x 2 + FCF margin reaches 65.
     float r40_score = not na(F.rev_g) and not na(D.s.get(Sx.fcf_margin)) ? (F.rev_g + D.s.get(Sx.fcf_margin)) * 100 : 0.0
     float rx_score = not na(F.rev_g) and not na(D.s.get(Sx.fcf_margin)) ? ((F.rev_g * 2.0) + D.s.get(Sx.fcf_margin)) * 100 : 0.0
-    bool super_stock = rx_score >= 65
+    super_stock = rx_score >= 65
     float ddm_yield = close > 0 and not na(F.dps) ? F.dps / close * 100 : na
-    string cl_txt = CL.txt()
+    cl_txt = CL.txt()
     // Absolute models show whenever allocated (even N/A); Acquirer's and the sector
     // models only once they produce a value.
     for m in f_order('RIM R40 GRA ACQ DCF EPV RNPV ECF ADCF UNB APV EVA DDM')
         if m.grp != Group.rel and m.grp != Group.comp and (m.on or m.om) and ((m.grp == Group.abs and m.code != 'ACQ') or not na(m.fv))
-            string lbl = m.code == 'R40' ? (super_stock ? '🌟 Rule of 65 (Super Stock)' : 'Rule of 40 Value') : m.code == 'ACQ' ? "Acquirer's Mult (" + str.tostring(i_acquirer_mult) + "x EBIT)" : m.name
-            string tt = switch m.code
+            lbl = m.code == 'R40' ? (super_stock ? '🌟 Rule of 65 (Super Stock)' : 'Rule of 40 Value') : m.code == 'ACQ' ? "Acquirer's Mult (" + str.tostring(i_acquirer_mult) + "x EBIT)" : m.name
+            tt = switch m.code
                 'R40' => (super_stock ? 'Rule of 65 Score: ' + str.tostring(rx_score, '#.#') + '%\n(Hyper-Growth Premium Unlocked!)' : 'Rule of 40 Score: ' + (na(F.rev_g) ? 'N/A (needs a year-ago revenue)' : str.tostring(r40_score, '#.#') + '%')) + '\n\nASSUMPTION: fixed EV/Sales rule -- 1x + 0.25x per Rule-of-40 point (floor 1.5x); the Rule-of-X multiple (12x + 0.3x per point above 65, never below that base) phases in as Rule-of-X goes from 55 to 65; capped at 25x.'
                 'GRA' => 'Needs positive EPS. Growth capped at 15%; the 4.4/Y bond-yield factor is capped at 1.0.'
                 'ACQ' => 'Bear/Bull shift the EBIT multiple by +/-' + str.tostring(i_scen_acq_delta) + 'x.'
@@ -2839,7 +2841,7 @@ f_det_models() =>
             f_model_row(lbl + (m.inv != '' ? ' !' : '') + f_wt_lbl(omni_active ? m.om_w : m.w), m.lo, m.fv, m.hi, tt + f_res_tt(m))
 f_det_omni() =>
     if is_omnibus
-        string omni_tt = omni_n == 0 ? 'No member survived gating, so the fair value is the Standard composite, not an Omnibus value.' : (not omni_eq ? str.format('Share of the blend. Weight = inverse prediction error against price {0} quarters later, x data-quality tier.\n\n', str.tostring(i_w_horizon)) : 'No member has 4+ paired quarters yet, so the weights are equal x data-quality tier.\n\n')
+        omni_tt = omni_n == 0 ? 'No member survived gating, so the fair value is the Standard composite, not an Omnibus value.' : (not omni_eq ? str.format('Share of the blend. Weight = inverse prediction error against price {0} quarters later, x data-quality tier.\n\n', str.tostring(i_w_horizon)) : 'No member has 4+ paired quarters yet, so the weights are equal x data-quality tier.\n\n')
         if omni_dupe
             omni_tt += omni_dupe_tt + '\n\n'
         for m in MD
@@ -2857,10 +2859,10 @@ f_det_street(StreetView s) =>
     else
         f_model_row('Target (12M)', s.lo_t, s.md_t, s.hi_t, s.n <= 1 ? '1 analyst: no range.' : 'Low / median / high analyst target.')
         f_row4('Implied growth', str.format('Reverse DCF on the DCF shown: the stage-1 growth at which it equals each street PV. At our value: {0}; the DCF uses {1}.', f_gtxt(s.our_g), f_gtxt(final_growth_rate)), f_gtxt(s.g_lo), f_gtxt(s.g_md), f_gtxt(s.g_hi))
-        string pe_tt = str.format('Target / FY consensus EPS. Percentile in the stock own P/E history: Base {0}, Bull {1}. Red = above the 90th.', (na(s.rank_md) ? 'N/A' : str.format('{0,number,#}th', s.rank_md * 100)), (na(s.rank_hi) ? 'N/A' : str.format('{0,number,#}th', s.rank_hi * 100)))
+        pe_tt = str.format('Target / FY consensus EPS. Percentile in the stock own P/E history: Base {0}, Bull {1}. Red = above the 90th.', (na(s.rank_md) ? 'N/A' : str.format('{0,number,#}th', s.rank_md * 100)), (na(s.rank_hi) ? 'N/A' : str.format('{0,number,#}th', s.rank_hi * 100)))
         f_row4('Implied fwd P/E', pe_tt, f_petxt(s.pe_lo), f_petxt(s.pe_md), f_petxt(s.pe_hi), c2 = s.rank_md > 0.9 ? color.red : color_text, c3 = s.rank_hi > 0.9 ? color.red : color_text, stt = pe_tt)
         float rc_tot = s.rc_buy + s.rc_hold + s.rc_sell
-        string rt_tt = rc_tot > 0 ? str.format('Rating score {0,number,#.0} (1 strong buy - 5 strong sell), {1,number,#} ratings.', s.rc_score, rc_tot) : 'No buy / hold / sell ratings on TradingView.'
+        rt_tt = rc_tot > 0 ? str.format('Rating score {0,number,#.0} (1 strong buy - 5 strong sell), {1,number,#} ratings.', s.rc_score, rc_tot) : 'No buy / hold / sell ratings on TradingView.'
         f_row4('Ratings', rt_tt, 'Buy ' + str.tostring(s.rc_buy, '#'), 'Hold ' + str.tostring(s.rc_hold, '#'), 'Sell ' + str.tostring(s.rc_sell, '#'), stt = rt_tt)
         f_row4('Target age / overlap', 'Age of the latest target (freshness drives street reliability). Overlap = the shared part of our Bear-Bull range and the street range; near 0% means we disagree on the whole distribution.', na(s.age_d) ? 'Age -' : str.tostring(s.age_d, '#') + ' days', 'Overlap ' + (na(s.overlap) ? '-' : str.tostring(s.overlap * 100, '#') + '%'), '')
     f_hdr('Confidence parts', 'Ours', 'Street', 'Weight', s.conf_tt)
@@ -2876,16 +2878,16 @@ f_det_health1(HealthView h) =>
     f_row4('Asset / EBITDA growth YoY', h.inv_tt, str.tostring(math.round(nz(F.asset_g) * 100)) + '% / ' + str.tostring(math.round(nz(F.ebitda_g) * 100)) + '%', 'Capital Allocation', h.inv_txt, c1 = F.inv_dummy ? color.red : color_text, b3 = h.inv_col, stt = h.inv_tt)
     if i_use_rkv
         f_row4('Rhodes-Kropf V/B (Growth)', h.rkv_tt, str.tostring(rkv_growth_vb, '#.##') + 'x', 'RKV Diagnosis', h.rkv_txt, c1 = is_rkv_deep_value ? color.green : is_rkv_value_trap ? color.red : color_text, b3 = h.rkv_col, stt = h.rkv_tt)
-    string macro_src = (i_lr_infl > 0 ? 'input' : 'auto') + ' / ' + (i_lr_rgdp > 0 ? 'input' : 'auto')
+    macro_src = (i_lr_infl > 0 ? 'input' : 'auto') + ' / ' + (i_lr_rgdp > 0 ? 'input' : 'auto')
     f_row4('Macro (manual)', 'Long-run inflation and real GDP growth are assumptions, not feeds. Set them in Industry-Specific Valuation. auto = per-currency default.', 'Infl ' + str.tostring(lr_infl * 100, '#.##') + '% | GDP ' + str.tostring(lr_rgdp * 100, '#.##') + '%', macro_src, 'Terminal g ' + str.tostring(final_terminal_growth * 100, '#.##') + '%', b1 = color_value)
     if M_OE.on
         float oe_yield_pct = close > 0 ? nz(F.oe_ps) / close * 100 : 0.0
         float yield_spread = oe_yield_pct - rf_local_avg
-        string coupon_status = yield_spread >= 3.0 ? 'SCREAMING BUY' : yield_spread > 0 ? 'BUY (Positive Carry)' : 'PASS (Yield < Bond)'
-        color coupon_color = yield_spread >= 3.0 ? color.green : yield_spread > 0 ? color_under : color_over
-        string coupon_tt = str.format('Owner Earnings yield: {0,number,#.##}%\n10Y hurdle: {1,number,#.##}%\nSpread: {2}{3,number,#.##}%', oe_yield_pct, rf_local_avg, (yield_spread > 0 ? '+' : ''), yield_spread)
+        coupon_status = yield_spread >= 3.0 ? 'SCREAMING BUY' : yield_spread > 0 ? 'BUY (Positive Carry)' : 'PASS (Yield < Bond)'
+        coupon_color = yield_spread >= 3.0 ? color.green : yield_spread > 0 ? color_under : color_over
+        coupon_tt = str.format('Owner Earnings yield: {0,number,#.##}%\n10Y hurdle: {1,number,#.##}%\nSpread: {2}{3,number,#.##}%', oe_yield_pct, rf_local_avg, (yield_spread > 0 ? '+' : ''), yield_spread)
         f_row4('Buffett Coupon vs 10Y', coupon_tt, str.tostring(oe_yield_pct, '#.##') + '%', (yield_spread > 0 ? '+' : '') + str.tostring(yield_spread, '#.##') + '%', coupon_status, b1 = color_value, c2 = yield_spread > 0 ? color.green : color.red, c3 = color.white, b3 = coupon_color, stt = coupon_tt)
-    bool is_crazy_exit = implied_exit_multiple > 30.0
+    is_crazy_exit = implied_exit_multiple > 30.0
     f_row4('Implied exit EV/NOPAT (Yr' + str.tostring(i_dcf_stage1_yrs) + ')', 'Terminal value / final-year NOPAT inside the DCF: a firm-value multiple, not a P/E. Above 30x the value leans on a rich exit.', f_petxt(implied_exit_multiple), 'Sanity Check', is_crazy_exit ? 'High' : 'Safe', b1 = color_value, c3 = is_crazy_exit ? color.red : color.green)
 f_det_health2(HealthView h) =>
     f_hdr('Quant Quality Filters', 'Value', 'Target', 'Status', '')
@@ -2893,17 +2895,17 @@ f_det_health2(HealthView h) =>
     [qon, qnm, qvl, qtg, qps] = f_qf()
     for j = 0 to 3
         if qon.get(j)
-            bool p = qps.get(j)
+            p = qps.get(j)
             f_row4(qnm.get(j), j == 2 ? '(Net Income - Operating Cash Flow) / Total Assets.\n\nSloan (1996) is a RETURNS anomaly, not a fraud test. Beneish M-Score in the Z+M row is the manipulation model.' : '', qvl.get(j), qtg.get(j), f_qword(j, p), c1 = p ? color.green : j == 3 ? color_text : color.red, c3 = color.white, b3 = p ? color_under : color_over)
 if barstate.islast
-    StreetView sv = StreetView.new()
+    sv = StreetView.new()
     if i_show_street
         sv := f_street_calc()
-    HealthView hv = f_health_calc()
+    hv = f_health_calc()
     f_tbl_head()
     f_sum_val(sv)
     f_sum_health(hv)
-    bool all_ = i_detail == 'Everything'
+    all_ = i_detail == 'Everything'
     if all_ or i_detail == 'Models'
         f_det_models()
         f_det_omni()
@@ -2925,8 +2927,8 @@ p_sell = plot(sell_zone_line, 'Sell Target (Overvalued)', color = color.new(colo
 p_buy = plot(buy_zone_line, 'Buy Zone (Discount)', color = C_GN30, linewidth = 1, style = plot.style_circles)
 fill(p_fv, p_sell, color = color.new(color.red, 90), title = 'Overvaluation Cloud')
 fill(p_fv, p_buy, color = color.new(color.green, 90), title = 'Margin of Safety Cloud')
-bool is_screaming_buy = close < buy_zone_line
-bool is_screaming_sell = close > sell_zone_line
+is_screaming_buy = close < buy_zone_line
+is_screaming_sell = close > sell_zone_line
 barcolor(is_screaming_buy ? color.green : is_screaming_sell ? color.red : na, title = "Zone Bar Highlights")
 // ==========================================
 // 8. TRUE ROLLING BACKTESTER
@@ -2952,7 +2954,7 @@ f_array_correl(array<float> arr_x, array<float> arr_y) =>
             res := num / math.sqrt(den_x * den_y)
     res
 // Period resolution, computed once per bar for all models.
-int bt_period = 0
+bt_period = 0
 if i_period_mode == 'Full Period'
     bt_period := 1
 else if i_period_mode == 'Auto-Split'
@@ -2966,12 +2968,12 @@ else
 int bt_cooldown = math.max(1, int(bpy / 12))
 f_rolling_update(ModelStats stats_obj, current_fv, current_close, current_low, exit_prem, max_hold, max_open, int current_period) =>
     int open_trades = stats_obj.tr.size()
-    bool target_hit = current_fv > 0 and current_close >= current_fv * (1.0 + exit_prem)
+    target_hit = current_fv > 0 and current_close >= current_fv * (1.0 + exit_prem)
     // Dividends accrue per bar at the trailing DPS known on that bar (not the exit-day yield).
     float dps_bar = nz(F.dps) / bpy
     if open_trades > 0
         for i = open_trades - 1 to 0
-            Trade t = stats_obj.tr.get(i)
+            t = stats_obj.tr.get(i)
             float e_price = t.px
             int e_period = t.per
             t.div += dps_bar
@@ -2979,11 +2981,11 @@ f_rolling_update(ModelStats stats_obj, current_fv, current_close, current_low, e
             float new_min = t.mn
             int bars_held = bar_index - t.bar
             if target_hit or bars_held >= max_hold
-                bool straddles = (current_period > 0) and (current_period != e_period)
-                bool skip_trade = straddles and i_bt_drop_straddle
+                straddles = (current_period > 0) and (current_period != e_period)
+                skip_trade = straddles and i_bt_drop_straddle
                 if straddles
                     stats_obj.straddled += 1
-                PeriodStats active_stats = e_period == 1 ? stats_obj.is_stats : (e_period == 2 ? stats_obj.oos_stats : stats_obj.fwd_stats)
+                active_stats = e_period == 1 ? stats_obj.is_stats : (e_period == 2 ? stats_obj.oos_stats : stats_obj.fwd_stats)
                 active_stats.total += skip_trade ? 0 : 1
                 float years_held = math.max(bars_held / float(bpy), 0.083)
                 float raw_exit_price = current_close + t.div
@@ -3020,14 +3022,14 @@ var ModelStats base_stats = f_new_model()
 if i_show_bt
     // Every row, then the baseline (k = MD.size()), through one call.
     for k = 0 to MD.size()
-        bool bl = k == MD.size()
-        Model m = MD.get(math.min(k, MD.size() - 1))
+        bl = k == MD.size()
+        m = MD.get(math.min(k, MD.size() - 1))
         f_rolling_update(bl ? base_stats : m.bt, bl ? close * 10 : m.grp == Group.comp ? finalFairValue : m.fv, close, low, i_bt_exit_premium, bars_to_hold, i_bt_max_open, bt_period)
 f_calc_vacagr(PeriodStats stats) =>
     float geo_cagr = na
     int n_ann = stats.closed_ann_returns.size()
     if n_ann > 0
-        float comp_mult = 1.0
+        comp_mult = 1.0
         for r in stats.closed_ann_returns
             comp_mult *= math.max(1.0 + r / 100.0, 0.001)
         geo_cagr := (math.pow(comp_mult, 1.0 / n_ann) - 1.0) * 100.0
@@ -3065,16 +3067,16 @@ f_conf_col(int n) =>
 f_ps(ModelStats m, int which) =>
     which == 1 ? m.is_stats : which == 2 ? m.oos_stats : m.fwd_stats
 f_format_period(PeriodStats stats) =>
-    PMetrics p = f_period_metrics(stats)
+    p = f_period_metrics(stats)
     if p.n == 0
         ["N/A", "No trades in this period.", C_GR80, color.gray]
     else
         float md = nz(f_med_ann(p))
-        string main_txt = str.tostring(md, "#.0") + "%/y (" + str.tostring(p.wr, "#.0") + "%) n=" + str.tostring(p.n)
-        string tt = str.format('Trades: {0}\nIC (Alpha): {1}\nExpectancy: {2}\nMedian trade: {3}\nMean trade: {4,number,#.0}%\nVACAGR: {5}\nAvg hold: {6}\nMAE (per-trade): {7}\n\nHeadline = median trade (after fees, dividends accrued) annualised over the average hold. VACAGR annualizes each trade with a 1-month floor, so short holds dominate it.', str.tostring(p.n), (not na(p.ic) ? str.tostring(p.ic, "#.00") : "N/A"), (not na(p.expectancy) ? str.format('{0,number,#.0}%', p.expectancy * 100) : "N/A"), (not na(p.med_ret) ? str.format('{0,number,#.0}%', p.med_ret * 100) : "N/A"), stats.closed_returns.avg() * 100, (not na(p.vacagr) ? str.format('{0,number,#.0}%', p.vacagr) : "N/A"), (not na(p.avg_hold) ? str.format('{0,number,#.0}y', p.avg_hold) : "N/A"), (not na(p.mae) ? str.format('{0,number,#.0}%', p.mae) : "N/A"))
-        color dim_col = f_conf_col(p.n)
-        color bg_col = not na(dim_col) ? dim_col : md >= 15.0 ? color.yellow : md > 0 ? C_GN70 : color.new(color.red, 70)
-        color txt_col = not na(dim_col) ? color.silver : md >= 15.0 ? color.black : color.white
+        main_txt = str.tostring(md, "#.0") + "%/y (" + str.tostring(p.wr, "#.0") + "%) n=" + str.tostring(p.n)
+        tt = str.format('Trades: {0}\nIC (Alpha): {1}\nExpectancy: {2}\nMedian trade: {3}\nMean trade: {4,number,#.0}%\nVACAGR: {5}\nAvg hold: {6}\nMAE (per-trade): {7}\n\nHeadline = median trade (after fees, dividends accrued) annualised over the average hold. VACAGR annualizes each trade with a 1-month floor, so short holds dominate it.', str.tostring(p.n), (not na(p.ic) ? str.tostring(p.ic, "#.00") : "N/A"), (not na(p.expectancy) ? str.format('{0,number,#.0}%', p.expectancy * 100) : "N/A"), (not na(p.med_ret) ? str.format('{0,number,#.0}%', p.med_ret * 100) : "N/A"), stats.closed_returns.avg() * 100, (not na(p.vacagr) ? str.format('{0,number,#.0}%', p.vacagr) : "N/A"), (not na(p.avg_hold) ? str.format('{0,number,#.0}y', p.avg_hold) : "N/A"), (not na(p.mae) ? str.format('{0,number,#.0}%', p.mae) : "N/A"))
+        dim_col = f_conf_col(p.n)
+        bg_col = not na(dim_col) ? dim_col : md >= 15.0 ? color.yellow : md > 0 ? C_GN70 : color.new(color.red, 70)
+        txt_col = not na(dim_col) ? color.silver : md >= 15.0 ? color.black : color.white
         [main_txt, tt, bg_col, txt_col]
 var table bt_tbl = table.new(position.bottom_left, 9, 32, border_width = 1)
 // One dashboard cell (small text) and the left-aligned model-name cell.
@@ -3090,10 +3092,10 @@ f_fill_matrix_row(int row, string name, ModelStats m) =>
         f_btc(c, row, txt, bg, tcol, tt)
 // --- VIEW 2: FOCUS (one period, metrics as columns) ---
 f_fill_focus_row(int row, string name, ModelStats m, int which) =>
-    PMetrics p = f_period_metrics(f_ps(m, which))
-    color grey = f_conf_col(p.n)
-    color base = not na(grey) ? grey : C_BK70
-    color txt = not na(grey) ? color.silver : color.white
+    p = f_period_metrics(f_ps(m, which))
+    grey = f_conf_col(p.n)
+    base = not na(grey) ? grey : C_BK70
+    txt = not na(grey) ? color.silver : color.white
     f_btn(row, name)
     f_btc(1, row, p.n == 0 ? "-" : str.tostring(p.n), base, txt, m.straddled > 0 ? "straddling trades excluded: " + str.tostring(m.straddled) : "")
     f_btc(2, row, na(p.ic) ? "-" : str.tostring(p.ic, "#.00"), not na(grey) ? grey : na(p.ic) ? C_GR80 : p.ic > 0.3 ? C_GN30 : p.ic > 0 ? C_GN70 : C_RD60, txt, "Correlation between entry discount and realised return. Near zero = the fair value carries no predictive information.")
@@ -3105,12 +3107,12 @@ f_fill_focus_row(int row, string name, ModelStats m, int which) =>
         f_btc(c, row, na(x) ? "-" : str.tostring(x, c == 6 ? "#.1" : "#.0") + (c == 6 ? "y" : "%"), base, txt, c == 8 ? "VACAGR floors holding period at 1 month. Read with Median and Hold." : "")
 // --- VIEW 3: ROBUSTNESS VERDICT (vs the always-in baseline) ---
 f_fill_robust_row(int row, string name, ModelStats m, ModelStats b) =>
-    array<float> v = array.new_float(0)
-    array<int> n = array.new_int(0)
-    float edge_sum = 0.0
-    bool beats_all = true
+    v = array.new_float(0)
+    n = array.new_int(0)
+    edge_sum = 0.0
+    beats_all = true
     for w = 1 to 3
-        PMetrics p = f_period_metrics(f_ps(m, w))
+        p = f_period_metrics(f_ps(m, w))
         // [FIX BASELINE] "Stable" also requires beating simply being invested.
         // Annualised median trade (%/y), the same headline as the matrix.
         float q = nz(f_med_ann(f_period_metrics(f_ps(b, w))))
@@ -3121,14 +3123,14 @@ f_fill_robust_row(int row, string name, ModelStats m, ModelStats b) =>
         beats_all := beats_all and nz(pv) > q
     float v1 = v.get(0), float v2 = v.get(1), float v3 = v.get(2)
     float edge = edge_sum / 3.0
-    bool enough = n.min() >= i_bt_min_n
+    enough = n.min() >= i_bt_min_n
     float spread = math.max(nz(v1), nz(v2), nz(v3)) - math.min(nz(v1), nz(v2), nz(v3))
-    bool all_pos = nz(v1, -1) > 0 and nz(v2, -1) > 0 and nz(v3, -1) > 0
+    all_pos = nz(v1, -1) > 0 and nz(v2, -1) > 0 and nz(v3, -1) > 0
     // Insufficient, Overfit (strong in period 1, weak later), Decaying, Stable, No edge, Mixed
     int vk = not enough ? 0 : v1 > 0 and (nz(v2) <= 0 or nz(v3) <= 0) ? 1 : v1 > v2 and v2 > v3 and spread > 10 ? 2 : all_pos and spread < 20 ? (beats_all ? 3 : 4) : 5
-    string verdict = array.from("Insufficient", "Overfit", "Decaying", "Stable", "No edge", "Mixed").get(vk)
-    color vcol = array.from(color.new(color.gray, 60), color.new(color.red, 20), color.new(color.orange, 30), color.new(color.green, 20), C_OR40, color.new(color.gray, 40)).get(vk)
-    string vtip = array.from(str.format('Fewer than {0} trades in at least one period. No verdict is defensible.', str.tostring(i_bt_min_n)), "Strong in period 1, weak or negative later. The parameters fit the first window, not the phenomenon.", "Monotonically falling across periods. The edge may be closing.", "Positive in all three periods, contained dispersion, and ahead of the always-in baseline in each.", "Stable and positive, but not better than simply being invested.", "No clean pattern. Treat as unproven rather than broken.").get(vk)
+    verdict = array.from("Insufficient", "Overfit", "Decaying", "Stable", "No edge", "Mixed").get(vk)
+    vcol = array.from(color.new(color.gray, 60), color.new(color.red, 20), color.new(color.orange, 30), color.new(color.green, 20), C_OR40, color.new(color.gray, 40)).get(vk)
+    vtip = array.from(str.format('Fewer than {0} trades in at least one period. No verdict is defensible.', str.tostring(i_bt_min_n)), "Strong in period 1, weak or negative later. The parameters fit the first window, not the phenomenon.", "Monotonically falling across periods. The edge may be closing.", "Positive in all three periods, contained dispersion, and ahead of the always-in baseline in each.", "Stable and positive, but not better than simply being invested.", "No clean pattern. Treat as unproven rather than broken.").get(vk)
     f_btn(row, name)
     for c = 1 to 3
         float vc = v.get(c - 1)
@@ -3150,26 +3152,26 @@ f_bt_row(int row, string name, ModelStats m) =>
 // Dashboard order: Composite, the classic intrinsic models, the multiples, Acquirer's
 // Multiple and Owners' Earnings, then the sector models. Rows the list leaves out follow;
 // the Baseline closes the list.
-string BT_ORDER = 'COMP DCF GRA EPV RIM R40 PE PS FCF PB TBV EV CF AFFO ACQ OE RNPV ECF ADCF UNB APV EVA DDM'
+BT_ORDER = 'COMP DCF GRA EPV RIM R40 PE PS FCF PB TBV EV CF AFFO ACQ OE RNPV ECF ADCF UNB APV EVA DDM'
 // --- DASHBOARD RENDERER ---
 f_bt_table() =>
     bt_tbl.set_position(i_bt_pos == 'top_left' ? position.top_left : i_bt_pos == 'middle_left' ? position.middle_left : i_bt_pos == 'bottom_center' ? position.bottom_center : i_bt_pos == 'top_center' ? position.top_center : position.bottom_left)
     bt_tbl.clear(0, 0, 8, 31)
-    string mode_tag = i_period_mode == 'Auto-Split' ? " [auto-split]" : i_period_mode == 'Full Period' ? " [pooled]" : ""
-    bool v_mx = i_bt_view == 'Matrix (all periods)'
-    bool v_rb = i_bt_view == 'Robustness verdict'
+    mode_tag = i_period_mode == 'Auto-Split' ? " [auto-split]" : i_period_mode == 'Full Period' ? " [pooled]" : ""
+    v_mx = i_bt_view == 'Matrix (all periods)'
+    v_rb = i_bt_view == 'Robustness verdict'
     array<string> hd = v_mx ? array.from('Valuation Model Matrix', 'Period 1\n(In-Sample)', 'Period 2\n(Out-of-Sample)', 'Period 3\n(Forward)') : v_rb ? array.from('Robustness', 'P1', 'P2', 'P3', 'Spread', 'Verdict', 'vs Base') : array.from(i_bt_view, 'n', 'IC', 'Expect', 'Median', 'Win%', 'Hold', 'MAE', 'VACAGR')
     for c = 0 to hd.size() - 1
-        string tt = c == 0 ? 'The inputs were chosen after seeing this whole history, so for the SETTINGS every period is in-sample. Read P2/P3 as a stability check, not proof of an edge.' : v_mx ? 'Median trade, annualised over the average hold (%/y) (Win%) n=trades' : v_rb ? (c == 6 ? 'Average median-trade edge over the always-in baseline across the three periods.' : '') : c == 2 ? 'Discount-to-return correlation: does a bigger discount predict a bigger return?' : c == 7 ? 'Per-trade maximum adverse excursion, NOT portfolio drawdown.' : ''
+        tt = c == 0 ? 'The inputs were chosen after seeing this whole history, so for the SETTINGS every period is in-sample. Read P2/P3 as a stability check, not proof of an edge.' : v_mx ? 'Median trade, annualised over the average hold (%/y) (Win%) n=trades' : v_rb ? (c == 6 ? 'Average median-trade edge over the always-in baseline across the three periods.' : '') : c == 2 ? 'Discount-to-return correlation: does a bigger discount predict a bigger return?' : c == 7 ? 'Per-trade maximum adverse excursion, NOT portfolio drawdown.' : ''
         f_btc(c, 0, hd.get(c) + (c == 0 ? mode_tag : ''), c == 0 ? color.new(color.purple, 30) : color.new(color.blue, 20), c == 0 ? color.yellow : color.white, tt)
     // A dot marks a model the current framework does NOT allocate. Compact view (default):
     // the Composite, the allocated models and the Baseline. Sector models stay hidden until
     // they have produced trades.
-    int bt_hidden = 0
-    array<string> bn = array.new_string()
-    array<ModelStats> bs = array.new<ModelStats>()
+    bt_hidden = 0
+    bn = array.new_string()
+    bs = array.new<ModelStats>()
     for m in f_order(BT_ORDER)
-        bool eligible = m.grp != Group.sect or m.fw or m.bt.is_stats.total > 0 or m.bt.oos_stats.total > 0
+        eligible = m.grp != Group.sect or m.fw or m.bt.is_stats.total > 0 or m.bt.oos_stats.total > 0
         if i_bt_all ? eligible : m.fw
             bn.push((m.fw ? '' : '· ') + m.bt_name)
             bs.push(m.bt)
