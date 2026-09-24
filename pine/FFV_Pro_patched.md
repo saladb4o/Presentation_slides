@@ -512,7 +512,7 @@ i_bt_drop_straddle = input.bool(true, 'Exclude trades that straddle a period bou
 // 3. DATA COLLECTION
 // =====================================================================
 // REQUEST LEDGER (hard cap = 40 per script)
-// request.financial     : 31 (ONE dynamic call site, see 3.3)
+// request.financial     : 31 (one wrapper, see 3.3)
 // request.security      : 6  (US10Y, local 10Y, benchmark, small-cap, value, growth ETF)
 // request.currency_rate : 1
 // request.earnings      : 1  (report dates)
@@ -591,19 +591,28 @@ float dflt_rgdp = curr == 'VND' ? 0.060 : curr == 'INR' ? 0.060 : curr == 'CNY' 
 float lr_infl = i_lr_infl > 0 ? i_lr_infl : dflt_infl
 float lr_rgdp = i_lr_rgdp > 0 ? i_lr_rgdp : dflt_rgdp
 // =====================================================================
-// 3.3 FUNDAMENTAL FETCH - 31 FIELDS, ONE DYNAMIC request.financial CALL SITE
+// 3.3 FUNDAMENTAL FETCH - 31 FIELDS, ONE request.financial WRAPPER
 // =====================================================================
-// A loop over the field list (dynamic requests) replaces 31 copies of a wrapper:
-// the same 31 request slots at a fraction of the compiled size. Field kind:
+// 31 calls to one wrapper, then one loop for the release logic. Field kind:
 // 0 flow (TTM, or FQ summed in the vault when 'Request flows as TTM' is off),
 // 1 flow with no TTM field (always FQ + vault: interest, R&D, preferred dividends),
 // 2 balance-sheet item (FQ), 3 fiscal-year consensus.
 // [FIX TTM] Capex and cash-flow D&A have no TTM field: capex = FCF - OCF (the
 // solver's identity), D&A from the income statement.
 // [FIX EST] Fiscal-year consensus, not a sum of four quarterly estimates.
-var array<string> FIN_ID = array.from('TOTAL_REVENUE', 'COST_OF_GOODS', 'EBIT', 'PRETAX_INCOME', 'INCOME_TAX', 'EARNINGS_PER_SHARE_DILUTED', 'INTEREST_EXPENSE_ON_DEBT', 'RESEARCH_AND_DEV', 'PREFERRED_DIVIDENDS', 'DPS_COMMON_STOCK_PRIM_ISSUE', 'CASH_F_OPERATING_ACTIVITIES', 'FREE_CASH_FLOW', 'DEP_AMORT_EXP_INCOME_S', 'NET_INCOME', 'MINORITY_INTEREST', 'DILUTED_SHARES_OUTSTANDING', 'TOTAL_SHARES_OUTSTANDING', 'TOTAL_ASSETS', 'TOTAL_LIABILITIES', 'TOTAL_CURRENT_ASSETS', 'TOTAL_CURRENT_LIABILITIES', 'TOTAL_DEBT', 'CASH_N_SHORT_TERM_INVEST', 'TOTAL_INVENTORY', 'ACCOUNTS_RECEIVABLES_NET', 'RETAINED_EARNINGS', 'PPE_TOTAL_GROSS', 'ACCUM_DEPREC_TOTAL', 'TOTAL_NON_CURRENT_ASSETS', 'INTANGIBLES_NET', 'EARNINGS_ESTIMATE')
+f_fin(string id, string per) =>
+    request.financial(syminfo.tickerid, id, per, ignore_invalid_symbol = true, currency = syminfo.currency)
 var array<int> FIN_KIND = array.from(0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3)
 string flow_per = i_flow_ttm ? 'TTM' : 'FQ'
+// Requests stay outside the loop: Pine rejects loop variables in a request's field/period.
+array<float> fin_raw = array.from(f_fin('TOTAL_REVENUE', flow_per), f_fin('COST_OF_GOODS', flow_per), f_fin('EBIT', flow_per),
+     f_fin('PRETAX_INCOME', flow_per), f_fin('INCOME_TAX', flow_per), f_fin('EARNINGS_PER_SHARE_DILUTED', flow_per), f_fin('INTEREST_EXPENSE_ON_DEBT', 'FQ'),
+     f_fin('RESEARCH_AND_DEV', 'FQ'), f_fin('PREFERRED_DIVIDENDS', 'FQ'), f_fin('DPS_COMMON_STOCK_PRIM_ISSUE', flow_per), f_fin('CASH_F_OPERATING_ACTIVITIES', flow_per),
+     f_fin('FREE_CASH_FLOW', flow_per), f_fin('DEP_AMORT_EXP_INCOME_S', flow_per), f_fin('NET_INCOME', flow_per), f_fin('MINORITY_INTEREST', 'FQ'),
+     f_fin('DILUTED_SHARES_OUTSTANDING', 'FQ'), f_fin('TOTAL_SHARES_OUTSTANDING', 'FQ'), f_fin('TOTAL_ASSETS', 'FQ'), f_fin('TOTAL_LIABILITIES', 'FQ'),
+     f_fin('TOTAL_CURRENT_ASSETS', 'FQ'), f_fin('TOTAL_CURRENT_LIABILITIES', 'FQ'), f_fin('TOTAL_DEBT', 'FQ'), f_fin('CASH_N_SHORT_TERM_INVEST', 'FQ'),
+     f_fin('TOTAL_INVENTORY', 'FQ'), f_fin('ACCOUNTS_RECEIVABLES_NET', 'FQ'), f_fin('RETAINED_EARNINGS', 'FQ'), f_fin('PPE_TOTAL_GROSS', 'FQ'),
+     f_fin('ACCUM_DEPREC_TOTAL', 'FQ'), f_fin('TOTAL_NON_CURRENT_ASSETS', 'FQ'), f_fin('INTANGIBLES_NET', 'FQ'), f_fin('EARNINGS_ESTIMATE', 'FY'))
 // [FIX LOOKAHEAD] request.financial returns a quarter's numbers from the START of the
 // next period, weeks before publication. A new value is released on the next report
 // date, or i_report_lag days after it first appeared at most, and always on the last bar.
@@ -611,8 +620,7 @@ var array<float> fin_pend = array.new_float(31, na)
 var array<float> fin_known = array.new_float(31, na)
 var array<int> fin_seen = array.new_int(31, 0)
 for i = 0 to 30
-    int kind = array.get(FIN_KIND, i)
-    float raw = request.financial(syminfo.tickerid, array.get(FIN_ID, i), kind == 0 ? flow_per : kind == 3 ? 'FY' : 'FQ', ignore_invalid_symbol = true, currency = syminfo.currency)
+    float raw = array.get(fin_raw, i)
     float pend = array.get(fin_pend, i)
     if not na(raw) and (na(pend) or raw != pend)
         pend := raw
