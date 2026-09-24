@@ -376,7 +376,6 @@ type Model
     bool tick = true
     float dflt = na
     bool rkv = false
-    int idx = -1
     int src_i = -1
     int held_by = -1
     bool ps = false
@@ -405,7 +404,7 @@ type Model
 // be positive for a value (a relative multiple is off without them) | t1/t2: tier sources (the row takes the worse tier) | src: the
 // row a reference row builds on | lk, lv_*: the lever, its Bear / Bull moves, a Bear floor |
 // m0: a rule multiple's target | tick: Omnibus tick box | dflt: an own multiple with no
-// history | rkv: P/B drops value-trap quarters. Derived on bar 0: idx, src_i, held_by (the
+// history | rkv: P/B drops value-trap quarters. Derived on bar 0: src_i, held_by (the
 // row that holds this one: rNPV holds the DCF, P/FCF holds P/AFFO), ps (per-share streams).
 enum Claim
     netdebt = 'net debt'
@@ -563,15 +562,10 @@ var array<Model> MD = array.new<Model>()
 // net income less the equity growth needs, on ROE: an earnings model, like the bank RIM.)
 // One entry per row, from its fam field.
 var array<int> FAM = array.new_int()
-// Declare a row: its results records (one per scenario), histories and backtest state.
+// Declare a row. Its results records (one per scenario), histories, family entry and
+// backtest state are made in the bar-0 loop of section 2b.
 f_add(Model m) =>
-    m.idx := MD.size()
-    m.res := array.from(Res.new(KIn.new()), Res.new(KIn.new()), Res.new(KIn.new()))
-    m.hist := array.new_float()
-    m.fvh := array.new_float()
-    m.bt := f_new_model()
     MD.push(m)
-    FAM.push(m.fam)
     m
 // A row's private scenario rule, as today: Graham scales its growth x0.5 / x1.5, Rule of 40
 // shifts revenue growth, Acquirer's steps its multiple (its Bear never under 1x).
@@ -1007,6 +1001,11 @@ var Model M_OE = f_add(Model.new(code = 'OE', name = "Owners' Earnings", bt_name
 // sector model, plus the absolute models the framework is named after), then the row checks.
 if barstate.isfirst
     for m in MD
+        m.res := array.from(Res.new(KIn.new()), Res.new(KIn.new()), Res.new(KIn.new()))
+        m.hist := array.new_float()
+        m.fvh := array.new_float()
+        m.bt := f_new_model()
+        FAM.push(m.fam)
         m.fw := m.grp == Group.comp or str.contains(fw_codes, ' ' + m.code + ' ')
         m.on := m.fw
         m.std := m.fw and m.grp != Group.comp and (m.grp != Group.abs or str.contains(fw_named, ' ' + m.code + ' '))
@@ -2234,21 +2233,13 @@ color color_under = color.new(color.green, 40)
 var table T = table.new(position.top_right, 4, 80, border_width = 1)
 // 88,601 | 123 | 4.56
 f_px(float v) =>
-    na(v) ? '-' : math.abs(v) >= 1000 ? str.tostring(math.round(v), '#,###') : math.abs(v) >= 100 ? str.tostring(math.round(v)) : str.tostring(v, '#.##')
+    na(v) ? '-' : str.tostring(math.abs(v) >= 100 ? math.round(v) : v, math.abs(v) >= 1000 ? '#,###' : '#.##')
 f_scen_txt(float v) =>
     na(v) or v <= 0 ? '-' : f_px(v)
 // GREEN price below this case | AMBER within the band | RED price above it.
 f_scen_col(float v, float px, bool is_base) =>
-    color out = color_bg
-    if v > 0
-        float dev = px / v - 1
-        if math.abs(dev) <= i_scen_fair_band
-            out := is_base ? color.new(color.orange, 15) : color.new(color.orange, 40)
-        else if dev > 0
-            out := is_base ? color.new(color.red, 15) : color_over
-        else
-            out := is_base ? color.new(color.green, 15) : color_under
-    out
+    float dev = v > 0 ? px / v - 1 : na
+    na(dev) ? color_bg : color.new(math.abs(dev) <= i_scen_fair_band ? color.orange : dev > 0 ? color.red : color.green, is_base ? 15 : 40)
 // One cell of the main table in the chosen text size.
 f_cell(int col, int row, string txt, color tc, color bg, string tt = '') =>
     table.cell(T, col, row, txt, text_color = tc, bgcolor = bg, text_size = i_textSize, tooltip = tt)
@@ -2941,9 +2932,11 @@ f_rolling_update(ModelStats stats_obj, current_fv, current_close, current_low, e
 // cooldown and exits at max hold -- a buy-and-hold proxy.
 var ModelStats base_stats = f_new_model()
 if i_show_bt
-    for m in MD
-        f_rolling_update(m.bt, m.grp == Group.comp ? finalFairValue : m.fv, close, low, i_bt_exit_premium, bars_to_hold, i_bt_max_open, bt_period)
-    f_rolling_update(base_stats, close * 10, close, low, i_bt_exit_premium, bars_to_hold, i_bt_max_open, bt_period)
+    // Every row, then the baseline (k = MD.size()), through one call.
+    for k = 0 to MD.size()
+        bool bl = k == MD.size()
+        Model m = MD.get(math.min(k, MD.size() - 1))
+        f_rolling_update(bl ? base_stats : m.bt, bl ? close * 10 : m.grp == Group.comp ? finalFairValue : m.fv, close, low, i_bt_exit_premium, bars_to_hold, i_bt_max_open, bt_period)
 f_calc_vacagr(PeriodStats stats) =>
     float geo_cagr = na
     int n_ann = array.size(stats.closed_ann_returns)
@@ -3115,17 +3108,21 @@ f_bt_table() =>
     // A dot marks a model the current framework does NOT allocate. Compact view (default):
     // the Composite, the allocated models and the Baseline. Sector models stay hidden until
     // they have produced trades.
-    int btrowidx = 1
     int bt_hidden = 0
+    array<string> bn = array.new_string()
+    array<ModelStats> bs = array.new<ModelStats>()
     for m in f_order(BT_ORDER)
         bool eligible = m.grp != Group.sect or m.fw or m.bt.is_stats.total > 0 or m.bt.oos_stats.total > 0
         if i_bt_all ? eligible : m.fw
-            f_bt_row(btrowidx, (m.fw ? '' : '· ') + m.bt_name, m.bt)
-            btrowidx += 1
+            bn.push((m.fw ? '' : '· ') + m.bt_name)
+            bs.push(m.bt)
         else if eligible
             bt_hidden += 1
-    f_bt_row(btrowidx, 'Baseline (always in)', base_stats)
-    btrowidx += 1
+    bn.push('Baseline (always in)')
+    bs.push(base_stats)
+    for [k, st] in bs
+        f_bt_row(k + 1, bn.get(k), st)
+    int btrowidx = bs.size() + 1
     // Footer: what compact mode hides (doubles as the padding row TV needs)
     table.cell(bt_tbl, 0, btrowidx, bt_hidden > 0 ? '+' + str.tostring(bt_hidden) + ' hidden (Show all)' : " ", bgcolor = color.new(color.black, 100), text_color = bt_hidden > 0 ? color.gray : color.new(color.white, 100), text_size = size.tiny, text_halign = text.align_left)
     for c = 1 to 3
