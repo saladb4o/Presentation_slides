@@ -8,18 +8,33 @@ library('FFVLib')
 // ==========================================
 // BACKTEST STATE (one ModelStats per registry model)
 // ==========================================
-// @type One period's closed trades.
+// @type One period's closed trades (parallel lists) and its portfolio curve.
+// @field wins Trades above the win threshold.
+// @field total Trades counted.
+// @field ret Net return per trade.
+// @field dd Worst dip below entry per trade, %.
+// @field disc Entry discount to fair value per trade.
+// @field hold Years held per trade.
+// @field blk Entry block per trade (bar / holding period): trades in one block are one bet.
+// @field eq Portfolio equity: in the stock while a trade is open, cash otherwise.
+// @field peak Portfolio high-water mark.
+// @field mdd Portfolio maximum drawdown (fraction, <= 0).
+// @field yrs Years in the period.
+// @field yin Years invested.
 export type PeriodStats
     int wins = 0
     int total = 0
-    float gross_profit = 0.0
-    float gross_loss = 0.0
-    array<float> closed_returns
-    array<float> closed_drawdowns
-    array<float> closed_ann_returns
-    array<float> closed_discounts
-    array<float> closed_holds
-// @type One open trade: entry price, lowest low since entry, entry bar, entry discount, period, dividends accrued.
+    array<float> ret
+    array<float> dd
+    array<float> disc
+    array<float> hold
+    array<int> blk
+    float eq = 1.0
+    float peak = 1.0
+    float mdd = 0.0
+    float yrs = 0.0
+    float yin = 0.0
+// @type One open trade: entry price, lowest low since entry, entry bar, entry discount, period, dividends accrued, entry block.
 export type Trade
     float px
     float mn
@@ -27,7 +42,8 @@ export type Trade
     float disc
     int per
     float div = 0.0
-// @type One model's backtest: three periods, its open trades.
+    int blk = 0
+// @type One model's backtest: three periods, its open trades, the last close and fee seen.
 export type ModelStats
     PeriodStats is_stats
     PeriodStats oos_stats
@@ -35,39 +51,18 @@ export type ModelStats
     array<Trade> tr
     int straddled = 0
     int last_entry = -999
+    float last_px = na
+    float fee = 0.0
 f_new_period() =>
-    PeriodStats.new(0, 0, 0.0, 0.0, array.new_float(), array.new_float(), array.new_float(), array.new_float(), array.new_float())
+    PeriodStats.new(0, 0, array.new_float(), array.new_float(), array.new_float(), array.new_float(), array.new_int())
 // @function A fresh, empty ModelStats.
 // @returns ModelStats
 export newModel() =>
     ModelStats.new(f_new_period(), f_new_period(), f_new_period(), array.new<Trade>())
-// Median of a sorted copy: the mean of the two middle values when the count is even.
-f_lmedian(array<float> a) =>
-    int n = a.size()
-    float r = na
-    if n > 0
-        array<float> s = a.copy()
-        s.sort()
-        r := n % 2 == 1 ? s.get(int(n / 2)) : (s.get(int(n / 2) - 1) + s.get(int(n / 2))) / 2.0
-    r
-// --- HELPER: ARRAY CORRELATION (FOR TIME-SERIES IC) ---
-f_array_correl(array<float> arr_x, array<float> arr_y) =>
-    int n = arr_x.size()
-    float res = na
-    if n > 1
-        float mean_x = arr_x.avg()
-        float mean_y = arr_y.avg()
-        float num = 0.0, float den_x = 0.0, float den_y = 0.0
-        for i = 0 to n - 1
-            float dx = arr_x.get(i) - mean_x
-            float dy = arr_y.get(i) - mean_y
-            num += (dx * dy)
-            den_x += (dx * dx)
-            den_y += (dy * dy)
-        if den_x > 0 and den_y > 0
-            res := num / math.sqrt(den_x * den_y)
-    res
-// @function One bar of one model's rolling backtest: accrue, close exits, open an entry.
+// Period 1 = in-sample, 2 = out-of-sample, 3 = forward.
+f_ps(ModelStats m, int which) =>
+    which == 1 ? m.is_stats : which == 2 ? m.oos_stats : m.fwd_stats
+// @function One bar of one model's rolling backtest: portfolio mark, exits, entry.
 // @param stats_obj The model's state.
 // @param current_fv Fair value on this bar (the baseline passes 10x price).
 // @param current_close Close.
@@ -86,40 +81,35 @@ f_array_correl(array<float> arr_x, array<float> arr_y) =>
 // @param win_th Minimum return that counts as a win.
 export update(ModelStats stats_obj, float current_fv, float current_close, float current_low, int bar, float dps_bar, int bpy, float exit_prem, int max_hold, int max_open, int current_period, float entry_margin, int cooldown, bool drop_straddle, float fees, float win_th) =>
     int open_trades = stats_obj.tr.size()
+    bool was_in = open_trades > 0
+    PeriodStats cur = f_ps(stats_obj, current_period)
+    // Portfolio: the bar's return (dividends included) is earned when a trade was open at the last close.
+    if current_period > 0
+        cur.yrs += 1.0 / bpy
+        if was_in and stats_obj.last_px > 0
+            cur.eq *= (current_close + dps_bar) / stats_obj.last_px
+            cur.yin += 1.0 / bpy
     target_hit = current_fv > 0 and current_close >= current_fv * (1.0 + exit_prem)
     if open_trades > 0
         for i = open_trades - 1 to 0
             t = stats_obj.tr.get(i)
-            float e_price = t.px
-            int e_period = t.per
             t.div += dps_bar
             t.mn := math.min(t.mn, current_low)
-            float new_min = t.mn
             int bars_held = bar - t.bar
             if target_hit or bars_held >= max_hold
-                straddles = (current_period > 0) and (current_period != e_period)
-                skip_trade = straddles and drop_straddle
+                straddles = (current_period > 0) and (current_period != t.per)
                 if straddles
                     stats_obj.straddled += 1
-                active_stats = e_period == 1 ? stats_obj.is_stats : (e_period == 2 ? stats_obj.oos_stats : stats_obj.fwd_stats)
-                active_stats.total += skip_trade ? 0 : 1
-                float years_held = math.max(bars_held / float(bpy), 0.083)
-                float raw_exit_price = current_close + t.div
-                float net_return_pct = ((raw_exit_price - e_price) / e_price) - fees
-                float ann_ret_pct = (math.pow(1.0 + math.max(net_return_pct, -0.999), 1.0 / years_held) - 1.0) * 100
-                float max_dd_pct = ((new_min - e_price) / e_price) * 100
-                if not skip_trade
-                    if net_return_pct > 0
-                        active_stats.gross_profit += net_return_pct
-                    else
-                        active_stats.gross_loss += math.abs(net_return_pct)
-                    if net_return_pct > win_th
-                        active_stats.wins += 1
-                    active_stats.closed_returns.push(net_return_pct)
-                    active_stats.closed_drawdowns.push(max_dd_pct)
-                    active_stats.closed_ann_returns.push(ann_ret_pct)
-                    active_stats.closed_discounts.push(t.disc)
-                    active_stats.closed_holds.push(years_held)
+                if not (straddles and drop_straddle)
+                    PeriodStats s = f_ps(stats_obj, t.per)
+                    float r = (current_close + t.div - t.px) / t.px - fees
+                    s.total += 1
+                    s.wins += r > win_th ? 1 : 0
+                    s.ret.push(r)
+                    s.dd.push((t.mn - t.px) / t.px * 100)
+                    s.disc.push(t.disc)
+                    s.hold.push(math.max(bars_held / float(bpy), 0.083))
+                    s.blk.push(t.blk)
                 // [PERF] SWAP-AND-POP (loop runs descending, order is never read).
                 stats_obj.tr.set(i, stats_obj.tr.last())
                 stats_obj.tr.pop()
@@ -128,54 +118,127 @@ export update(ModelStats stats_obj, float current_fv, float current_close, float
     if current_period > 0 and current_fv > 0 and (max_open <= 0 or n_open < max_open)
         float buy_limit = current_fv * (1.0 - entry_margin)
         if current_close <= buy_limit and (n_open == 0 or (bar - stats_obj.last_entry) >= cooldown)
-            stats_obj.tr.push(Trade.new(current_close, current_close, bar, (current_fv - current_close) / current_close, current_period))
+            stats_obj.tr.push(Trade.new(current_close, current_close, bar, (current_fv - current_close) / current_close, current_period, 0.0, int(bar / max_hold)))
             stats_obj.last_entry := bar
+    // Half the round-trip fee on each switch between stock and cash; then the drawdown.
+    if current_period > 0
+        if (stats_obj.tr.size() > 0) != was_in
+            cur.eq *= 1 - fees / 2
+        cur.peak := math.max(cur.peak, cur.eq)
+        cur.mdd := math.min(cur.mdd, cur.eq / cur.peak - 1)
+    stats_obj.last_px := current_close
+    stats_obj.fee := fees
     true
-f_calc_vacagr(PeriodStats stats) =>
-    float geo_cagr = na
-    int n_ann = stats.closed_ann_returns.size()
-    if n_ann > 0
-        comp_mult = 1.0
-        for r in stats.closed_ann_returns
-            comp_mult *= math.max(1.0 + r / 100.0, 0.001)
-        geo_cagr := (math.pow(comp_mult, 1.0 / n_ann) - 1.0) * 100.0
-    geo_cagr
 // =====================================================================
-// BACKTEST RENDERER -- 3 VIEWS
+// STATISTICS (last bar only)
 // =====================================================================
-// One period's metrics: [trades, win %, expectancy, MAE, IC, median trade, average hold, VACAGR].
-f_period_metrics(PeriodStats stats) =>
-    int n = stats.total
-    float wr = n > 0 ? (stats.wins / float(n)) * 100.0 : na
-    float avg_win = stats.wins > 0 ? (stats.gross_profit / stats.wins) : 0.0
-    float avg_loss = (n - stats.wins) > 0 ? (stats.gross_loss / (n - stats.wins)) : 0.0
-    float expectancy = n > 0 ? ((wr / 100.0) * avg_win) - ((1.0 - (wr / 100.0)) * avg_loss) : na
-    float mae = stats.closed_drawdowns.size() > 0 ? stats.closed_drawdowns.min() : na
-    float ic = f_array_correl(stats.closed_discounts, stats.closed_returns)
-    float med_ret = f_lmedian(stats.closed_returns)
-    float avg_hold = stats.closed_holds.size() > 0 ? stats.closed_holds.avg() : na
-    [n, wr, expectancy, mae, ic, med_ret, avg_hold, f_calc_vacagr(stats)]
-// Median trade annualised over the average hold (floor 3 months), in %: comparable across
-// holding periods, unlike a raw median (scales with hold) or VACAGR (short holds dominate).
-f_med_ann(float med_ret, float avg_hold) =>
-    na(med_ret) ? na : (math.pow(1 + math.max(med_ret, -0.999), 1 / math.max(nz(avg_hold, 1.0), 0.25)) - 1) * 100
-f_conf_col(int n, int min_n) =>
-    n == 0 ? color.new(color.gray, 85) : n < min_n ? color.new(color.gray, 75) : color(na)
-// Period 1 = in-sample, 2 = out-of-sample, 3 = forward.
-f_ps(ModelStats m, int which) =>
-    which == 1 ? m.is_stats : which == 2 ? m.oos_stats : m.fwd_stats
-f_format_period(PeriodStats stats, int min_n) =>
-    [pn, pwr, pex, pmae, pic, pmed, phold, pvac] = f_period_metrics(stats)
-    if pn == 0
-        ["N/A", "No trades in this period.", color.new(color.gray, 80), color.gray]
+// Median of a sorted copy: the mean of the two middle values when the count is even.
+f_lmedian(array<float> a) =>
+    int n = a.size()
+    float r = na
+    if n > 0
+        array<float> s = a.copy()
+        s.sort()
+        r := n % 2 == 1 ? s.get(int(n / 2)) : (s.get(int(n / 2) - 1) + s.get(int(n / 2))) / 2.0
+    r
+f_correl(array<float> x, array<float> y) =>
+    int n = x.size()
+    float sd = n > 1 ? x.stdev() * y.stdev() : na
+    sd > 0 ? x.covariance(y) / sd : na
+// Ranks, ties sharing their average rank.
+f_rank(array<float> a) =>
+    int n = a.size()
+    array<int> ix = a.sort_indices()
+    array<float> rk = array.new_float(n, 0.0)
+    int i = 0
+    while i < n
+        int j = i
+        while j + 1 < n and math.abs(a.get(ix.get(j + 1)) - a.get(ix.get(i))) <= 1e-9 * math.max(math.abs(a.get(ix.get(i))), 1)
+            j += 1
+        for k = i to j
+            rk.set(ix.get(k), (i + j) / 2.0)
+        i := j + 1
+    rk
+// A return annualised over its hold (floor 3 months), in %.
+f_ann(float r, float h) =>
+    na(r) ? na : (math.pow(1 + math.max(r, -0.999), 1 / math.max(nz(h, 1.0), 0.25)) - 1) * 100
+// Independent bets: trades grouped by entry block, each bet the mean of its trades' annualised returns.
+f_bets(PeriodStats s) =>
+    map<int, float> sm = map.new<int, float>()
+    map<int, int> ct = map.new<int, int>()
+    for [i, r] in s.ret
+        int b = s.blk.get(i)
+        sm.put(b, nz(sm.get(b)) + f_ann(r, s.hold.get(i)))
+        ct.put(b, nz(ct.get(b)) + 1)
+    array<float> out = array.new_float()
+    for b in sm.keys()
+        out.push(sm.get(b) / ct.get(b))
+    out
+// Two-sided 90% t quantile (exact to 10 degrees of freedom, within 1% beyond).
+f_t90(int df) =>
+    df < 1 ? na : df <= 10 ? array.from(6.314, 2.920, 2.353, 2.132, 2.015, 1.943, 1.895, 1.860, 1.833, 1.812).get(df - 1) : 1.645 * (1 + 3.706 / (4 * df))
+// Welch t of mean(a) - mean(b).
+f_welch(array<float> a, array<float> b) =>
+    int ka = a.size(), int kb = b.size()
+    float se = ka > 1 and kb > 1 ? math.sqrt(a.variance(false) / ka + b.variance(false) / kb) : na
+    se > 0 ? (a.avg() - b.avg()) / se : na
+// Median return of the low, middle and high thirds of the entry discount.
+f_ladder(PeriodStats s) =>
+    int n = s.ret.size()
+    string out = 'needs 6+ trades with different discounts'
+    if n >= 6 and s.disc.range() > 1e-6
+        array<int> ix = s.disc.sort_indices()
+        array<string> parts = array.new_string()
+        for g = 0 to 2
+            array<float> r = array.new_float()
+            for k = int(g * n / 3) to int((g + 1) * n / 3) - 1
+                r.push(s.ret.get(ix.get(k)) * 100)
+            parts.push(str.tostring(f_lmedian(r), '#.0') + '%')
+        out := parts.join(' / ')
+    out
+f_f(float x, string fmt) =>
+    na(x) ? 'N/A' : str.tostring(x, fmt)
+f_pc(float x) =>
+    na(x) ? 'N/A' : str.tostring(x, '#.0') + '%'
+// One period's metrics: [trades, bets, win %, mean, median, hold, MAE, rank IC, headline,
+// 90% range low / high, open trades, their median marked return, headline with them, bets array].
+f_pm(ModelStats m, int w) =>
+    PeriodStats s = f_ps(m, w)
+    int n = s.ret.size()
+    array<float> bets = f_bets(s)
+    int k = bets.size()
+    float hold = n > 0 ? s.hold.avg() : na
+    float med = f_lmedian(s.ret)
+    float half = k > 1 ? f_t90(k - 1) * bets.stdev(false) / math.sqrt(k) : na
+    // Open trades, marked at the last close after fees.
+    array<float> opn = array.new_float()
+    array<float> alls = s.ret.copy()
+    for t in m.tr
+        if t.per == w
+            float r = (m.last_px + t.div - t.px) / t.px - m.fee
+            opn.push(r)
+            alls.push(r)
+    [n, k, n > 0 ? s.wins / float(n) * 100 : na, n > 0 ? s.ret.avg() : na, med, hold, n > 0 ? s.dd.min() : na, f_correl(f_rank(s.disc), f_rank(s.ret)), f_ann(med, hold), k > 1 ? bets.avg() - half : na, k > 1 ? bets.avg() + half : na, opn.size(), f_lmedian(opn), f_ann(f_lmedian(alls), hold), bets]
+// Portfolio CAGR (%), max drawdown (%), time in market (%).
+f_port(PeriodStats s) =>
+    [s.yrs > 0 ? (math.pow(math.max(s.eq, 0.0001), 1 / s.yrs) - 1) * 100 : na, s.mdd * 100, s.yrs > 0 ? s.yin / s.yrs * 100 : na]
+// Dim a cell short of trades or independent bets.
+f_conf_col(int n, int k, int min_n) =>
+    n == 0 ? color.new(color.gray, 85) : n < min_n or k < 2 ? color.new(color.gray, 75) : color(na)
+// Headline colours: gold from 15%/y, green above zero, red below.
+f_hl_bg(float md) =>
+    md >= 15.0 ? color.yellow : md > 0 ? color.new(color.green, 70) : color.new(color.red, 70)
+f_format_period(ModelStats m, int w, int min_n) =>
+    [n, k, wr, mean, med, hold, mae, ric, hl, lo, hi, no, omed, hl_all, bets] = f_pm(m, w)
+    [cagr, mdd, tin] = f_port(f_ps(m, w))
+    if n == 0
+        [no > 0 ? 'N/A*' : 'N/A', 'No closed trades in this period.' + (no > 0 ? str.format('\nOpen trades: {0}, marked today: {1}', no, f_pc(omed * 100)) : ''), color.new(color.gray, 80), color.gray]
     else
-        float md = nz(f_med_ann(pmed, phold))
-        main_txt = str.tostring(md, "#.0") + "%/y (" + str.tostring(pwr, "#.0") + "%) n=" + str.tostring(pn)
-        tt = str.format('Trades: {0}\nIC (Alpha): {1}\nExpectancy: {2}\nMedian trade: {3}\nMean trade: {4,number,#.0}%\nVACAGR: {5}\nAvg hold: {6}\nMAE (per-trade): {7}\n\nHeadline = median trade (after fees, dividends accrued) annualised over the average hold. VACAGR annualizes each trade with a 1-month floor, so short holds dominate it.', str.tostring(pn), (not na(pic) ? str.tostring(pic, "#.00") : "N/A"), (not na(pex) ? str.format('{0,number,#.0}%', pex * 100) : "N/A"), (not na(pmed) ? str.format('{0,number,#.0}%', pmed * 100) : "N/A"), stats.closed_returns.avg() * 100, (not na(pvac) ? str.format('{0,number,#.0}%', pvac) : "N/A"), (not na(phold) ? str.format('{0,number,#.0}y', phold) : "N/A"), (not na(pmae) ? str.format('{0,number,#.0}%', pmae) : "N/A"))
-        dim_col = f_conf_col(pn, min_n)
-        bg_col = not na(dim_col) ? dim_col : md >= 15.0 ? color.yellow : md > 0 ? color.new(color.green, 70) : color.new(color.red, 70)
-        txt_col = not na(dim_col) ? color.silver : md >= 15.0 ? color.black : color.white
-        [main_txt, tt, bg_col, txt_col]
+        float md = nz(hl)
+        main_txt = str.tostring(md, '#.0') + '%/y (' + str.tostring(wr, '#.0') + '%) n=' + str.tostring(k) + '/' + str.tostring(n) + (no > 0 ? '*' : '')
+        tt = str.format('Headline (median trade, annualised over the average hold): {0}/y\nTrades: {1} in {2} independent bets\n90% range, average bet: {3} to {4} a year\nWin rate: {5} | Mean trade: {6} | Median trade: {7}\nAvg hold: {8}y | Worst dip in a trade (MAE): {9}\nRank IC (discount vs return): {10}\nBy discount, low / mid / high third: {11}\nOpen trades: {12}, marked today: {13} (headline with them: {14}/y)\nPortfolio (in the stock while a trade is open): CAGR {15}, max drawdown {16}, in market {17}', f_pc(md), n, k, f_pc(lo), f_pc(hi), f_pc(wr), f_pc(mean * 100), f_pc(med * 100), f_f(hold, '#.0'), f_pc(mae), f_f(ric, '#.00'), f_ladder(f_ps(m, w)), no, f_pc(omed * 100), f_pc(hl_all), f_pc(cagr), f_pc(mdd), f_pc(tin))
+        dim_col = f_conf_col(n, k, min_n)
+        [main_txt, tt, not na(dim_col) ? dim_col : f_hl_bg(md), not na(dim_col) ? color.silver : md >= 15.0 ? color.black : color.white]
 // One dashboard cell (small text) and the left-aligned model-name cell.
 f_btc(table tb, int c, int r, string t, color bg, color tc, string tt = '') =>
     tb.cell(c, r, t, bgcolor = bg, text_color = tc, text_size = size.small, tooltip = tt)
@@ -185,60 +248,65 @@ f_btn(table tb, int r, string name) =>
 f_fill_matrix_row(table tb, int min_n, int row, string name, ModelStats m) =>
     f_btn(tb, row, name)
     for c = 1 to 3
-        [txt, tt, bg, tcol] = f_format_period(f_ps(m, c), min_n)
+        [txt, tt, bg, tcol] = f_format_period(m, c, min_n)
         f_btc(tb, c, row, txt, bg, tcol, tt)
 // --- VIEW 2: FOCUS (one period, metrics as columns) ---
 f_fill_focus_row(table tb, int min_n, int row, string name, ModelStats m, int which) =>
-    [pn, pwr, pex, pmae, pic, pmed, phold, pvac] = f_period_metrics(f_ps(m, which))
-    grey = f_conf_col(pn, min_n)
+    [n, k, wr, mean, med, hold, mae, ric, hl, lo, hi, no, omed, hl_all, bets] = f_pm(m, which)
+    [cagr, mdd, tin] = f_port(f_ps(m, which))
+    grey = f_conf_col(n, k, min_n)
     base = not na(grey) ? grey : color.new(color.black, 70)
     txt = not na(grey) ? color.silver : color.white
     f_btn(tb, row, name)
-    f_btc(tb, 1, row, pn == 0 ? "-" : str.tostring(pn), base, txt, m.straddled > 0 ? "straddling trades excluded: " + str.tostring(m.straddled) : "")
-    f_btc(tb, 2, row, na(pic) ? "-" : str.tostring(pic, "#.00"), not na(grey) ? grey : na(pic) ? color.new(color.gray, 80) : pic > 0.3 ? color.new(color.green, 30) : pic > 0 ? color.new(color.green, 70) : color.new(color.red, 60), txt, "Correlation between entry discount and realised return. Near zero = the fair value carries no predictive information.")
-    f_btc(tb, 3, row, na(pex) ? "-" : str.tostring(pex * 100, "#.0") + "%", not na(grey) ? grey : na(pex) ? color.new(color.gray, 80) : pex > 0 ? color.new(color.green, 60) : color.new(color.red, 60), txt)
-    // Median, Win%, Hold (years), MAE, VACAGR
-    array<float> fx = array.from(pmed * 100, pwr, phold, pmae, pvac)
-    for c = 4 to 8
-        float x = fx.get(c - 4)
-        f_btc(tb, c, row, na(x) ? "-" : str.tostring(x, c == 6 ? "#.1" : "#.0") + (c == 6 ? "y" : "%"), base, txt, c == 8 ? "VACAGR floors holding period at 1 month. Read with Median and Hold." : "")
+    f_btc(tb, 1, row, n == 0 ? '-' : str.tostring(k) + '/' + str.tostring(n) + (no > 0 ? '*' : ''), base, txt, (m.straddled > 0 ? 'Straddling trades excluded: ' + str.tostring(m.straddled) + '\n' : '') + str.format('Open trades: {0}, marked today: {1}', no, f_pc(omed * 100)))
+    f_btc(tb, 2, row, na(ric) ? '-' : str.tostring(ric, '#.00'), not na(grey) ? grey : na(ric) ? color.new(color.gray, 80) : ric > 0.3 ? color.new(color.green, 30) : ric > 0 ? color.new(color.green, 70) : color.new(color.red, 60), txt, 'Median return by entry discount, low / mid / high third: ' + f_ladder(f_ps(m, which)) + '\nRising from left to right = a deeper discount paid more.')
+    f_btc(tb, 3, row, na(hl) ? '-' : str.tostring(hl, '#.0') + '%', not na(grey) ? grey : na(hl) ? color.new(color.gray, 80) : f_hl_bg(hl), not na(grey) ? color.silver : nz(hl) >= 15.0 ? color.black : color.white, str.format('Mean trade {0} | median trade {1}\nWith open trades marked today: {2}/y', f_pc(mean * 100), f_pc(med * 100), f_pc(hl_all)))
+    f_btc(tb, 4, row, na(lo) ? '-' : str.tostring(lo, '#') + '..' + str.tostring(hi, '#'), not na(grey) ? grey : na(lo) ? color.new(color.black, 70) : lo > 0 ? color.new(color.green, 60) : hi < 0 ? color.new(color.red, 60) : color.new(color.black, 70), txt)
+    array<float> fx = array.from(wr, hold, mae)
+    for c = 5 to 7
+        float x = fx.get(c - 5)
+        f_btc(tb, c, row, na(x) ? '-' : str.tostring(x, c == 6 ? '#.1' : '#.0') + (c == 6 ? 'y' : '%'), base, txt)
+    f_btc(tb, 8, row, na(cagr) ? '-' : str.tostring(cagr, '#.0') + '% / ' + str.tostring(mdd, '#') + '%', base, txt, 'In the market ' + f_pc(tin) + ' of the period.')
 // --- VIEW 3: ROBUSTNESS VERDICT (vs the always-in baseline) ---
 f_fill_robust_row(table tb, int min_n, int row, string name, ModelStats m, ModelStats b) =>
     v = array.new_float(0)
-    n = array.new_int(0)
+    ns = array.new_int(0)
+    ks = array.new_int(0)
+    array<float> mb = array.new_float()
+    array<float> bb = array.new_float()
+    array<string> ptt = array.new_string()
     edge_sum = 0.0
-    beats_all = true
     for w = 1 to 3
-        [pn, pwr, pex, pmae, pic, pmed, phold, pvac] = f_period_metrics(f_ps(m, w))
+        [n, k, wr, mean, med, hold, mae, ric, hl, lo, hi, no, omed, hl_all, bets] = f_pm(m, w)
         // [FIX BASELINE] "Stable" also requires beating simply being invested.
-        // Annualised median trade (%/y), the same headline as the matrix.
-        [bn, bwr, bex, bmae, bic, bmed, bhold, bvac] = f_period_metrics(f_ps(b, w))
-        float q = nz(f_med_ann(bmed, bhold))
-        float pv = f_med_ann(pmed, phold)
-        v.push(pv)
-        n.push(pn)
-        edge_sum += nz(pv) - q
-        beats_all := beats_all and nz(pv) > q
+        [bn, bk, bwr, bmean, bmed, bhold, bmae, bric, bhl, blo, bhi, bno, bomed, bhl_all, bbets] = f_pm(b, w)
+        v.push(hl)
+        ns.push(n)
+        ks.push(k)
+        edge_sum += nz(hl) - nz(bhl)
+        mb.concat(bets)
+        bb.concat(bbets)
+        ptt.push(str.format('Trades {0} in {1} independent bets\n90% range, average bet: {2} to {3} a year\nBaseline: {4}/y', n, k, f_pc(lo), f_pc(hi), f_pc(bhl)))
     float v1 = v.get(0), float v2 = v.get(1), float v3 = v.get(2)
     float edge = edge_sum / 3.0
-    enough = n.min() >= min_n
+    float tst = f_welch(mb, bb)
+    enough = ns.min() >= min_n and ks.min() >= 2
     float spread = math.max(nz(v1), nz(v2), nz(v3)) - math.min(nz(v1), nz(v2), nz(v3))
     all_pos = nz(v1, -1) > 0 and nz(v2, -1) > 0 and nz(v3, -1) > 0
     // Insufficient, Overfit (strong in period 1, weak later), Decaying, Stable, No edge, Mixed
-    int vk = not enough ? 0 : v1 > 0 and (nz(v2) <= 0 or nz(v3) <= 0) ? 1 : v1 > v2 and v2 > v3 and spread > 10 ? 2 : all_pos and spread < 20 ? (beats_all ? 3 : 4) : 5
-    verdict = array.from("Insufficient", "Overfit", "Decaying", "Stable", "No edge", "Mixed").get(vk)
+    int vk = not enough ? 0 : v1 > 0 and (nz(v2) <= 0 or nz(v3) <= 0) ? 1 : v1 > v2 and v2 > v3 and spread > 10 ? 2 : all_pos and spread < 20 ? (edge > 0 and nz(tst) >= 2 ? 3 : 4) : 5
+    verdict = array.from('Insufficient', 'Overfit', 'Decaying', 'Stable', 'No edge', 'Mixed').get(vk)
     vcol = array.from(color.new(color.gray, 60), color.new(color.red, 20), color.new(color.orange, 30), color.new(color.green, 20), color.new(color.orange, 40), color.new(color.gray, 40)).get(vk)
-    vtip = array.from(str.format('Fewer than {0} trades in at least one period. No verdict is defensible.', str.tostring(min_n)), "Strong in period 1, weak or negative later. The parameters fit the first window, not the phenomenon.", "Monotonically falling across periods. The edge may be closing.", "Positive in all three periods, contained dispersion, and ahead of the always-in baseline in each.", "Stable and positive, but not better than simply being invested.", "No clean pattern. Treat as unproven rather than broken.").get(vk)
+    vtip = array.from(str.format('Fewer than {0} trades or 2 independent bets in at least one period. No verdict is defensible. A shorter holding period, or a larger Period 3 share in Auto-Split, gives more bets.', min_n), 'Strong in period 1, weak or negative later. The parameters fit the first window, not the phenomenon.', 'Monotonically falling across periods. The edge may be closing.', 'Positive in all three periods, contained dispersion, and ahead of the always-in baseline with t >= 2 over the pooled independent bets.', 'Stable and positive, but not clearly better than simply being invested (edge <= 0 or t < 2).', 'No clean pattern. Treat as unproven rather than broken.').get(vk)
     f_btn(tb, row, name)
     for c = 1 to 3
         float vc = v.get(c - 1)
-        int nc = n.get(c - 1)
-        f_btc(tb, c, row, na(vc) ? "-" : str.tostring(vc, "#.0"), color.new(color.black, 70), nc < min_n ? color.silver : color.white, "n=" + str.tostring(nc))
-    f_btc(tb, 4, row, enough ? str.tostring(spread, "#.0") : "-", color.new(color.black, 70), color.white)
+        f_btc(tb, c, row, na(vc) ? '-' : str.tostring(vc, '#.0'), color.new(color.black, 70), ns.get(c - 1) < min_n or ks.get(c - 1) < 2 ? color.silver : color.white, ptt.get(c - 1))
+    f_btc(tb, 4, row, enough ? str.tostring(spread, '#.0') : '-', color.new(color.black, 70), color.white)
     f_btc(tb, 5, row, verdict, vcol, color.white, vtip)
-    f_btc(tb, 6, row, enough ? (edge > 0 ? "+" : "") + str.tostring(edge, "#.0") : "-", enough ? (edge > 0 ? color.new(color.green, 60) : color.new(color.red, 60)) : color.new(color.black, 70), color.white)
-    f_btc(tb, 7, row, "", color.new(color.black, 100), color.white)
-    f_btc(tb, 8, row, "", color.new(color.black, 100), color.white)
+    f_btc(tb, 6, row, enough ? (edge > 0 ? '+' : '') + str.tostring(edge, '#.0') + ' t' + f_f(tst, '#.0') : '-', enough ? (edge > 0 and nz(tst) >= 2 ? color.new(color.green, 60) : edge < 0 ? color.new(color.red, 60) : color.new(color.black, 70)) : color.new(color.black, 70), color.white, str.format('Independent bets pooled over the three periods: {0} for this model, {1} for the baseline.', mb.size(), bb.size()))
+    f_btc(tb, 7, row, '', color.new(color.black, 100), color.white)
+    f_btc(tb, 8, row, '', color.new(color.black, 100), color.white)
 // @function Draws the dashboard on the last bar: header, one row per model, the footer.
 // @param tb The dashboard table (9 x 32, created by the indicator).
 // @param pos Position setting.
@@ -252,12 +320,13 @@ f_fill_robust_row(table tb, int min_n, int row, string name, ModelStats m, Model
 export btTable(table tb, string pos, string view, string mode, int min_n, array<string> names, array<ModelStats> stats, ModelStats base, int hidden) =>
     tb.set_position(pos == 'top_left' ? position.top_left : pos == 'middle_left' ? position.middle_left : pos == 'bottom_center' ? position.bottom_center : pos == 'top_center' ? position.top_center : position.bottom_left)
     tb.clear(0, 0, 8, 31)
-    mode_tag = mode == 'Auto-Split' ? " [auto-split]" : mode == 'Full Period' ? " [pooled]" : ""
+    mode_tag = mode == 'Auto-Split' ? ' [auto-split]' : mode == 'Full Period' ? ' [pooled]' : ''
     v_mx = view == 'Matrix (all periods)'
     v_rb = view == 'Robustness verdict'
-    array<string> hd = v_mx ? array.from('Valuation Model Matrix', 'Period 1\n(In-Sample)', 'Period 2\n(Out-of-Sample)', 'Period 3\n(Forward)') : v_rb ? array.from('Robustness', 'P1', 'P2', 'P3', 'Spread', 'Verdict', 'vs Base') : array.from(view, 'n', 'IC', 'Expect', 'Median', 'Win%', 'Hold', 'MAE', 'VACAGR')
+    array<string> hd = v_mx ? array.from('Valuation Model Matrix', 'Period 1\n(In-Sample)', 'Period 2\n(Out-of-Sample)', 'Period 3\n(Forward)') : v_rb ? array.from('Robustness', 'P1', 'P2', 'P3', 'Spread', 'Verdict', 'vs Base') : array.from(view, 'Bets/n', 'Rank IC', 'Median', '90% range', 'Win%', 'Hold', 'MAE', 'Portfolio')
+    array<string> ht = v_mx ? array.from('', 'Median trade, annualised over the average hold (%/y) (Win%) n=independent bets/trades. Trades entered within one holding period of each other are one bet. * = trades still open, not in the headline (see the cell tooltip). Grey = fewer than the minimum trades or 2 bets.') : v_rb ? array.from('', '', '', '', '', '', 'Average headline edge over the always-in baseline across the three periods, and the Welch t-statistic of the independent bets of all three periods pooled. t >= 2: unlikely to be luck.') : array.from('', 'Independent bets / trades. Trades entered within one holding period of each other are one bet. * = trades still open.', 'Rank (Spearman) correlation between entry discount and realised return: does a bigger discount predict a bigger return? The tooltip splits returns by discount.', 'Median trade, annualised over the average hold.', '90% range for the average independent bet (%/y). Green = entirely above zero.', '', '', 'Per-trade maximum adverse excursion, NOT portfolio drawdown.', 'Portfolio in the stock whenever the model holds a trade, cash otherwise, half the fee on each switch: CAGR / max drawdown. On the Baseline row this is buy-and-hold.')
     for c = 0 to hd.size() - 1
-        tt = c == 0 ? 'The inputs were chosen after seeing this whole history, so for the SETTINGS every period is in-sample. Read P2/P3 as a stability check, not proof of an edge.' : v_mx ? 'Median trade, annualised over the average hold (%/y) (Win%) n=trades' : v_rb ? (c == 6 ? 'Average median-trade edge over the always-in baseline across the three periods.' : '') : c == 2 ? 'Discount-to-return correlation: does a bigger discount predict a bigger return?' : c == 7 ? 'Per-trade maximum adverse excursion, NOT portfolio drawdown.' : ''
+        tt = c == 0 ? 'The inputs were chosen after seeing this whole history, so for the SETTINGS every period is in-sample. Read P2/P3 as a stability check, not proof of an edge.' : ht.get(math.min(c, ht.size() - 1))
         f_btc(tb, c, 0, hd.get(c) + (c == 0 ? mode_tag : ''), c == 0 ? color.new(color.purple, 30) : color.new(color.blue, 20), c == 0 ? color.yellow : color.white, tt)
     // --- DISPATCHER ---
     for [k, st] in stats
@@ -269,9 +338,9 @@ export btTable(table tb, string pos, string view, string mode, int min_n, array<
             f_fill_focus_row(tb, min_n, k + 1, names.get(k), st, view == 'Focus: Period 1' ? 1 : view == 'Focus: Period 2' ? 2 : 3)
     int btrowidx = stats.size() + 1
     // Footer: what compact mode hides (doubles as the padding row TV needs)
-    tb.cell(0, btrowidx, hidden > 0 ? '+' + str.tostring(hidden) + ' hidden (Show all)' : " ", bgcolor = color.new(color.black, 100), text_color = hidden > 0 ? color.gray : color.new(color.white, 100), text_size = size.tiny, text_halign = text.align_left)
+    tb.cell(0, btrowidx, hidden > 0 ? '+' + str.tostring(hidden) + ' hidden (Show all)' : ' ', bgcolor = color.new(color.black, 100), text_color = hidden > 0 ? color.gray : color.new(color.white, 100), text_size = size.tiny, text_halign = text.align_left)
     for c = 1 to 3
-        tb.cell(c, btrowidx, " ", bgcolor = color.new(color.black, 100), text_color = color.new(color.white, 100))
+        tb.cell(c, btrowidx, ' ', bgcolor = color.new(color.black, 100), text_color = color.new(color.white, 100))
     true
 // ==========================================
 // LONG TEXTS: the indicator's table and tooltip texts, by number
