@@ -973,11 +973,11 @@ method cagr(QStore s, int c, float cur, int yrs) =>
 // 3. DATA COLLECTION
 // =====================================================================
 // REQUEST LEDGER (hard cap = 40 per script)
-// request.financial     : 31 (one wrapper, see 3.2)
+// request.financial     : 30 (one wrapper, see 3.2)
 // request.security      : 6  (US10Y, local 10Y, benchmark, small-cap, value, growth ETF)
 // request.currency_rate : 1
 // request.earnings      : 1  (report dates)
-// TOTAL                 : 39 -> 1 slot free
+// TOTAL                 : 38 -> 2 slots free
 // RULES
 // R1. request.security() accepts TUPLES -> unlimited series per slot.
 // R2. request.financial() does NOT -> never spend a slot on anything an
@@ -1020,9 +1020,9 @@ int trading_days = syminfo.type == 'crypto' ? 365 : 252
 float session_sec = syminfo.type == 'crypto' ? 86400.0 : 23400.0
 int bpy = current_tf_sec < 86400 ? math.max(1, int(math.round(trading_days * session_sec / current_tf_sec))) : current_tf_sec < 604800 ? math.max(1, int(math.round(trading_days * 86400.0 / current_tf_sec))) : math.max(1, int(math.round(365.25 * 86400.0 / current_tf_sec)))
 // =====================================================================
-// 3.2 FUNDAMENTAL FETCH - 31 FIELDS, ONE request.financial WRAPPER
+// 3.2 FUNDAMENTAL FETCH - 30 FIELDS, ONE request.financial WRAPPER
 // =====================================================================
-// 31 calls to one wrapper, then one loop for the release logic. Field kind:
+// 30 calls to one wrapper, then one loop for the release logic. Field kind:
 // 0 flow (TTM, or FQ summed from the store when 'Request flows as TTM' is off),
 // 1 flow with no TTM field (always FQ + store: interest, R&D, preferred dividends),
 // 2 balance-sheet item (FQ), 3 fiscal-year consensus (EPS, revenue).
@@ -1031,7 +1031,7 @@ int bpy = current_tf_sec < 86400 ? math.max(1, int(math.round(trading_days * ses
 // [FIX EST] Fiscal-year consensus, not a sum of four quarterly estimates.
 f_fin(string id, string per) =>
     request.financial(syminfo.tickerid, id, per, ignore_invalid_symbol = true, currency = syminfo.currency)
-var array<int> FIN_KIND = array.from(0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3)
+var array<int> FIN_KIND = array.from(0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3)
 flow_per = i_flow_ttm ? 'TTM' : 'FQ'
 // Requests stay outside the loop: Pine rejects loop variables in a request's field/period.
 array<float> fin_raw = array.from(f_fin('TOTAL_REVENUE', flow_per), f_fin('COST_OF_GOODS', flow_per), f_fin('EBIT', flow_per),
@@ -1040,16 +1040,16 @@ array<float> fin_raw = array.from(f_fin('TOTAL_REVENUE', flow_per), f_fin('COST_
      f_fin('FREE_CASH_FLOW', flow_per), f_fin('DEP_AMORT_EXP_INCOME_S', flow_per), f_fin('NET_INCOME', flow_per), f_fin('MINORITY_INTEREST', 'FQ'),
      f_fin('DILUTED_SHARES_OUTSTANDING', 'FQ'), f_fin('TOTAL_SHARES_OUTSTANDING', 'FQ'), f_fin('TOTAL_ASSETS', 'FQ'), f_fin('TOTAL_LIABILITIES', 'FQ'),
      f_fin('TOTAL_CURRENT_ASSETS', 'FQ'), f_fin('TOTAL_CURRENT_LIABILITIES', 'FQ'), f_fin('TOTAL_DEBT', 'FQ'), f_fin('CASH_N_SHORT_TERM_INVEST', 'FQ'),
-     f_fin('SHORT_TERM_DEBT', 'FQ'), f_fin('ACCOUNTS_RECEIVABLES_NET', 'FQ'), f_fin('RETAINED_EARNINGS', 'FQ'), f_fin('PPE_TOTAL_GROSS', 'FQ'),
-     f_fin('ACCUM_DEPREC_TOTAL', 'FQ'), f_fin('INTANGIBLES_NET', 'FQ'), f_fin('EARNINGS_ESTIMATE', 'FY'), f_fin('SALES_ESTIMATES', 'FY'))
+     f_fin('SHORT_TERM_DEBT', 'FQ'), f_fin('ACCOUNTS_RECEIVABLES_NET', 'FQ'), f_fin('RETAINED_EARNINGS', 'FQ'), f_fin('PPE_TOTAL_NET', 'FQ'),
+     f_fin('INTANGIBLES_NET', 'FQ'), f_fin('EARNINGS_ESTIMATE', 'FY'), f_fin('SALES_ESTIMATES', 'FY'))
 // [FIX LOOKAHEAD] request.financial returns a quarter's numbers from the START of the
 // next period, weeks before publication. A new value is released on the next report
 // date, or i_report_lag days after it first appeared at most, and always on the last bar.
-var array<float> fin_pend = array.new_float(31, na)
-var array<float> fin_known = array.new_float(31, na)
-var array<int> fin_seen = array.new_int(31, 0)
+var array<float> fin_pend = array.new_float(30, na)
+var array<float> fin_known = array.new_float(30, na)
+var array<int> fin_seen = array.new_int(30, 0)
 fin_changed = false
-for i = 0 to 30
+for i = 0 to 29
     float raw = fin_raw.get(i)
     float pend = fin_pend.get(i)
     if not na(raw) and (na(pend) or raw != pend)
@@ -1233,10 +1233,10 @@ if CK.dirty
     float total_debt_latest = fin.get(21)
     float cash_latest = fin.get(22)
     float receiv_fq = fin.get(24)
-    float ppe_gross_fq = fin.get(26)
-    float accum_dep_fq = fin.get(27)
-    float eps_est_ttm = fin.get(29)
-    float rev_est = fin.get(30)
+    float ppe_net_fq = fin.get(26)
+    float ppe_gross_fq = na
+    float eps_est_ttm = fin.get(28)
+    float rev_est = fin.get(29)
     // Year-ago (and one-quarter-ago) rows of the store, one read per column.
     array<float> Y1 = ST.back(1)
     array<float> Y4 = ST.back(4)
@@ -1254,7 +1254,7 @@ if CK.dirty
     // Raw values the sanity and capex rules and CAPE read a year (or a quarter) later.
     float raw_rev = total_revenue_ttm
     float raw_as = total_assets_fq
-    float raw_pn = ppe_gross_fq - math.abs(accum_dep_fq)
+    float raw_pn = ppe_net_fq
     float raw_eps = eps_ttm
     eng_v.fill(na)
     eng_t.fill(0)
@@ -1275,7 +1275,7 @@ if CK.dirty
     else if na(interest_expense_ttm) and nz(total_debt_latest) > 0
         interest_expense_ttm := total_debt_latest * int_rate
     // --- 2. LOAD REQUESTED VALUES (tier 3; NI tier from its source) ---
-    array<float> eng_raw = array.from(total_assets_fq, fin.get(18), float(na), fin.get(19), float(na), total_revenue_ttm, cogs_ttm, float(na), ebit_ttm, fin.get(12), float(na), ocf_ttm, fin.get(11), float(na), ppe_gross_fq, math.abs(accum_dep_fq), float(na), net_income_ttm, cash_latest, accounts_receivable_ttm, total_debt_latest)
+    array<float> eng_raw = array.from(total_assets_fq, fin.get(18), float(na), fin.get(19), float(na), total_revenue_ttm, cogs_ttm, float(na), ebit_ttm, fin.get(12), float(na), ocf_ttm, fin.get(11), float(na), float(na), float(na), ppe_net_fq, net_income_ttm, cash_latest, accounts_receivable_ttm, total_debt_latest)
     for i = 0 to 20
         float x = eng_raw.get(i)
         if CK.adv and not na(x)
@@ -1539,7 +1539,7 @@ if CK.dirty
     F_minority := minority_fq
     F_pref_div := pref_div_ttm
     F_dps := fin.get(9)
-    F_intang := fin.get(28)
+    F_intang := fin.get(27)
     F_cl := curr_liab_fq
     F_re := fin.get(25)
     F_eps_est := eps_est_ttm
