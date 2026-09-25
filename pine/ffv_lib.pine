@@ -415,6 +415,25 @@ export f_rab(float rab, float allowed, float rate, float g) =>
         float r = allowed > 0 ? allowed : rate
         v := rab * math.max(math.min((r - gg) / (rate - gg), 2.0), 0.5)
     v
+// @function Report-lag release (no look-ahead): request.financial shows a quarter from the START of the next period, weeks before publication. A new raw value is released on the next report date, or lag_days after it first appeared at most, and always on the last bar. Updates pend/known/seen in place.
+// @returns true when any released value changed on this bar.
+export release(array<float> raw, array<float> pend, array<float> known, array<int> seen, int lag_days, bool report_bar) =>
+    bool changed = false
+    for i = 0 to raw.size() - 1
+        float r = raw.get(i)
+        float p = pend.get(i)
+        if not na(r) and (na(p) or r != p)
+            p := r
+            pend.set(i, r)
+            seen.set(i, time)
+        int sn = seen.get(i)
+        if not na(p) and (time - sn >= lag_days * 86400000 or barstate.islast or (report_bar and time > sn))
+            changed := changed or na(known.get(i)) or p != known.get(i)
+            known.set(i, p)
+    changed
+// @function Check-value term: the mantissa of x (x / 10^floor(log10|x|)), 0 for na or 0. Summed with weights over every value the companion sends, so each link is checked at its own scale.
+export mant(float x) =>
+    na(x) or x == 0 ? 0.0 : x / math.pow(10, math.floor(math.log10(math.abs(x))))
 // @function The indicator's long text number `id`.
 // @param id Text number.
 // @returns The text, or an empty string for an unknown number.

@@ -698,6 +698,16 @@ i_bt_exit_premium = input.float(20.0, 'Exit when Price > FV + %', minval = 0, gr
 i_bt_fees = input.float(0.5, 'Round-trip Fees & Slippage %', group = group_bt, tooltip = 'Deducted from every trade (e.g., 0.5%).') / 100
 i_bt_win_threshold = input.float(0.0, 'Min Profit % to count as Win', group = group_bt, tooltip = 'Set to > 0 if you want to ignore tiny gains (e.g., 2%).') / 100
 i_report_lag = input.int(45, 'Report lag (days)', minval = 0, maxval = 120, group = group_bt, tooltip = "request.financial returns a quarter's numbers from the START of the next period -- weeks before they were published. Each new value is released on the next earnings report date, or after this many days at most. 0 restores the old (look-ahead) behaviour. The latest value is always released on the last bar.")
+group_cf = 'Companion Feed'
+i_cf_on = input.bool(false, 'Use FFV Companion Feed', group = group_cf, tooltip = 'Add FFV Companion Feed to the chart first, then pick its 8 plots below. Its values only fill gaps the engine could not solve exactly. A wrong or missing link, or a different report lag, disables the whole feed.')
+i_cf_eq = input.source(close, 'Feed: Equity', group = group_cf)
+i_cf_gp = input.source(close, 'Feed: Gross profit', group = group_cf)
+i_cf_ed = input.source(close, 'Feed: EBITDA', group = group_cf)
+i_cf_cx = input.source(close, 'Feed: Capex', group = group_cf)
+i_cf_da = input.source(close, 'Feed: D&A', group = group_cf)
+i_cf_oe = input.source(close, 'Feed: Owner earnings per share', group = group_cf)
+i_cf_codes = input.source(close, 'Feed: Codes', group = group_cf)
+i_cf_chk = input.source(close, 'Feed: Check', group = group_cf)
 i_acquirer_mult = input.float(10.0, "Acquirer's Multiple Target (EV/EBIT)", group = group_iv, tooltip = "Tobias Carlisle's standard is 10x. Raise this to 15x or 20x for large-cap/growth stocks.")
 group_oos = 'Walk-Forward Matrix (IS / OOS / FWD)'
 i_is_start = input.time(timestamp("2015-01-01"), "In-Sample Start", group = group_oos)
@@ -986,18 +996,24 @@ array<float> fin_raw = array.from(f_fin('TOTAL_REVENUE', flow_per), f_fin('COST_
 var array<float> fin_pend = array.new_float(32, na)
 var array<float> fin_known = array.new_float(32, na)
 var array<int> fin_seen = array.new_int(32, 0)
-fin_changed = false
-for i = 0 to 31
-    float raw = fin_raw.get(i)
-    float pend = fin_pend.get(i)
-    if not na(raw) and (na(pend) or raw != pend)
-        pend := raw
-        fin_pend.set(i, raw)
-        fin_seen.set(i, time)
-    int seen = fin_seen.get(i)
-    if not na(pend) and (time - seen >= i_report_lag * 86400000 or barstate.islast or (report_bar and time > seen))
-        fin_changed := fin_changed or na(fin_known.get(i)) or pend != fin_known.get(i)
-        fin_known.set(i, pend)
+fin_changed = FL.release(fin_raw, fin_pend, fin_known, fin_seen, i_report_lag, report_bar)
+// COMPANION FEED: valid only when the codes carry this script's report lag and the check
+// (weighted mantissas, FL.mant) recomputes: a link left on the close fails it at any scale.
+// Codes: lag + 1000 x sum(code_i x 4^i), code 1 reported, 2 reported parts (tier 2),
+// 3 from a ratio (tier 1), 0 none.
+array<float> cf_v = array.from(i_cf_eq, i_cf_gp, i_cf_ed, i_cf_cx, i_cf_da, i_cf_oe)
+float cf_sum = 8 * FL.mant(i_cf_codes)
+for [k, x] in cf_v
+    cf_sum += (k + 2) * FL.mant(x)
+bool cf_ok = i_cf_on and not na(i_cf_codes) and i_cf_codes % 1000 == i_report_lag and math.abs(i_cf_chk - cf_sum) <= 1e-6
+int cf_c = cf_ok ? int(i_cf_codes / 1000) : 0
+array<int> cf_t = array.new_int(0)
+for k = 0 to 5
+    int c = int(cf_c / math.pow(4, k)) % 4
+    cf_t.push(c == 3 ? 1 : 2)
+// A new feed value is new data: every witness runs on every bar ('or' is lazy).
+bool cf_n0 = f_fresh(i_cf_eq), bool cf_n1 = f_fresh(i_cf_gp), bool cf_n2 = f_fresh(i_cf_ed), bool cf_n3 = f_fresh(i_cf_cx), bool cf_n4 = f_fresh(i_cf_da), bool cf_n5 = f_fresh(i_cf_oe)
+fin_changed := fin_changed or cf_ok and (cf_n0 or cf_n1 or cf_n2 or cf_n3 or cf_n4 or cf_n5)
 // ---------------------------------------------------------------------
 // 3.3 QUARTER TRIGGER, RELEASE CLOCK AND QUARTER STORE
 // ---------------------------------------------------------------------
@@ -1255,7 +1271,11 @@ if CK.dirty
                 f_put(i, f_g(lf_b.get(k)) * lf_k.get(k), i == iCX ? math.min(f_tg(iDA), 1) : 0)
                 if i == iAS
                     f_put(iEQ, f_g(iAS) - nz(f_g(iLI), nz(f_g(iDB))), 0)
-        for p = 0 to 2
+        for p = 0 to 3
+            // The feed fills only what the exact identities left open, then they run again.
+            if st == 0 and p == 2 and cf_ok
+                for [k, i] in array.from(iEQ, iGP, iED, iCX, iDA)
+                    f_put(i, cf_v.get(k), cf_t.get(k))
             for k = 0 to 5
                 int a = id3.get(3 * k), int b = id3.get(3 * k + 1), int c = id3.get(3 * k + 2)
                 float va = f_g(a), float vb = f_g(b), float vc = f_g(c)
@@ -1428,6 +1448,9 @@ if CK.dirty
         float growth_capex = math.min(math.max(0, (total_revenue_ttm - total_revenue_ttm_prev) * (calc_ppe_net / total_revenue_ttm)), abs_total_capex)
         float owners_earnings = ocf_ttm - (abs_total_capex - growth_capex)
         oe_per_share := shares_out_latest > 0 ? owners_earnings / shares_out_latest : na
+    // Buffett's owner earnings from the feed when it has them (net income + D&A - maintenance capex).
+    if cf_ok and not na(i_cf_oe)
+        oe_per_share := i_cf_oe
     // Telecom unbundling: NetCo share = net PPE / invested capital (held to 30-90%; no PPE, no
     // split). NetCo = that share of invested capital (the network, net PPE) at a RAB multiple;
     // ServeCo = the rest of the unlevered FCF and NOPAT through the value-driver DCF. The two
@@ -2621,6 +2644,9 @@ if barstate.islast
         fl.push('M-score')
         flags_tt += str.format(FL.tx(41), F_m_score)
         severe := true
+    if i_cf_on and not cf_ok
+        fl.push('Feed')
+        flags_tt += '\nCompanion feed: not linked correctly (links, or report lag differs). Ignored.'
     if F_pio <= 3
         fl.push('Piotroski')
         flags_tt += str.format(FL.tx(42), F_pio)
