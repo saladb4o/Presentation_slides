@@ -516,6 +516,7 @@ export type Card
     int sec = 0
     float agree = na
     float cut = 0.0
+    float eg = na
 
 // @function Score of x on a curve: breakpoints xs (rising or falling) to scores ys, linear between them and held at the ends. na x gives na.
 export f_curve(float x, array<float> xs, array<float> ys) =>
@@ -575,10 +576,11 @@ f_at(matrix<float> m, int q, int c, int lag) =>
 f_pil(int i) =>
     i == 26 or i == 27 ? 0 : i == 28 ? 1 : i == 29 ? 2 : i < 15 ? 0 : i < 23 ? 1 : 2
 
-// @function Builds the scorecard. v: the 30 metric values the indicator computes (ids 6-10, 16, 19, 22-24 are filled here). tier: the data engine's quality tiers (a metric whose inputs are tier 0 is not scored). bad: suspect or stale data. eq: book equity (<= 0 drops the ROE metrics and book-to-market). sec: 0 general, 1 bank, 2 REIT / utility. zd, zg: Altman distress and safe cuts. manip, trap: the Beneish and value-trap caps. hm, hq, hc: the quarter store, its open row and the columns of gross profit / assets, cash flow / assets, ROE, ROA, gross margin. ra, rb: the beta return pairs, ppy their periods per year. pbh, pb: P/B history and now. px, sell, fv, buy: price and the chart's lines. ov: the fair value's shares held by the DCF, P/B and Owners' Earnings rows. cv: the spread of the blend's models / fair value (na with one model).
-export f_card(array<float> v, array<int> tier, bool bad, float eq, int sec, float zd, float zg, bool manip, bool trap, matrix<float> hm, int hq, array<int> hc, array<float> ra, array<float> rb, float ppy, array<float> pbh, float pb, float px, float sell, float fv, float buy, array<float> ov, float cv) =>
+// @function Builds the scorecard. v: the 30 metric values the indicator computes (ids 6-10, 16, 19, 22-24 are filled here). tier: the data engine's quality tiers (a metric whose inputs are tier 0 is not scored). bad: suspect or stale data. eq: book equity (<= 0 drops the ROE metrics and book-to-market). sec: 0 general, 1 bank, 2 REIT / utility. zd, zg: Altman distress and safe cuts. manip, trap: the Beneish and value-trap caps. hm, hq, hc: the quarter store, its open row and the columns of gross profit / assets, cash flow / assets, ROE, ROA, gross margin. ra, rb: the beta return pairs, ppy their periods per year. pbh, pb: P/B history and now. px, sell, fv, buy: price and the chart's lines. ov: the fair value's shares held by the DCF, P/B and Owners' Earnings rows. cv: the spread of the blend's models / fair value (na with one model). eg: EBITDA growth over the year (capital allocation: asset growth against it).
+export f_card(array<float> v, array<int> tier, bool bad, float eq, int sec, float zd, float zg, bool manip, bool trap, matrix<float> hm, int hq, array<int> hc, array<float> ra, array<float> rb, float ppy, array<float> pbh, float pb, float px, float sell, float fv, float buy, array<float> ov, float cv, float eg) =>
     Card c = Card.new(v.copy(), array.new_float(30, na), array.new_float(30, 0.0), array.new_bool(30, true), array.new_float(8, na), array.new_float(3, na), array.new_float(3, na), array.new_float(3, 0.0), array.new_int(30, -1))
     c.sec := sec
+    c.eg := tier.get(10) >= 1 ? eg : na
     vv = c.v
     // Growth: the last 3 yearly readings against the 3 from 5 years earlier (at least one each).
     for [k, col] in hc
@@ -645,7 +647,7 @@ export f_card(array<float> v, array<int> tier, bool bad, float eq, int sec, floa
     // Inputs by engine item (tier >= 1 needed): 0 assets, 2 equity, 5 revenue, 7 gross profit,
     // 8 EBIT, 10 EBITDA, 11 OCF, 17 net income, 20 debt; 'h' = report data without an item
     // (suspect or stale data only).
-    array<float> W = array.from(10.0, 8.0, 6.0, 6.0, 6.0, 4.0, 5.0, 5.0, 5.0, 5.0, 5.0, 10.0, 10.0, 5.0, 10.0, 30.0, 15.0, 10.0, 10.0, 10.0, 10.0, 10.0, 5.0, 60.0, 20.0, 20.0, 10.0, 5.0, 8.0, 15.0)
+    array<float> W = array.from(10.0, 8.0, 6.0, 6.0, 6.0, 4.0, 5.0, 5.0, 5.0, 5.0, 5.0, 10.0, 10.0, 5.0, 10.0, 30.0, 15.0, 10.0, 10.0, 10.0, 10.0, 10.0, 5.0, 60.0, 20.0, 20.0, 10.0, 8.0, 8.0, 15.0)
     array<string> DP = array.from('0 7', '0 11', '2 17', '0 17', '0 11 17', '5 7', 'h', 'h', 'h', 'h', 'h', 'h', '17', '0 20', '8', '', '', '0 20', '0 5 8', 'h', '', '8 20', '', '', 'h', '17', '0 17', '0', '10 20', 'h')
     array<int> BK = array.from(0, 1, 4, 5, 6, 7, 10, 17, 18, 21, 26, 28)
     for i = 0 to 29
@@ -665,6 +667,11 @@ export f_card(array<float> v, array<int> tier, bool bad, float eq, int sec, floa
         c.cut += app and cut > 0 ? W.get(i) * cut : 0.0
         if not ok or not app
             c.s.set(i, na)
+        else if i == 27 and not na(c.eg) and not na(vv.get(27))
+            // Capital allocation: assets growing faster than EBITDA scored by the gap; shrinking
+            // assets with EBITDA shrinking faster (deteriorating) 20; EBITDA keeping pace 100.
+            float gap = vv.get(27) - c.eg
+            c.s.set(i, vv.get(27) < 0 and gap > 0 ? 20.0 : f_curve(gap, array.from(0.0, 0.05, 0.15, 0.30), array.from(100.0, 75.0, 40.0, 0.0)))
         else if i != 23
             array<float> bp = f_bp(i, sec, zd, zg)
             int h = int(bp.size() / 2)
@@ -732,14 +739,14 @@ f_sc(float s) =>
 f_fmt(int i, float x) =>
     na(x) ? 'N/A' : i == 26 ? str.tostring(x, '#') + ' / 9' : i == 28 ? (x >= 99 ? 'losses, with debt' : x < 0 ? 'net cash' : str.tostring(x, '#.#') + 'x') : i == 15 or i == 20 ? str.tostring(x, '#.##') : i == 18 ? str.tostring(x, '#.#') : i == 21 ? (x >= 99 ? 'no debt' : str.tostring(x, '#.#') + 'x') : i == 24 ? str.tostring(x * 100, '#') + '% of history dearer' : (i >= 6 and i <= 10) or i == 14 or i == 19 or i == 25 or i == 29 ? (x > 0 ? '+' : '') + str.tostring(x * 100, '#.#') + 'pp' : (x > 0 and (i == 23 or i == 27) ? '+' : '') + str.tostring(x * 100, '#.#') + '%'
 f_name(int i, int sec) =>
-    array<string> NM = array.from('Gross profit / assets', 'Cash flow / assets', 'ROE', 'ROA', 'Accruals / assets', 'Gross margin', 'Change in gross profit / assets', 'Change in cash flow / assets', 'Change in ROE', 'Change in ROA', 'Change in gross margin', 'Net share issuance', 'Net payout / profits', 'Net debt issuance / assets', 'ROIC - WACC', 'Beta', 'Idiosyncratic volatility', 'Debt / assets', 'Altman Z', 'ROE volatility', 'Downside beta', 'Interest cover', 'Maximum drawdown', 'Price vs fair value', 'Book-to-market vs own history', 'Owner-earnings yield - 10Y', 'Piotroski F-score', 'Asset growth (1y)', 'Net debt / EBITDA', 'Growth priced in - ours')
+    array<string> NM = array.from('Gross profit / assets', 'Cash flow / assets', 'ROE', 'ROA', 'Accruals / assets', 'Gross margin', 'Change in gross profit / assets', 'Change in cash flow / assets', 'Change in ROE', 'Change in ROA', 'Change in gross margin', 'Net share issuance', 'Net payout / profits', 'Net debt issuance / assets', 'ROIC - WACC', 'Beta', 'Idiosyncratic volatility', 'Debt / assets', 'Altman Z', 'ROE volatility', 'Downside beta', 'Interest cover', 'Maximum drawdown', 'Price vs fair value', 'Book-to-market vs own history', 'Owner-earnings yield - 10Y', 'Piotroski F-score', 'Capital allocation (1y)', 'Net debt / EBITDA', 'Growth priced in - ours')
     sec == 1 and i == 14 ? 'ROE - cost of equity' : NM.get(i)
 // One metric's line for a tooltip: value -> score (share of the pillar's weight, source).
 f_line(Card c, int i) =>
     int by = c.by.get(i)
     bool ex = i == 14 or (i >= 20 and i <= 23) or i >= 25
     string ag = i == 23 and not na(c.agree) and c.agree < 1 ? ', models disagree: kept ' + str.tostring(c.agree * 100, '#') + '% of its distance from 50' : ''
-    f_name(i, c.sec) + ': ' + (c.w.get(i) == 0 ? (i == 24 or i == 25 or i == 29 ? 'not used: the fair value already holds that model' : 'not used for this sector') : f_fmt(i, c.v.get(i)) + ' -> ' + (by >= 0 ? 'N/A, weight passed to ' + f_name(by, c.sec) : not c.ok.get(i) ? 'not scored (placeholder, stale or suspect data)' : f_sc(c.s.get(i))) + ' (weight ' + str.tostring((by >= 0 ? 0.0 : c.w.get(i)) / c.pt.get(f_pil(i)) * 100, '#') + '%, ' + (ex ? 'extra' : 'paper') + ag + ')') + '\n'
+    f_name(i, c.sec) + ': ' + (c.w.get(i) == 0 ? (i == 24 or i == 25 or i == 29 ? 'not used: the fair value already holds that model' : 'not used for this sector') : (i == 27 and not na(c.eg) and not na(c.v.get(i)) ? 'assets ' + f_fmt(i, c.v.get(i)) + ' / EBITDA ' + f_fmt(i, c.eg) + (c.v.get(i) > 0 and c.v.get(i) > c.eg ? ' (empire builder)' : c.v.get(i) < 0 and c.eg < c.v.get(i) ? ' (deteriorating)' : ' (efficient)') : f_fmt(i, c.v.get(i)) + (i == 27 and not na(c.v.get(i)) ? ' assets, EBITDA growth N/A' : '')) + ' -> ' + (by >= 0 ? 'N/A, weight passed to ' + f_name(by, c.sec) : not c.ok.get(i) ? 'not scored (placeholder, stale or suspect data)' : f_sc(c.s.get(i))) + ' (weight ' + str.tostring((by >= 0 ? 0.0 : c.w.get(i)) / c.pt.get(f_pil(i)) * 100, '#') + '%, ' + (ex ? 'extra' : 'paper') + ag + ')') + '\n'
 
 // @function Summary-card row: the total as a bar, the three pillars, the verdict. cl = text, background, header, green, red, amber colours; ts = text size. Returns the next free row.
 export cardSum(table t, int row, Card c, array<color> cl, string ts) =>

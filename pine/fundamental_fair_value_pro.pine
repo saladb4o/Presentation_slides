@@ -1108,6 +1108,7 @@ var float F_pipe = na
 var float F_shield = na
 var float F_rev_g = na
 var float F_asset_g = na
+var float F_ebitda_g = na
 var bool F_inv_dummy = false
 var bool F_deter = false
 var float F_fwd_g = na
@@ -1534,6 +1535,7 @@ if CK.dirty
     F_shield := nz(total_debt_latest) * effective_tax
     F_rev_g := rev_growth
     F_asset_g := asset_growth
+    F_ebitda_g := ebitda_growth
     F_inv_dummy := investment_dummy
     F_deter := is_deteriorating
     F_fwd_g := fwd_eps_growth
@@ -2680,7 +2682,7 @@ if barstate.islast
          eng_t, F_suspect or CK.cap == 0, F_eq, use_bank_model ? 1 : selected_industry == 'REITs' or selected_industry == 'Utilities' ? 2 : 0, z_safe_cut, z_gold_cut,
          i_useBeneishCheck and F_manip and math.min(eng_t.get(19), eng_t.get(5), eng_t.get(6), eng_t.get(0)) >= 2, i_use_rkv and is_rkv_value_trap,
          ST.v, ST.q, array.from(Q_X, Q_X + 1, Q_ROE, Q_ROA, Q_GM), beta_ra, beta_rb, bsec >= 604800 ? 31557600 / bsec : trading_days * (bsec >= 86400 ? 86400 : session_sec) / bsec,
-         pbh, pb, close, sell_zone_line, finalFairValue, buy_zone_line, ov, n_mem >= 2 and finalFairValue > 0 ? fv_stddev / finalFairValue : float(na))
+         pbh, pb, close, sell_zone_line, finalFairValue, buy_zone_line, ov, n_mem >= 2 and finalFairValue > 0 ? fv_stddev / finalFairValue : float(na), F_ebitda_g)
     CARD_INFO := array.from('1', 'Z+M matrix', 'Z ' + (na(altman_z) ? '-' : str.tostring(altman_z, '#.#')), 'information', HV_zm_txt,
          '2', 'Rhodes-Kropf V/B', i_use_rkv ? str.tostring(rkv_growth_vb, '#.##') + 'x' : 'off', 'information', HV_rkv_txt)
 // ---------- summary card ----------
