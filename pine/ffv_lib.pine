@@ -630,7 +630,7 @@ export f_card(array<float> v, array<int> tier, bool bad, float eq, int sec, floa
     // Inputs by engine item (tier >= 1 needed): 0 assets, 2 equity, 5 revenue, 7 gross profit,
     // 8 EBIT, 11 OCF, 17 net income, 20 debt; 'h' = stored history (suspect data only).
     array<float> W = array.from(10.0, 8.0, 6.0, 6.0, 6.0, 4.0, 5.0, 5.0, 5.0, 5.0, 5.0, 10.0, 10.0, 5.0, 10.0, 30.0, 15.0, 10.0, 10.0, 10.0, 10.0, 10.0, 5.0, 60.0, 20.0, 20.0)
-    array<string> DP = array.from('0 7', '0 11', '2 17', '0 17', '0 11 17', '5 7', 'h', 'h', 'h', 'h', 'h', '', '17', '0 20', '8', '', '', '0 20', '0 5 8', 'h', '', '8 20', '', '', '', '17')
+    array<string> DP = array.from('0 7', '0 11', '2 17', '0 17', '0 11 17', '5 7', 'h', 'h', 'h', 'h', 'h', 'h', '17', '0 20', '8', '', '', '0 20', '0 5 8', 'h', '', '8 20', '', '', 'h', '17')
     array<int> BK = array.from(0, 1, 4, 5, 6, 7, 10, 17, 18, 21)
     for i = 0 to 25
         string d = sec == 1 and i == 14 ? '2 17' : DP.get(i)
