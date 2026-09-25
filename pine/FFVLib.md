@@ -507,11 +507,15 @@ export type Card
     array<float> gs
     array<float> p
     array<float> cov
+    array<float> pt
+    array<int> by
     float total = na
     string why = ''
     bool qcap = false
     bool vcap = false
     int sec = 0
+    float agree = na
+    float cut = 0.0
 
 // @function Score of x on a curve: breakpoints xs (rising or falling) to scores ys, linear between them and held at the ends. na x gives na.
 export f_curve(float x, array<float> xs, array<float> ys) =>
@@ -558,6 +562,10 @@ f_bp(int i, int sec, float zd, float zg) =>
         22 => array.from(-0.60, -0.40, -0.25, -0.15, 0.0, 40.0, 75.0, 100.0)
         24 => array.from(0.0, 1.0, 0.0, 100.0)
         25 => array.from(-0.02, 0.0, 0.02, 0.04, 0.0, 40.0, 70.0, 100.0)
+        26 => array.from(2.0, 5.0, 7.0, 9.0, 0.0, 50.0, 80.0, 100.0)
+        27 => array.from(0.05, 0.10, 0.20, 0.35, 100.0, 75.0, 40.0, 0.0)
+        28 => sec == 2 ? array.from(0.0, 3.0, 5.0, 7.0, 9.0, 100.0, 80.0, 50.0, 20.0, 0.0) : array.from(0.0, 1.5, 3.0, 4.5, 6.0, 100.0, 80.0, 50.0, 20.0, 0.0)
+        29 => array.from(-0.10, -0.05, 0.0, 0.05, 0.10, 100.0, 80.0, 50.0, 20.0, 0.0)
         => array.from(-0.10, 0.0, 0.05, 0.10, 0.0, 50.0, 80.0, 100.0)
 
 // Quarter-store read: lag quarters back from the open row q of a 128-row ring.
@@ -565,11 +573,11 @@ f_at(matrix<float> m, int q, int c, int lag) =>
     lag >= 0 and lag <= q and lag < 128 ? m.get((q - lag) % 128, c) : na
 
 f_pil(int i) =>
-    i < 15 ? 0 : i < 23 ? 1 : 2
+    i == 26 or i == 27 ? 0 : i == 28 ? 1 : i == 29 ? 2 : i < 15 ? 0 : i < 23 ? 1 : 2
 
-// @function Builds the scorecard. v: the 26 metric values the indicator computes (ids 6-10, 16, 19, 22-24 are filled here). tier: the data engine's quality tiers (a metric whose inputs are tier 0 is not scored). bad: suspect data. eq: book equity (<= 0 drops the ROE metrics and book-to-market). sec: 0 general, 1 bank, 2 REIT / utility. zd, zg: Altman distress and safe cuts. manip, trap: the Beneish and value-trap caps. hm, hq, hc: the quarter store, its open row and the columns of gross profit / assets, cash flow / assets, ROE, ROA, gross margin. ra, rb: the beta return pairs, ppy their periods per year. pbh, pb: P/B history and now. px, sell, fv, buy: price and the chart's lines.
-export f_card(array<float> v, array<int> tier, bool bad, float eq, int sec, float zd, float zg, bool manip, bool trap, matrix<float> hm, int hq, array<int> hc, array<float> ra, array<float> rb, float ppy, array<float> pbh, float pb, float px, float sell, float fv, float buy) =>
-    Card c = Card.new(v.copy(), array.new_float(26, na), array.new_float(26, 0.0), array.new_bool(26, true), array.new_float(7, na), array.new_float(3, na), array.new_float(3, na))
+// @function Builds the scorecard. v: the 30 metric values the indicator computes (ids 6-10, 16, 19, 22-24 are filled here). tier: the data engine's quality tiers (a metric whose inputs are tier 0 is not scored). bad: suspect or stale data. eq: book equity (<= 0 drops the ROE metrics and book-to-market). sec: 0 general, 1 bank, 2 REIT / utility. zd, zg: Altman distress and safe cuts. manip, trap: the Beneish and value-trap caps. hm, hq, hc: the quarter store, its open row and the columns of gross profit / assets, cash flow / assets, ROE, ROA, gross margin. ra, rb: the beta return pairs, ppy their periods per year. pbh, pb: P/B history and now. px, sell, fv, buy: price and the chart's lines. ov: the fair value's shares held by the DCF, P/B and Owners' Earnings rows. cv: the spread of the blend's models / fair value (na with one model).
+export f_card(array<float> v, array<int> tier, bool bad, float eq, int sec, float zd, float zg, bool manip, bool trap, matrix<float> hm, int hq, array<int> hc, array<float> ra, array<float> rb, float ppy, array<float> pbh, float pb, float px, float sell, float fv, float buy, array<float> ov, float cv) =>
+    Card c = Card.new(v.copy(), array.new_float(30, na), array.new_float(30, 0.0), array.new_bool(30, true), array.new_float(8, na), array.new_float(3, na), array.new_float(3, na), array.new_float(3, 0.0), array.new_int(30, -1))
     c.sec := sec
     vv = c.v
     // Growth: the last 3 yearly readings against the 3 from 5 years earlier (at least one each).
@@ -619,11 +627,13 @@ export f_card(array<float> v, array<int> tier, bool bad, float eq, int sec, floa
             pk := math.max(pk, e)
             dd := math.min(dd, e / pk - 1)
         vv.set(22, dd)
-    // Value: the price against the chart's sell target, fair value and buy line; P/B against
-    // its own history (8 quarters at least): the share of quarters that were dearer.
+    // Value: the price against the chart's sell target, fair value and buy line, pulled toward 50
+    // when the blend's models disagree (their spread over 15% of the fair value); P/B against its
+    // own history (8 quarters at least): the share of quarters that were dearer.
+    c.agree := na(cv) ? na : f_curve(cv, array.from(0.15, 0.30, 0.50, 0.80), array.from(1.0, 0.85, 0.65, 0.5))
     if px > 0 and fv > 0 and sell > fv and buy < fv
         vv.set(23, px / fv - 1)
-        c.s.set(23, f_curve(px, array.from(sell, fv, buy), array.from(0.0, 50.0, 100.0)))
+        c.s.set(23, 50 + (f_curve(px, array.from(sell, fv, buy), array.from(0.0, 50.0, 100.0)) - 50) * nz(c.agree, 1.0))
     if pb > 0 and eq > 0
         int nh = 0
         int ge = 0
@@ -633,11 +643,12 @@ export f_card(array<float> v, array<int> tier, bool bad, float eq, int sec, floa
                 ge += x >= pb ? 1 : 0
         vv.set(24, nh >= 8 ? float(ge) / nh : na)
     // Inputs by engine item (tier >= 1 needed): 0 assets, 2 equity, 5 revenue, 7 gross profit,
-    // 8 EBIT, 11 OCF, 17 net income, 20 debt; 'h' = stored history (suspect data only).
-    array<float> W = array.from(10.0, 8.0, 6.0, 6.0, 6.0, 4.0, 5.0, 5.0, 5.0, 5.0, 5.0, 10.0, 10.0, 5.0, 10.0, 30.0, 15.0, 10.0, 10.0, 10.0, 10.0, 10.0, 5.0, 60.0, 20.0, 20.0)
-    array<string> DP = array.from('0 7', '0 11', '2 17', '0 17', '0 11 17', '5 7', 'h', 'h', 'h', 'h', 'h', 'h', '17', '0 20', '8', '', '', '0 20', '0 5 8', 'h', '', '8 20', '', '', 'h', '17')
-    array<int> BK = array.from(0, 1, 4, 5, 6, 7, 10, 17, 18, 21)
-    for i = 0 to 25
+    // 8 EBIT, 10 EBITDA, 11 OCF, 17 net income, 20 debt; 'h' = report data without an item
+    // (suspect or stale data only).
+    array<float> W = array.from(10.0, 8.0, 6.0, 6.0, 6.0, 4.0, 5.0, 5.0, 5.0, 5.0, 5.0, 10.0, 10.0, 5.0, 10.0, 30.0, 15.0, 10.0, 10.0, 10.0, 10.0, 10.0, 5.0, 60.0, 20.0, 20.0, 10.0, 5.0, 8.0, 15.0)
+    array<string> DP = array.from('0 7', '0 11', '2 17', '0 17', '0 11 17', '5 7', 'h', 'h', 'h', 'h', 'h', 'h', '17', '0 20', '8', '', '', '0 20', '0 5 8', 'h', '', '8 20', '', '', 'h', '17', '0 17', '0', '10 20', 'h')
+    array<int> BK = array.from(0, 1, 4, 5, 6, 7, 10, 17, 18, 21, 26, 28)
+    for i = 0 to 29
         string d = sec == 1 and i == 14 ? '2 17' : DP.get(i)
         bool ok = not (bad and d != '')
         if d != '' and d != 'h'
@@ -648,36 +659,48 @@ export f_card(array<float> v, array<int> tier, bool bad, float eq, int sec, floa
             ok := false
         c.ok.set(i, ok)
         bool app = not (sec == 1 and BK.includes(i))
-        c.w.set(i, app ? W.get(i) : 0.0)
+        // A value metric that re-reads a model counts only for the fair value's share that model does not carry.
+        float cut = i == 29 ? ov.get(0) : i == 24 ? ov.get(1) : i == 25 ? ov.get(2) : 0.0
+        c.w.set(i, app ? W.get(i) * (1 - nz(cut)) : 0.0)
+        c.cut += app and cut > 0 ? W.get(i) * cut : 0.0
         if not ok or not app
             c.s.set(i, na)
         else if i != 23
             array<float> bp = f_bp(i, sec, zd, zg)
             int h = int(bp.size() / 2)
             c.s.set(i, f_curve(vv.get(i), bp.slice(0, h), bp.slice(h, bp.size())))
-    // Groups (for the rows) and pillars (60% of the applicable weight scored).
-    array<int> G = array.from(0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 3, 4, 4, 5, 5, 5, 4, 5, 4, 6, 6, 6)
-    for g = 0 to 6
+    // Pillar totals (the applicable weight), then the stand-ins: a missing interest cover or Altman Z
+    // passes its weight to net debt / EBITDA (one of them), a missing net debt / EBITDA to interest cover.
+    for i = 0 to 29
+        c.pt.set(f_pil(i), c.pt.get(f_pil(i)) + c.w.get(i))
+    array<float> we = c.w.copy()
+    array<int> SB = array.from(28, 28, 21)
+    for [k, a] in array.from(21, 18, 28)
+        int b = SB.get(k)
+        if na(c.s.get(a)) and c.w.get(a) > 0 and not na(c.s.get(b)) and not c.by.includes(b)
+            we.set(b, we.get(b) + c.w.get(a))
+            c.by.set(a, b)
+    // Groups (for the rows) and pillars (60% of the applicable weight scored or stood in for).
+    array<int> G = array.from(0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 3, 5, 5, 6, 6, 6, 5, 6, 5, 7, 7, 7, 4, 2, 6, 7)
+    for g = 0 to 7
         float sw = 0.0
         float sx = 0.0
-        for i = 0 to 25
+        for i = 0 to 29
             if G.get(i) == g and not na(c.s.get(i))
-                sw += c.w.get(i)
-                sx += c.w.get(i) * c.s.get(i)
+                sw += we.get(i)
+                sx += we.get(i) * c.s.get(i)
         c.gs.set(g, sw > 0 ? sx / sw : na)
     for p = 0 to 2
-        float sa = 0.0
         float sw = 0.0
         float sx = 0.0
-        for i = 0 to 25
-            if f_pil(i) == p
-                sa += c.w.get(i)
-                if not na(c.s.get(i))
-                    sw += c.w.get(i)
-                    sx += c.w.get(i) * c.s.get(i)
-        float cv = sa > 0 ? sw / sa : na
-        c.cov.set(p, cv)
-        c.p.set(p, cv >= 0.6 ? sx / sw : na)
+        for i = 0 to 29
+            if f_pil(i) == p and not na(c.s.get(i))
+                sw += we.get(i)
+                sx += we.get(i) * c.s.get(i)
+        float cv2 = c.pt.get(p) > 0 ? sw / c.pt.get(p) : na
+        c.cov.set(p, cv2)
+        c.p.set(p, cv2 >= 0.6 ? sx / sw : na)
+    c.w := we
     if manip and c.p.get(0) > 50
         c.p.set(0, 50.0)
         c.qcap := true
@@ -707,17 +730,16 @@ f_sc(float s) =>
     na(s) ? 'N/A' : str.tostring(s, '#')
 // A metric's value as shown.
 f_fmt(int i, float x) =>
-    na(x) ? 'N/A' : i == 15 or i == 20 ? str.tostring(x, '#.##') : i == 18 ? str.tostring(x, '#.#') : i == 21 ? (x >= 99 ? 'no debt' : str.tostring(x, '#.#') + 'x') : i == 24 ? str.tostring(x * 100, '#') + '% of history dearer' : (i >= 6 and i <= 10) or i == 14 or i == 19 or i == 25 ? (x > 0 ? '+' : '') + str.tostring(x * 100, '#.#') + 'pp' : (x > 0 and i == 23 ? '+' : '') + str.tostring(x * 100, '#.#') + '%'
+    na(x) ? 'N/A' : i == 26 ? str.tostring(x, '#') + ' / 9' : i == 28 ? (x >= 99 ? 'losses, with debt' : x < 0 ? 'net cash' : str.tostring(x, '#.#') + 'x') : i == 15 or i == 20 ? str.tostring(x, '#.##') : i == 18 ? str.tostring(x, '#.#') : i == 21 ? (x >= 99 ? 'no debt' : str.tostring(x, '#.#') + 'x') : i == 24 ? str.tostring(x * 100, '#') + '% of history dearer' : (i >= 6 and i <= 10) or i == 14 or i == 19 or i == 25 or i == 29 ? (x > 0 ? '+' : '') + str.tostring(x * 100, '#.#') + 'pp' : (x > 0 and (i == 23 or i == 27) ? '+' : '') + str.tostring(x * 100, '#.#') + '%'
 f_name(int i, int sec) =>
-    array<string> NM = array.from('Gross profit / assets', 'Cash flow / assets', 'ROE', 'ROA', 'Accruals / assets', 'Gross margin', 'Change in gross profit / assets', 'Change in cash flow / assets', 'Change in ROE', 'Change in ROA', 'Change in gross margin', 'Net share issuance', 'Net payout / profits', 'Net debt issuance / assets', 'ROIC - WACC', 'Beta', 'Idiosyncratic volatility', 'Debt / assets', 'Altman Z', 'ROE volatility', 'Downside beta', 'Interest cover', 'Maximum drawdown', 'Price vs fair value', 'Book-to-market vs own history', 'Owner-earnings yield - 10Y')
+    array<string> NM = array.from('Gross profit / assets', 'Cash flow / assets', 'ROE', 'ROA', 'Accruals / assets', 'Gross margin', 'Change in gross profit / assets', 'Change in cash flow / assets', 'Change in ROE', 'Change in ROA', 'Change in gross margin', 'Net share issuance', 'Net payout / profits', 'Net debt issuance / assets', 'ROIC - WACC', 'Beta', 'Idiosyncratic volatility', 'Debt / assets', 'Altman Z', 'ROE volatility', 'Downside beta', 'Interest cover', 'Maximum drawdown', 'Price vs fair value', 'Book-to-market vs own history', 'Owner-earnings yield - 10Y', 'Piotroski F-score', 'Asset growth (1y)', 'Net debt / EBITDA', 'Growth priced in - ours')
     sec == 1 and i == 14 ? 'ROE - cost of equity' : NM.get(i)
 // One metric's line for a tooltip: value -> score (share of the pillar's weight, source).
 f_line(Card c, int i) =>
-    float wp = 0.0
-    for j = 0 to 25
-        wp += f_pil(j) == f_pil(i) ? c.w.get(j) : 0.0
-    bool ex = i == 14 or (i >= 20 and i <= 23) or i == 25
-    f_name(i, c.sec) + ': ' + (c.w.get(i) == 0 ? 'not used for this sector' : f_fmt(i, c.v.get(i)) + ' -> ' + (not c.ok.get(i) ? 'not scored (placeholder, stale or suspect data)' : f_sc(c.s.get(i))) + ' (weight ' + str.tostring(c.w.get(i) / wp * 100, '#') + '%, ' + (ex ? 'extra' : 'paper') + ')') + '\n'
+    int by = c.by.get(i)
+    bool ex = i == 14 or (i >= 20 and i <= 23) or i >= 25
+    string ag = i == 23 and not na(c.agree) and c.agree < 1 ? ', models disagree: kept ' + str.tostring(c.agree * 100, '#') + '% of its distance from 50' : ''
+    f_name(i, c.sec) + ': ' + (c.w.get(i) == 0 ? (i == 24 or i == 25 or i == 29 ? 'not used: the fair value already holds that model' : 'not used for this sector') : f_fmt(i, c.v.get(i)) + ' -> ' + (by >= 0 ? 'N/A, weight passed to ' + f_name(by, c.sec) : not c.ok.get(i) ? 'not scored (placeholder, stale or suspect data)' : f_sc(c.s.get(i))) + ' (weight ' + str.tostring((by >= 0 ? 0.0 : c.w.get(i)) / c.pt.get(f_pil(i)) * 100, '#') + '%, ' + (ex ? 'extra' : 'paper') + ag + ')') + '\n'
 
 // @function Summary-card row: the total as a bar, the three pillars, the verdict. cl = text, background, header, green, red, amber colours; ts = text size. Returns the next free row.
 export cardSum(table t, int row, Card c, array<color> cl, string ts) =>
@@ -733,25 +755,25 @@ export cardSum(table t, int row, Card c, array<color> cl, string ts) =>
 export cardRows(table t, int row, Card c, array<color> cl, string ts, array<string> info) =>
     int r = row
     array<string> PN = array.from('Quality', 'Low risk (higher = safer)', 'Value')
-    array<string> GN = array.from('Profitability', 'Growth (5y)', 'Payout', 'Return spread', 'Market risk', 'Balance sheet & earnings')
-    array<int> G = array.from(0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 3, 4, 4, 5, 5, 5, 4, 5, 4, 6, 6, 6)
+    array<string> GN = array.from('Profitability', 'Growth (5y)', 'Payout & investment', 'Return spread', 'Piotroski (1y changes)', 'Market risk', 'Balance sheet & earnings')
+    array<int> G = array.from(0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 3, 5, 5, 6, 6, 6, 5, 6, 5, 7, 7, 7, 4, 2, 6, 7)
     for p = 0 to 2
         float ps = c.p.get(p)
         string ptt = ''
-        for i = 0 to 25
+        for i = 0 to 29
             ptt += f_pil(i) == p ? f_line(c, i) : ''
-        ptt += (p == 0 and c.qcap ? '\nHeld at 50: Beneish flag.' : '') + (p == 2 and c.vcap ? '\nHeld at 50: value trap.' : '')
+        ptt += (p == 0 and c.qcap ? '\nHeld at 50: Beneish flag.' : '') + (p == 2 and c.vcap ? '\nHeld at 50: value trap.' : '') + (p == 2 and c.cut > 0 ? "\nGrowth priced in, book-to-market and the owner-earnings yield re-read the DCF, P/B and Owners' Earnings models: each counts only for the fair value's share its model does not carry." : '')
         t.cell(0, r, PN.get(p), text_color = cl.get(0), bgcolor = cl.get(2), text_size = ts, tooltip = ptt)
         t.cell(1, r, f_bar(ps), text_color = na(ps) ? cl.get(0) : f_scol(ps, cl), bgcolor = cl.get(2), text_size = ts, text_font_family = font.family_monospace, tooltip = ptt)
         t.cell(2, r, f_sc(ps), text_color = cl.get(0), bgcolor = cl.get(2), text_size = ts)
         t.cell(3, r, 'Coverage ' + str.tostring(nz(c.cov.get(p)) * 100, '#') + '%', text_color = cl.get(0), bgcolor = cl.get(2), text_size = ts)
         r += 1
         if p < 2
-            for g = (p == 0 ? 0 : 4) to (p == 0 ? 3 : 5)
+            for g = (p == 0 ? 0 : 5) to (p == 0 ? 4 : 6)
                 string gtt = ''
                 int nn = 0
                 int ns = 0
-                for i = 0 to 25
+                for i = 0 to 29
                     if G.get(i) == g and c.w.get(i) > 0
                         gtt += f_line(c, i)
                         nn += 1
@@ -759,16 +781,16 @@ export cardRows(table t, int row, Card c, array<color> cl, string ts, array<stri
                 if nn > 0
                     float gs = c.gs.get(g)
                     t.cell(0, r, GN.get(g), text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts, tooltip = gtt)
-                    t.cell(1, r, f_sc(gs), text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts)
-                    t.cell(2, r, str.tostring(ns) + ' / ' + str.tostring(nn) + ' metrics', text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts)
+                    t.cell(1, r, g == 4 ? f_fmt(26, c.v.get(26)) : f_sc(gs), text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts)
+                    t.cell(2, r, g == 4 ? 'Score ' + f_sc(gs) : str.tostring(ns) + ' / ' + str.tostring(nn) + ' metrics', text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts)
                     t.cell(3, r, f_word(gs), text_color = na(gs) ? cl.get(0) : color.white, bgcolor = f_scol(gs, cl), text_size = ts, tooltip = gtt)
                     r += 1
         else
-            for i = 23 to 25
+            for i in array.from(23, 29, 24, 25)
                 float s = c.s.get(i)
                 t.cell(0, r, f_name(i, c.sec), text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts, tooltip = f_line(c, i))
                 t.cell(1, r, f_fmt(i, c.v.get(i)), text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts)
-                t.cell(2, r, 'Score ' + f_sc(s), text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts)
+                t.cell(2, r, c.w.get(i) == 0 and i != 23 ? 'Held by the FV' : 'Score ' + f_sc(s), text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts)
                 t.cell(3, r, f_word(s), text_color = na(s) ? cl.get(0) : color.white, bgcolor = f_scol(s, cl), text_size = ts)
                 r += 1
         for k = 0 to int(info.size() / 5) - 1

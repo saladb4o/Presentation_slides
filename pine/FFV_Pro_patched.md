@@ -1377,7 +1377,9 @@ if CK.dirty
     // [NEUTRAL] An untestable signal no longer counts as a fail: score = passes x 9 / tested
     // (needs 5+ testable signals).
     array<float> _pio = array.from(_roa > 0 ? 1.0 : 0.0, calc_ocf > 0 ? 1.0 : 0.0, _roa > _roa_prev ? 1.0 : 0.0, calc_ocf > calc_ni ? 1.0 : 0.0, _lev < _lev_prev ? 1.0 : 0.0, _cr > _cr_prev ? 1.0 : 0.0, calc_shares <= _sh_prev * 1.001 ? 1.0 : 0.0, _gm > _gm_prev ? 1.0 : 0.0, _at > _at_prev ? 1.0 : 0.0)
-    array<float> _pio_in = array.from(_roa, calc_ocf, _roa + _roa_prev, calc_ocf + calc_ni, _lev + _lev_prev, _cr + _cr_prev, calc_shares + _sh_prev, _gm + _gm_prev, _at + _at_prev)
+    // A test counts only on reported (or exact) inputs: a change read off an estimate is noise.
+    bool _pa = f_tg(iAS) >= 2, bool _pn = f_tg(iNI) >= 2, bool _po = f_tg(iOC) >= 2, bool _pr = f_tg(iRV) >= 2
+    array<float> _pio_in = array.from(_pa and _pn ? _roa : na, _po ? calc_ocf : na, _pa and _pn ? _roa + _roa_prev : na, _po and _pn ? calc_ocf + calc_ni : na, _pa and f_tg(iDB) >= 2 ? _lev + _lev_prev : na, f_tg(iCA) >= 2 ? _cr + _cr_prev : na, t_shares >= 2 ? calc_shares + _sh_prev : na, _pr and f_tg(iGP) >= 2 ? _gm + _gm_prev : na, _pa and _pr ? _at + _at_prev : na)
     int _f = 0, int _n = 0
     for k = 0 to 8
         if not na(_pio_in.get(k))
@@ -2540,15 +2542,10 @@ if barstate.islast and i_show_street
 float HV_nd = na
 string HV_nd_txt = 'N/A'
 color HV_nd_col = na
-string HV_pio_txt = 'N/A'
-color HV_pio_col = na
 bool HV_zm_on = false
 string HV_zm_txt = 'N/A'
 color HV_zm_col = na
 string HV_zm_tt = ''
-string HV_inv_txt = 'Efficient'
-color HV_inv_col = na
-string HV_inv_tt = ''
 string HV_rkv_txt = 'Neutral'
 color HV_rkv_col = na
 string HV_rkv_tt = ''
@@ -2560,15 +2557,12 @@ string HV_flag1 = ''
 string HV_flags_tt = ''
 if barstate.islast
     // Leverage
-    float nd = F_ebitda > 0 ? nz(F_nd) / F_ebitda : na
+    float nd = F_ebitda > 0 ? F_nd / F_ebitda : na
     nd_txt = 'N/A'
     nd_col = color_bg
     if not na(nd)
         nd_txt := nd < 0 ? 'Net Cash' : nd <= 1.5 ? 'Conservative' : nd <= 3.0 ? 'Moderate' : nd <= 4.5 ? 'Elevated' : 'High'
         nd_col := nd <= 1.5 ? color_under : nd <= 3.0 ? color_bg : nd <= 4.5 ? C_OR40 : color_over
-    // Piotroski
-    pio_txt = na(F_pio) ? 'N/A' : F_pio >= 7 ? 'Strong' : F_pio <= 3 ? 'Weak' : 'Neutral'
-    pio_col = na(F_pio) ? color_bg : F_pio >= 7 ? color_under : F_pio <= 3 ? color_over : color_bg
     // Z + M quadrant
     zm_on = i_useBeneishCheck and not na(altman_z) and not na(F_m_score)
     zm_txt = 'N/A'
@@ -2595,8 +2589,6 @@ if barstate.islast
         zm_tt += (z_is_em ? FL.tx(31) : FL.tx(32)) + '\nM-Score cutoff: -1.78.'
     // Capital allocation
     inv_txt = F_inv_dummy ? 'Empire Builder' : F_deter ? 'Deteriorating' : 'Efficient'
-    inv_col = F_inv_dummy or F_deter ? color_over : color_under
-    inv_tt = str.format(FL.tx(33), f_gtxt(F_asset_g), f_gtxt(F_ebitda_g), (F_inv_dummy ? FL.tx(34) : F_deter ? FL.tx(35) : FL.tx(36)))
     // Rhodes-Kropf
     rkv_txt = is_rkv_value_trap ? 'Value Trap' : is_rkv_deep_value ? 'True Deep Value' : 'Neutral'
     rkv_col = is_rkv_value_trap ? color_over : is_rkv_deep_value ? color_under : color_bg
@@ -2645,15 +2637,10 @@ if barstate.islast
     HV_nd := nd
     HV_nd_txt := nd_txt
     HV_nd_col := nd_col
-    HV_pio_txt := pio_txt
-    HV_pio_col := pio_col
     HV_zm_on := zm_on
     HV_zm_txt := zm_txt
     HV_zm_col := zm_col
     HV_zm_tt := zm_tt
-    HV_inv_txt := inv_txt
-    HV_inv_col := inv_col
-    HV_inv_tt := inv_tt
     HV_rkv_txt := rkv_txt
     HV_rkv_col := rkv_col
     HV_rkv_tt := rkv_tt
@@ -2683,18 +2670,25 @@ if barstate.islast
     float bsec = timeframe.in_seconds(beta_tf)
     float cash_iss = not na(F_netbb) and D.mc > 0 ? -F_netbb / D.mc : na
     float sh_chg = F_sh / F_sh_1y - 1
+    // The fair value's shares held by the DCF, P/B and Owners' Earnings rows, and its members.
+    array<float> ov = array.new_float(3, 0.0)
+    int n_mem = 0
+    for m in MD
+        float sh = omni_active ? m.om_w : m.w
+        n_mem += sh > 0 ? 1 : 0
+        int j = m.code == 'DCF' ? 0 : m.code == 'PB' ? 1 : m.code == 'OE' ? 2 : -1
+        if j >= 0
+            ov.set(j, nz(sh))
     CARD := FL.f_card(array.from(F_gp / F_assets, F_ocf / F_assets, D.roe, F_ni_c / F_assets, (F_ni_c - F_ocf) / F_assets, F_gp / F_rev, float(na), float(na), float(na), float(na), float(na),
          nz(cash_iss, math.abs(sh_chg) < 0.3 ? sh_chg : float(na)), F_ni_c > 0 and not (na(F_dps) and na(F_netbb)) ? (nz(F_dps) * F_sh + nz(F_netbb)) / F_ni_c : float(na), (F_debt - F_debt_1y) / F_assets,
          use_bank_model ? D.roe - cost_of_equity : roic_wacc_spread, na(raw_beta_s) ? na : beta_mkt, float(na), F_debt / F_assets, altman_z, float(na), downside_beta,
-         F_debt / F_assets < 0.02 ? 99.0 : F_interest > 0 ? F_ebit / F_interest : float(na), float(na), float(na), float(na), close > 0 and F_t_oe > 0 ? F_oe_ps / close - rf_local_avg / 100 : float(na)),
+         F_debt / F_assets < 0.02 ? 99.0 : F_interest > 0 ? F_ebit / F_interest : float(na), float(na), float(na), float(na), close > 0 and F_t_oe > 0 ? F_oe_ps / close - rf_local_avg / 100 : float(na),
+         F_pio, F_asset_g, na(F_ebitda) ? float(na) : F_ebitda > 0 ? F_nd / F_ebitda : F_nd > 0 ? 99.0 : F_nd <= 0 ? -1.0 : float(na), rdcf.get(0) - final_growth_rate),
          eng_t, F_suspect or CK.cap == 0, F_eq, use_bank_model ? 1 : selected_industry == 'REITs' or selected_industry == 'Utilities' ? 2 : 0, z_safe_cut, z_gold_cut,
          i_useBeneishCheck and F_manip and math.min(eng_t.get(19), eng_t.get(5), eng_t.get(6), eng_t.get(0)) >= 2, i_use_rkv and is_rkv_value_trap,
          ST.v, ST.q, array.from(Q_X, Q_X + 1, Q_ROE, Q_ROA, Q_GM), beta_ra, beta_rb, bsec >= 604800 ? 31557600 / bsec : trading_days * (bsec >= 86400 ? 86400 : session_sec) / bsec,
-         pbh, pb, close, sell_zone_line, finalFairValue, buy_zone_line)
-    CARD_INFO := array.from('0', 'Piotroski F-score', na(F_pio) ? 'N/A' : str.tostring(F_pio, '#') + ' / 9', 'information', HV_pio_txt,
-         '0', 'Capital allocation', f_gtxt(F_asset_g) + ' / ' + f_gtxt(F_ebitda_g), 'assets / EBITDA growth', HV_inv_txt,
-         '1', 'Net debt / EBITDA', na(HV_nd) ? 'N/A' : str.tostring(HV_nd, '#.#') + 'x', 'information', HV_nd_txt,
-         '1', 'Z+M matrix', 'Z ' + (na(altman_z) ? '-' : str.tostring(altman_z, '#.#')), 'information', HV_zm_txt,
+         pbh, pb, close, sell_zone_line, finalFairValue, buy_zone_line, ov, n_mem >= 2 and finalFairValue > 0 ? fv_stddev / finalFairValue : float(na))
+    CARD_INFO := array.from('1', 'Z+M matrix', 'Z ' + (na(altman_z) ? '-' : str.tostring(altman_z, '#.#')), 'information', HV_zm_txt,
          '2', 'Rhodes-Kropf V/B', i_use_rkv ? str.tostring(rkv_growth_vb, '#.##') + 'x' : 'off', 'information', HV_rkv_txt)
 // ---------- summary card ----------
 f_tbl_head() =>
