@@ -837,7 +837,7 @@ if barstate.isfirst
     f_add(Model.new('GRA', 'Graham', 'Graham Number', level = Level.equity, eng = Eng.graham, fam = 1, s_earn = Sx.eps_pos, s_gx = Sx.g_gra, s_adj = Sx.yadj, need1 = Sx.eps_pos, lk = Lever.scale, lv_bear = 0.5, lv_bull = 1.5))
     f_add(Model.new('R40', 'Rule of 40', 'Rule of 40', eng = Eng.rulex, fam = 2, s_drv = Sx.rev, s_gx = Sx.rev_g, s_adj = Sx.fcf_margin, t2 = Sx.fcf_margin, lk = Lever.step, lv_bear = -i_scen_r40_bps, lv_bull = i_scen_r40_bps))
     f_add(Model.new('ACQ', "Acquirer's Multiple", "Acquirer's Mult", fam = 5, s_drv = Sx.ebit, need1 = Sx.ebit, lk = Lever.step, lv_bear = -i_scen_acq_delta, lv_bull = i_scen_acq_delta, lv_floor = 1.0, m0 = i_acquirer_mult))
-var Model M_OE = f_add(Model.new('OE', "Owners' Earnings", "Owners' Earnings", level = Level.equity, eng = Eng.perp, fam = 3, s_cf = Sx.oe_ps, need1 = Sx.oe_ps))
+var Model M_OE = f_add(Model.new('OE', "Owners' Earnings", "Owners' Earnings", level = Level.equity, eng = Eng.vdcf, fam = 3, s_cf = Sx.oe_ps, s_earn = Sx.oe_ps, need1 = Sx.oe_ps))
 // Bar 0: what the framework allocates, the Standard scope (every allocated multiple and
 // sector model, plus the absolute models the framework is named after), then the row checks.
 if barstate.isfirst
@@ -2859,7 +2859,7 @@ f_det_models() =>
                 'ADCF' => FL.tx(94)
                 'APV' => FL.tx(95) + f_gtxt(D.r_unlev) + FL.tx(96) + cl_txt + '.'
                 'EPV' => FL.tx(97) + cl_txt + '.'
-                'OE' => FL.tx(98)
+                'OE' => "Buffett (Williams 1938): owner earnings discounted at the cost of equity, growing at the stage-1 rate fading to terminal, plus a terminal value. With the Companion Feed: NI + D&A + impairments - 3y avg maintenance capex - working-capital build-up; without it: OCF - maintenance capex."
                 'EVA' => FL.tx(99) + cl_txt + '.'
                 'DDM' => FL.tx(100) + str.tostring(F_dps, '#.##') + '\nYield: ' + (na(ddm_yield) ? 'N/A' : str.tostring(ddm_yield, '#.##') + '%') + '\nCost of equity: ' + str.tostring(cost_of_equity * 100, '#.#') + '%\nTerminal growth: ' + str.tostring(final_terminal_growth * 100, '#.#') + '%'
                 => ''
