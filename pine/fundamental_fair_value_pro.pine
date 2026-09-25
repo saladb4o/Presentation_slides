@@ -2,7 +2,7 @@
 indicator('Fundamental Fair Value Pro (FF4 + McKinsey/Rev DCF) [Real-Time + Backtest]', shorttitle = 'FFV Pro (Real)', overlay = true, dynamic_requests = true)
 // Companion library pine/ffv_lib.pine (backtester and long texts): publish it as a private
 // library named FFVLib, then replace YOUR_TV_USERNAME with your TradingView username.
-import YOUR_TV_USERNAME/FFVLib/2 as FL
+import YOUR_TV_USERNAME/FFVLib/3 as FL
 // =====================================================================
 // ARCHITECTURE: one top-to-bottom pass per bar, on two clocks
 //   1. Helpers and types   pure maths, backtest state, the model stage: enums, the
@@ -677,7 +677,7 @@ i_cagr_years = input.int(3, 'CAGR Lookback Years', group = group_iv, minval = 1,
 i_dcf_stage1_yrs = input.int(10, 'DCF: High-Growth Years (Stage 1)', group = group_iv, minval = 1, maxval = 15, tooltip = 'Used by every DCF-type model: main DCF, rNPV, AFFO DCF, Unbundled ServeCo, APV and Equity Cash Flow.')
 i_strict_cap = input.bool(true, 'Strict capital structure', group = group_iv, tooltip = "ON: minority interest and preferred equity are claims ahead of common shareholders. They are added to enterprise value and subtracted from every firm-value model (EV/EBITDA, DCF, rNPV, EPV, APV, EVA, RIM, Unbundled, Rule of 40, Acquirer's Multiple); book value is common equity (ex-MI, ex-preferred) and earnings are income attributable to common (net of preferred dividends). Preferred equity = preferred dividends capitalised at the local 10Y + 2%.")
 group_display = 'Display Options'
-i_detail = input.string('None', 'Table detail (below the summary)', options = ['None', 'Models', 'Street', 'Health', 'Everything'], group = group_display, tooltip = 'The summary card is always shown. Pick one section to add below it.\n\nModels: every relative and intrinsic model.\nStreet: analyst targets, implied growth and P/E, ratings, confidence parts.\nHealth: every diagnostic and quality filter.\n\nEverything can run off a short chart.')
+i_detail = input.string('None', 'Table detail (below the summary)', options = ['None', 'Models', 'Street', 'Scorecard', 'Everything'], group = group_display, tooltip = 'The summary card is always shown. Pick one section to add below it.\n\nModels: every relative and intrinsic model.\nStreet: analyst targets, implied growth and P/E, ratings, confidence parts.\nScorecard: every quality, low-risk and value metric behind the Buffett score.\n\nEverything can run off a short chart.')
 i_tablePos = input.string('top_right', 'Table Position', options = ['top_right', 'middle_right', 'bottom_right'], group = group_display)
 i_textSize = input.string('normal', 'Text Size', options = ['auto', 'tiny', 'small', 'normal', 'large', 'huge'], group = group_display)
 i_theme = input.string('Dark', 'Theme', options = ['Dark', 'Light'], group = group_display)
@@ -781,10 +781,7 @@ active_model_desc = fw_parts.get(0)
 fw_codes = ' ' + fw_parts.get(1) + ' '
 fw_named = ' ' + (fw_parts.size() > 2 ? fw_parts.get(2) : '') + ' '
 use_cape = str.contains(fw_codes, ' CAPE ')
-show_gpa = str.contains(fw_codes, ' GPA ')
-show_roic_wacc = str.contains(fw_codes, ' ROIC ')
 show_sloan = str.contains(fw_codes, ' SLN ')
-show_shareholder = str.contains(fw_codes, ' SHY ')
 is_financial_sector = selected_industry == 'Financials (Bank/Insurance)'
 // Banks and insurers use the Equity models (RIM: NI / book at CoE; growth from ROE), the
 // rest the Entity models (RIM: NOPAT / invested capital at WACC; growth from ROIC).
@@ -1048,7 +1045,9 @@ int Q_ROA = 40, int Q_CR = 41, int Q_LEV = 42, int Q_GM = 43, int Q_AT = 44, int
 int Q_REV = 47, int Q_AS = 48, int Q_EBITDA = 49, int Q_DEBT = 50, int Q_REC = 51, int Q_COGS = 52
 int Q_PEQ = 53, int Q_ROE = 54, int Q_OP = 55, int Q_PX = 56, int Q_FFV = 57, int Q_FREL = 58, int Q_MNT = 59, int Q_FV = 60
 int Q_MULT = Q_FV + MD.size()
-var QStore ST = QStore.new(matrix.new<float>(128, Q_MULT + MD.size(), na))
+// Scorecard history: gross profit / assets, cash flow / assets.
+int Q_X = Q_MULT + MD.size()
+var QStore ST = QStore.new(matrix.new<float>(128, Q_X + 2, na))
 // FIRM (F_*): report data, rebuilt when the clock marks it dirty. Solved items (sh ... nd) with their
 // tiers before the staleness cap (Drivers caps them), the released fields read later, then the
 // derived drivers, diagnostics and scores.
@@ -1482,6 +1481,8 @@ if CK.dirty
     // F-score ratios and the solved items a year-ago comparison reads.
     for [k, x] in array.from(raw_rev, raw_as, raw_pn, rnd_ttm, raw_eps, _roa, _cr, _lev, _gm, _at, calc_shares, calc_ebit, calc_rev, calc_assets, calc_ebitda, calc_debt, accounts_receivable_ttm, cogs_ttm)
         ST.write(Q_RV0 + k, x)
+    ST.write(Q_X, calc_assets > 0 ? calc_gp / calc_assets : na)
+    ST.write(Q_X + 1, calc_assets > 0 ? calc_ocf / calc_assets : na)
     F_sh := calc_shares
     F_rev := calc_rev
     F_gp := calc_gp
@@ -2314,15 +2315,8 @@ f_st_pe(float t) =>
 // ==============================================================
 // ⚙️ QUANTITATIVE QUALITY & MANAGEMENT RATIOS
 // ==============================================================
-float safe_shares_prev = nz(F_sh_1y, F_sh)
-float safe_debt_prev = nz(F_debt_1y, nz(F_debt))
-float gpa_ratio = F_assets > 0 ? nz(F_gp) / F_assets : na
 float roic_wacc_spread = not na(final_discount_rate) ? F_roic - final_discount_rate : na
 float sloan_ratio = F_assets > 0 ? (nz(F_ni_c) - nz(F_ocf)) / F_assets : na
-// Net buyback cash of the last fiscal year; the share-count change when neither field is reported.
-float buyback_yield = not na(F_netbb) and D.mc > 0 ? F_netbb / D.mc : safe_shares_prev > 0 ? (safe_shares_prev - F_sh) / safe_shares_prev : 0.0
-float debt_paydown_yield = D.mc > 0 ? (safe_debt_prev - nz(F_debt)) / D.mc : 0.0
-float shareholder_yield = nz(div_yield) + math.max(buyback_yield, 0.0) + math.max(debt_paydown_yield, 0.0)
 // ==========================================
 // TABLE DISPLAY
 // ==========================================
@@ -2339,7 +2333,7 @@ color_header = i_theme == 'Dark' ? color.new(color.gray, 50) : C_GR80
 color_value = color.new(color.orange, 20)
 color_over = color.new(color.red, 40)
 color_under = color.new(color.green, 40)
-var table T = table.new(position.top_right, 4, 80, border_width = 1)
+var table T = table.new(position.top_right, 4, 100, border_width = 1)
 // 88,601 | 123 | 4.56
 f_px(float v) =>
     na(v) ? '-' : str.tostring(math.abs(v) >= 100 ? math.round(v) : v, math.abs(v) >= 1000 ? '#,###' : '#.##')
@@ -2398,12 +2392,6 @@ f_row4(string lbl, string ltt, string v1, string v2, string v3, color c1 = na, c
 // White text on a status colour, the theme text colour on the plain background.
 f_on(float c) =>
     na(c) ? color_text : color.white
-// The quality filters the framework switches on: [on, name, value, target, pass].
-f_qf() =>
-    [array.from(show_gpa, show_roic_wacc, show_sloan, show_shareholder), array.from('Gross Profit / Assets (GPA)', 'ROIC vs WACC Spread', 'Sloan Accrual Ratio', 'True Shareholder Yield'), array.from(f_gtxt(gpa_ratio), (roic_wacc_spread > 0 ? '+' : '') + f_gtxt(roic_wacc_spread), f_gtxt(sloan_ratio), f_gtxt(shareholder_yield)), array.from('> 33%', '> +5%', '< 0%', '> 5%'), array.from(gpa_ratio > 0.33, roic_wacc_spread > 0.05, sloan_ratio < 0, shareholder_yield > 0.05)]
-// Sloan (index 2) is an accruals flag, the rest pass/fail filters.
-f_qword(int j, bool p) =>
-    p ? (j == 2 ? 'SAFE' : 'PASS') : (j == 2 ? 'HIGH ACCRUALS' : 'FAIL')
 // ---------- last-bar calculations ----------
 var array<string> CPN = array.from('Agreement', 'Depth', 'Reliability / Freshness', 'Quality / Conviction')
 bool SV_has = false
@@ -2561,9 +2549,6 @@ color HV_rkv_col = na
 string HV_rkv_tt = ''
 string HV_wacc_flag = 'Normal'
 string HV_wacc_tt = ''
-int HV_q_pass = 0
-int HV_q_tot = 0
-string HV_q_tt = ''
 int HV_n_flags = 0
 bool HV_severe = false
 string HV_flag1 = ''
@@ -2614,17 +2599,6 @@ if barstate.islast
     // Discount rate (+ the macro assumptions behind terminal growth)
     wacc_flag = final_discount_rate < 0.05 ? 'Too Low' : final_discount_rate > 0.20 ? 'Extreme' : 'Normal'
     wacc_tt = str.format(FL.tx(38), beta_mkt, (na(downside_beta) ? 'N/A' : str.tostring(downside_beta, '#.##')), i_rf_base, base_rf_for_calc * 100, calc_erp * 100, calc_crp * 100, auto_crp_raw * 100) + str.format(FL.tx(39), D.cod * 100, F_tax * 100, lr_infl * 100, lr_rgdp * 100, final_terminal_growth * 100)
-    // Quality: Piotroski + the quant filters the framework switches on
-    q_pass = 0
-    q_tot = 0
-    q_tt = str.format('Piotroski F-score: {0}\n', (na(F_pio) ? 'N/A' : str.format('{0,number,#} / 9 ({1})', F_pio, pio_txt)))
-    [qon, qnm, qvl, qtg, qps] = f_qf()
-    for j = 0 to 3
-        if qon.get(j)
-            p = qps.get(j)
-            q_tot += 1
-            q_pass += p ? 1 : 0
-            q_tt += str.format('\n{0} {1} ({2}): {3}', qnm.get(j), qvl.get(j), qtg.get(j), f_qword(j, p))
     // Red flags: one list, short names for the cell, full text for the tooltip.
     fl = array.new_string(0)
     flags_tt = ''
@@ -2680,17 +2654,47 @@ if barstate.islast
     HV_rkv_tt := rkv_tt
     HV_wacc_flag := wacc_flag
     HV_wacc_tt := wacc_tt
-    HV_q_pass := q_pass
-    HV_q_tot := q_tot
-    HV_q_tt := q_tt
     HV_n_flags := n_flags
     HV_severe := severe
     HV_flag1 := n_flags > 0 ? fl.get(0) : ''
     HV_flags_tt := flags_tt
+// [FIX ZONE] ONE entry margin, used by both the chart and the backtester.
+// Input margin x downside beta (min 0.5x), clamped 5%..50%.
+float entry_margin = math.min(math.max(i_bt_margin * math.max(nz(downside_beta, beta_mkt), 0.5), 0.05), 0.50)
+float sell_zone_line = finalFairValue * (1.0 + i_bt_exit_premium)
+float buy_zone_line = finalFairValue * (1.0 - entry_margin)
+// ---------- Buffett scorecard (last bar) ----------
+// Quality, low risk and value (Buffett's Alpha); FFVLib scores them. Display only.
+var FL.Card CARD = na
+var array<string> CARD_INFO = array.new_string()
+CLR = array.from(color_text, color_bg, color_header, color_under, color_over, C_OR40)
+if barstate.islast
+    float pb = na
+    array<float> pbh = array.new_float()
+    for [k, m] in MD
+        if m.code == 'PB' and not na(m.hist)
+            pb := f_cur(m)
+            pbh := m.hist
+    float bsec = timeframe.in_seconds(beta_tf)
+    float cash_iss = not na(F_netbb) and D.mc > 0 ? -F_netbb / D.mc : na
+    float sh_chg = F_sh / F_sh_1y - 1
+    CARD := FL.f_card(array.from(F_gp / F_assets, F_ocf / F_assets, D.roe, F_ni_c / F_assets, (F_ni_c - F_ocf) / F_assets, F_gp / F_rev, float(na), float(na), float(na), float(na), float(na),
+         nz(cash_iss, math.abs(sh_chg) < 0.3 ? sh_chg : float(na)), F_ni_c > 0 and not (na(F_dps) and na(F_netbb)) ? (nz(F_dps) * F_sh + nz(F_netbb)) / F_ni_c : float(na), (F_debt - F_debt_1y) / F_assets,
+         use_bank_model ? D.roe - cost_of_equity : roic_wacc_spread, na(raw_beta_s) ? na : beta_mkt, float(na), F_debt / F_assets, altman_z, float(na), downside_beta,
+         F_debt / F_assets < 0.02 ? 99.0 : F_interest > 0 ? F_ebit / F_interest : float(na), float(na), float(na), float(na), close > 0 and F_t_oe > 0 ? F_oe_ps / close - rf_local_avg / 100 : float(na)),
+         eng_t, F_suspect, F_eq, use_bank_model ? 1 : selected_industry == 'REITs' or selected_industry == 'Utilities' ? 2 : 0, z_safe_cut, z_gold_cut,
+         i_useBeneishCheck and F_manip and math.min(eng_t.get(19), eng_t.get(5), eng_t.get(6), eng_t.get(0)) >= 2, i_use_rkv and is_rkv_value_trap,
+         ST.v, ST.q, array.from(Q_X, Q_X + 1, Q_ROE, Q_ROA, Q_GM), beta_ra, beta_rb, bsec >= 604800 ? 31557600 / bsec : trading_days * (bsec >= 86400 ? 86400 : session_sec) / bsec,
+         pbh, pb, close, sell_zone_line, finalFairValue, buy_zone_line)
+    CARD_INFO := array.from('0', 'Piotroski F-score', na(F_pio) ? 'N/A' : str.tostring(F_pio, '#') + ' / 9', 'information', HV_pio_txt,
+         '0', 'Capital allocation', f_gtxt(F_asset_g) + ' / ' + f_gtxt(F_ebitda_g), 'assets / EBITDA growth', HV_inv_txt,
+         '1', 'Net debt / EBITDA', na(HV_nd) ? 'N/A' : str.tostring(HV_nd, '#.#') + 'x', 'information', HV_nd_txt,
+         '1', 'Z+M matrix', 'Z ' + (na(altman_z) ? '-' : str.tostring(altman_z, '#.#')), 'information', HV_zm_txt,
+         '2', 'Rhodes-Kropf V/B', i_use_rkv ? str.tostring(rkv_growth_vb, '#.##') + 'x' : 'off', 'information', HV_rkv_txt)
 // ---------- summary card ----------
 f_tbl_head() =>
     T.set_position(i_tablePos == 'top_right' ? position.top_right : i_tablePos == 'middle_right' ? position.middle_right : position.bottom_right)
-    T.clear(0, 0, 3, 79)
+    T.clear(0, 0, 3, 99)
     hc = color.new(color.purple, 20)
     f_cell(0, 0, active_model_desc, color.white, hc, str.format(FL.tx(48), i_scen_fair_band * 100))
     f_cell(1, 0, 'Price', color.white, hc)
@@ -2768,9 +2772,8 @@ f_sum_health() =>
     zm_cell = HV_zm_on ? 'Z ' + str.tostring(altman_z, '#.#') + ' | M ' + str.tostring(F_m_score, '#.#') : na(altman_z) ? 'Z -' : 'Z ' + str.tostring(altman_z, '#.#')
     bs_tt = str.format(FL.tx(68), (na(HV_nd) ? 'N/A' : str.format('{0,number,#.#}x', HV_nd)), HV_nd_txt, (HV_zm_on ? str.format('\n\nZ+M matrix: {0}\n{1}', HV_zm_txt, HV_zm_tt) : ''))
     f_row4('Balance sheet', bs_tt, na(HV_nd) ? 'N/A' : str.tostring(HV_nd, '#.#') + 'x', zm_cell, HV_nd_txt, c1 = HV_nd > 3.0 ? color.red : color_text, c2 = HV_zm_on ? color.white : color_text, b2 = HV_zm_on ? HV_zm_col : color_bg, b3 = HV_nd_col, stt = bs_tt)
-    // Quality: Piotroski + pass count of the quant filters
-    q_bg = HV_q_tot == 0 ? color_bg : HV_q_pass * 3 >= HV_q_tot * 2 ? color_under : HV_q_pass * 3 >= HV_q_tot ? C_OR40 : color_over
-    f_row4('Quality', HV_q_tt, 'F-score ' + (na(F_pio) ? '-' : str.tostring(F_pio, '#')), HV_q_tot > 0 ? 'Filters ' + str.tostring(HV_q_pass) + '/' + str.tostring(HV_q_tot) : 'Filters -', HV_pio_txt, c2 = HV_q_tot > 0 ? color.white : color_text, b2 = q_bg, b3 = HV_pio_col, stt = HV_q_tt)
+    // Buffett score (quality, low risk, value), built on the last bar
+    RW.set(0, FL.cardSum(T, RW.get(0), CARD, CLR, i_textSize))
     // Discount rate
     f_row4('Discount rate', HV_wacc_tt, 'WACC ' + str.tostring(final_discount_rate * 100, '#.#') + '%', 'CoE ' + str.tostring(cost_of_equity * 100, '#.#') + '% | g ' + str.tostring(final_terminal_growth * 100, '#.#') + '%', HV_wacc_flag, b1 = color_value, c3 = color.white, b3 = HV_wacc_flag == 'Normal' ? color_under : color_over, stt = HV_wacc_tt)
     // Growth the price implies: the stage-1 growth at which our displayed DCF equals the price
@@ -2859,6 +2862,11 @@ f_det_models() =>
                 'DDM' => FL.tx(100) + str.tostring(F_dps, '#.##') + '\nYield: ' + (na(ddm_yield) ? 'N/A' : str.tostring(ddm_yield, '#.##') + '%') + '\nCost of equity: ' + str.tostring(cost_of_equity * 100, '#.#') + '%\nTerminal growth: ' + str.tostring(final_terminal_growth * 100, '#.#') + '%'
                 => ''
             f_model_row(lbl + f_mlbl(m), m.lo, m.fv, m.hi, tt + f_res_tt(m))
+    // Valuation assumptions: the macro inputs behind terminal growth, and the DCF's exit multiple.
+    macro_src = (i_lr_infl > 0 ? 'input' : 'auto') + ' / ' + (i_lr_rgdp > 0 ? 'input' : 'auto')
+    f_row4('Macro (manual)', FL.tx(112), 'Infl ' + str.tostring(lr_infl * 100, '#.##') + '% | GDP ' + str.tostring(lr_rgdp * 100, '#.##') + '%', macro_src, 'Terminal g ' + str.tostring(final_terminal_growth * 100, '#.##') + '%', b1 = color_value)
+    is_crazy_exit = implied_exit_multiple > 30.0
+    f_row4('Implied exit EV/NOPAT (Yr' + str.tostring(i_dcf_stage1_yrs) + ')', FL.tx(114), f_petxt(implied_exit_multiple), 'Sanity Check', is_crazy_exit ? 'High' : 'Safe', b1 = color_value, c3 = is_crazy_exit ? color.red : color.green)
 f_det_omni() =>
     if is_omnibus
         omni_tt = omni_n == 0 ? FL.tx(101) : (not omni_eq ? str.format(FL.tx(102), str.tostring(i_w_horizon)) : FL.tx(103))
@@ -2889,33 +2897,6 @@ f_det_street() =>
     array<string> cwt = array.from('35%', '20%', '25%', '20%')
     for j = 0 to 3
         f_row4(CPN.get(j), SV_ctt.get(j), f_stxt(SV_co.get(j)), f_stxt(SV_cs.get(j)), cwt.get(j))
-f_det_health1() =>
-    f_hdr('Diagnostics', 'Value', 'Detail', 'Status', '')
-    f_row4('Net Debt / EBITDA', FL.tx(111), na(HV_nd) ? 'N/A' : str.tostring(HV_nd, '#.#') + 'x', 'Leverage', HV_nd_txt, c1 = HV_nd > 3.0 ? color.red : color_text, b3 = HV_nd_col)
-    if HV_zm_on
-        f_row4('Z+M Risk Matrix', HV_zm_tt, 'Z: ' + str.tostring(altman_z, '#.#') + ' | M: ' + str.tostring(F_m_score, '#.#'), 'Risk Profile', HV_zm_txt, c3 = color.white, b3 = HV_zm_col, stt = HV_zm_tt)
-    f_row4('Asset / EBITDA growth YoY', HV_inv_tt, str.tostring(math.round(nz(F_asset_g) * 100)) + '% / ' + str.tostring(math.round(nz(F_ebitda_g) * 100)) + '%', 'Capital Allocation', HV_inv_txt, c1 = F_inv_dummy ? color.red : color_text, b3 = HV_inv_col, stt = HV_inv_tt)
-    if i_use_rkv
-        f_row4('Rhodes-Kropf V/B (Growth)', HV_rkv_tt, str.tostring(rkv_growth_vb, '#.##') + 'x', 'RKV Diagnosis', HV_rkv_txt, c1 = is_rkv_deep_value ? color.green : is_rkv_value_trap ? color.red : color_text, b3 = HV_rkv_col, stt = HV_rkv_tt)
-    macro_src = (i_lr_infl > 0 ? 'input' : 'auto') + ' / ' + (i_lr_rgdp > 0 ? 'input' : 'auto')
-    f_row4('Macro (manual)', FL.tx(112), 'Infl ' + str.tostring(lr_infl * 100, '#.##') + '% | GDP ' + str.tostring(lr_rgdp * 100, '#.##') + '%', macro_src, 'Terminal g ' + str.tostring(final_terminal_growth * 100, '#.##') + '%', b1 = color_value)
-    if M_OE.on
-        float oe_yield_pct = close > 0 ? nz(F_oe_ps) / close * 100 : 0.0
-        float yield_spread = oe_yield_pct - rf_local_avg
-        coupon_status = yield_spread >= 3.0 ? 'SCREAMING BUY' : yield_spread > 0 ? 'BUY (Positive Carry)' : 'PASS (Yield < Bond)'
-        coupon_color = yield_spread >= 3.0 ? color.green : yield_spread > 0 ? color_under : color_over
-        coupon_tt = str.format(FL.tx(113), oe_yield_pct, rf_local_avg, (yield_spread > 0 ? '+' : ''), yield_spread)
-        f_row4('Buffett Coupon vs 10Y', coupon_tt, str.tostring(oe_yield_pct, '#.##') + '%', (yield_spread > 0 ? '+' : '') + str.tostring(yield_spread, '#.##') + '%', coupon_status, b1 = color_value, c2 = yield_spread > 0 ? color.green : color.red, c3 = color.white, b3 = coupon_color, stt = coupon_tt)
-    is_crazy_exit = implied_exit_multiple > 30.0
-    f_row4('Implied exit EV/NOPAT (Yr' + str.tostring(i_dcf_stage1_yrs) + ')', FL.tx(114), f_petxt(implied_exit_multiple), 'Sanity Check', is_crazy_exit ? 'High' : 'Safe', b1 = color_value, c3 = is_crazy_exit ? color.red : color.green)
-f_det_health2() =>
-    f_hdr('Quant Quality Filters', 'Value', 'Target', 'Status', '')
-    f_row4('Piotroski F-Score', FL.tx(115), na(F_pio) ? 'N/A' : str.tostring(F_pio, '#'), '7 or more', HV_pio_txt, b3 = HV_pio_col)
-    [qon, qnm, qvl, qtg, qps] = f_qf()
-    for j = 0 to 3
-        if qon.get(j)
-            p = qps.get(j)
-            f_row4(qnm.get(j), j == 2 ? FL.tx(116) : '', qvl.get(j), qtg.get(j), f_qword(j, p), c1 = p ? color.green : j == 3 ? color_text : color.red, c3 = color.white, b3 = p ? color_under : color_over)
 if barstate.islast
     f_tbl_head()
     f_sum_val()
@@ -2926,17 +2907,11 @@ if barstate.islast
         f_det_omni()
     if i_show_street and (all_ or i_detail == 'Street')
         f_det_street()
-    if all_ or i_detail == 'Health'
-        f_det_health1()
-        f_det_health2()
+    if all_ or i_detail == 'Scorecard'
+        RW.set(0, FL.cardRows(T, RW.get(0), CARD, CLR, i_textSize, CARD_INFO))
 // ==========================================
 // 7. PLOTTING (MARGIN OF SAFETY ZONES)
 // ==========================================
-// [FIX ZONE] ONE entry margin, used by both the chart and the backtester.
-// Input margin x downside beta (min 0.5x), clamped 5%..50%.
-float entry_margin = math.min(math.max(i_bt_margin * math.max(nz(downside_beta, beta_mkt), 0.5), 0.05), 0.50)
-float sell_zone_line = finalFairValue * (1.0 + i_bt_exit_premium)
-float buy_zone_line = finalFairValue * (1.0 - entry_margin)
 p_fv = plot(finalFairValue, 'Fair Value', color = color.blue, linewidth = 2)
 p_sell = plot(sell_zone_line, 'Sell Target (Overvalued)', color = color.new(color.red, 30), linewidth = 1, style = plot.style_circles)
 p_buy = plot(buy_zone_line, 'Buy Zone (Discount)', color = C_GN30, linewidth = 1, style = plot.style_circles)

@@ -5,7 +5,8 @@ Publish this as a private library named FFVLib (it becomes version 2). Copy ever
 ```pine
 //@version=6
 // @description Companion library for Fundamental Fair Value Pro: the no-repaint backtester
-// (state, engine, three-view dashboard) and the indicator's long table and tooltip texts.
+// (state, engine, three-view dashboard), the Buffett scorecard, and the indicator's long
+// table and tooltip texts.
 // It lives here because a library compiles on its own, so this code does not count toward
 // the indicator's compile-size limit. Publish it as a PRIVATE library named FFVLib; after
 // any change, publish a new version and bump the number in the indicator's import line.
@@ -471,6 +472,311 @@ export f_beta_pair(array<float> ra, array<float> rb, bool downside_only) =>
                     vb += (b - mb) * (b - mb)
             out := vb > 0 ? cov / vb : na
     out
+// ==========================================
+// BUFFETT SCORECARD: quality, low risk, value (Frazzini, Kabiller & Pedersen, "Buffett's
+// Alpha", 2018; quality as in Asness, Frazzini & Pedersen, "Quality Minus Junk")
+// ==========================================
+// Metric ids: QUALITY 0 gross profit / assets, 1 cash flow / assets, 2 ROE, 3 ROA, 4 accruals
+// / assets, 5 gross margin, 6-10 the 5-year change of 0, 1, 2, 3, 5 (3-year averages 5 years
+// apart), 11 net share issuance, 12 net payout / profits, 13 net debt issuance, 14 ROIC - WACC
+// (banks: ROE - cost of equity) | LOW RISK 15 beta, 16 idiosyncratic volatility, 17 debt /
+// assets, 18 Altman Z, 19 ROE volatility (5 yearly readings), 20 downside beta, 21 interest
+// cover, 22 maximum drawdown | VALUE 23 price vs the chart's fair-value lines, 24 book-to-market
+// vs own history, 25 owner-earnings yield - 10Y. Every metric scores 0-100 on fixed breakpoints
+// (not a ranking against other stocks, as the papers do); a pillar is the weighted mean of its
+// scored metrics, N/A under 60% of the weight that applies to the sector; the total is the
+// geometric mean of the three pillars (each floored at 1), so one weak pillar pulls it down.
+// @type One stock's scorecard.
+// @field v Metric values (26).
+// @field s Metric scores 0-100, na when not scored.
+// @field w Metric weights, 0 when the metric does not apply to the sector.
+// @field ok Metric inputs usable (false: generic placeholder, stale or suspect data).
+// @field gs Group scores (7).
+// @field p Pillar scores: quality, low risk, value.
+// @field cov Pillar coverage: share of the applicable weight that was scored.
+// @field total Geometric mean of the pillars, na when a pillar is na.
+// @field why The pillars that are N/A.
+// @field qcap Quality held at 50 by the Beneish flag.
+// @field vcap Value held at 50 by the value-trap flag.
+// @field sec 0 general, 1 bank / insurer, 2 REIT / utility.
+export type Card
+    array<float> v
+    array<float> s
+    array<float> w
+    array<bool> ok
+    array<float> gs
+    array<float> p
+    array<float> cov
+    float total = na
+    string why = ''
+    bool qcap = false
+    bool vcap = false
+    int sec = 0
+
+// @function Score of x on a curve: breakpoints xs (rising or falling) to scores ys, linear between them and held at the ends. na x gives na.
+export f_curve(float x, array<float> xs, array<float> ys) =>
+    float s = na
+    int n = xs.size()
+    if not na(x) and n > 1
+        bool up = xs.get(n - 1) > xs.get(0)
+        float lo = up ? xs.get(0) : xs.get(n - 1)
+        float hi = up ? xs.get(n - 1) : xs.get(0)
+        if x <= lo
+            s := up ? ys.get(0) : ys.get(n - 1)
+        else if x >= hi
+            s := up ? ys.get(n - 1) : ys.get(0)
+        else
+            for i = 0 to n - 2
+                float a = xs.get(i)
+                float b = xs.get(i + 1)
+                if na(s) and a != b and x >= math.min(a, b) and x <= math.max(a, b)
+                    s := ys.get(i) + (ys.get(i + 1) - ys.get(i)) * (x - a) / (b - a)
+    s
+
+// Breakpoints of metric i: the x values, then as many scores.
+f_bp(int i, int sec, float zd, float zg) =>
+    switch i
+        0 => array.from(0.10, 0.20, 0.33, 0.45, 0.0, 40.0, 75.0, 100.0)
+        1 => array.from(0.0, 0.05, 0.10, 0.15, 0.0, 40.0, 75.0, 100.0)
+        2 => array.from(0.0, 0.08, 0.15, 0.25, 0.0, 40.0, 75.0, 100.0)
+        3 => array.from(0.0, 0.03, 0.07, 0.12, 0.0, 40.0, 75.0, 100.0)
+        4 => array.from(0.10, 0.05, 0.0, -0.05, 0.0, 30.0, 60.0, 100.0)
+        5 => array.from(0.10, 0.25, 0.40, 0.60, 0.0, 40.0, 70.0, 100.0)
+        7 => array.from(-0.05, 0.0, 0.025, 0.05, 0.0, 50.0, 80.0, 100.0)
+        9 => array.from(-0.05, 0.0, 0.025, 0.05, 0.0, 50.0, 80.0, 100.0)
+        11 => array.from(0.10, 0.02, 0.0, -0.03, 0.0, 40.0, 60.0, 100.0)
+        12 => array.from(0.0, 0.25, 0.50, 0.80, 0.0, 40.0, 70.0, 100.0)
+        13 => array.from(0.10, 0.0, -0.05, 0.0, 60.0, 100.0)
+        14 => array.from(-0.05, 0.0, 0.03, 0.08, 0.15, 0.0, 40.0, 60.0, 85.0, 100.0)
+        15 => array.from(1.6, 1.2, 1.0, 0.8, 0.6, 0.0, 35.0, 55.0, 80.0, 100.0)
+        16 => array.from(0.50, 0.35, 0.25, 0.15, 0.0, 40.0, 70.0, 100.0)
+        17 => sec == 2 ? array.from(0.85, 0.60, 0.40, 0.20, 0.0, 50.0, 80.0, 100.0) : array.from(0.70, 0.50, 0.30, 0.10, 0.0, 40.0, 75.0, 100.0)
+        18 => array.from(zd, (zd + zg) / 2, zg, zg * 4 / 3, 0.0, 50.0, 80.0, 100.0)
+        19 => array.from(0.15, 0.08, 0.04, 0.01, 0.0, 40.0, 75.0, 100.0)
+        20 => array.from(1.6, 1.2, 1.0, 0.8, 0.6, 0.0, 35.0, 55.0, 80.0, 100.0)
+        21 => array.from(1.5, 3.0, 6.0, 10.0, 0.0, 40.0, 75.0, 100.0)
+        22 => array.from(-0.60, -0.40, -0.25, -0.15, 0.0, 40.0, 75.0, 100.0)
+        24 => array.from(0.0, 1.0, 0.0, 100.0)
+        25 => array.from(-0.02, 0.0, 0.02, 0.04, 0.0, 40.0, 70.0, 100.0)
+        => array.from(-0.10, 0.0, 0.05, 0.10, 0.0, 50.0, 80.0, 100.0)
+
+// Quarter-store read: lag quarters back from the open row q of a 128-row ring.
+f_at(matrix<float> m, int q, int c, int lag) =>
+    lag >= 0 and lag <= q and lag < 128 ? m.get((q - lag) % 128, c) : na
+
+f_pil(int i) =>
+    i < 15 ? 0 : i < 23 ? 1 : 2
+
+// @function Builds the scorecard. v: the 26 metric values the indicator computes (ids 6-10, 16, 19, 22-24 are filled here). tier: the data engine's quality tiers (a metric whose inputs are tier 0 is not scored). bad: suspect data. eq: book equity (<= 0 drops the ROE metrics and book-to-market). sec: 0 general, 1 bank, 2 REIT / utility. zd, zg: Altman distress and safe cuts. manip, trap: the Beneish and value-trap caps. hm, hq, hc: the quarter store, its open row and the columns of gross profit / assets, cash flow / assets, ROE, ROA, gross margin. ra, rb: the beta return pairs, ppy their periods per year. pbh, pb: P/B history and now. px, sell, fv, buy: price and the chart's lines.
+export f_card(array<float> v, array<int> tier, bool bad, float eq, int sec, float zd, float zg, bool manip, bool trap, matrix<float> hm, int hq, array<int> hc, array<float> ra, array<float> rb, float ppy, array<float> pbh, float pb, float px, float sell, float fv, float buy) =>
+    Card c = Card.new(v.copy(), array.new_float(26, na), array.new_float(26, 0.0), array.new_bool(26, true), array.new_float(7, na), array.new_float(3, na), array.new_float(3, na))
+    c.sec := sec
+    vv = c.v
+    // Growth: the last 3 yearly readings against the 3 from 5 years earlier (at least one each).
+    for [k, col] in hc
+        float a = 0.0
+        float b = 0.0
+        int n1 = 0
+        int n2 = 0
+        for j = 0 to 2
+            float x = f_at(hm, hq, col, 4 * j)
+            float y = f_at(hm, hq, col, 20 + 4 * j)
+            if not na(x)
+                a += x
+                n1 += 1
+            if not na(y)
+                b += y
+                n2 += 1
+        vv.set(6 + k, n1 > 0 and n2 > 0 ? a / n1 - b / n2 : na)
+    // ROE volatility: 5 yearly TTM readings that do not overlap (3 at least).
+    ev = array.new_float()
+    for j = 0 to 4
+        float x = f_at(hm, hq, hc.get(2), 4 * j)
+        if not na(x)
+            ev.push(x)
+    vv.set(19, ev.size() >= 3 ? ev.stdev(false) : na)
+    // Idiosyncratic volatility (the residual of the beta regression, annualised) and the
+    // maximum drawdown, from the beta return pairs (26 at least).
+    int n = math.min(ra.size(), rb.size())
+    if n >= 26
+        float ma = ra.avg()
+        float mb = rb.avg()
+        float sab = 0.0
+        float sbb = 0.0
+        for i = 0 to n - 1
+            sab += (ra.get(i) - ma) * (rb.get(i) - mb)
+            sbb += math.pow(rb.get(i) - mb, 2)
+        float b1 = sbb > 0 ? sab / sbb : na
+        float ss = 0.0
+        for i = 0 to n - 1
+            ss += math.pow(ra.get(i) - ma - b1 * (rb.get(i) - mb), 2)
+        vv.set(16, na(b1) ? na : math.sqrt(ss / (n - 2) * ppy))
+        float e = 1.0
+        float pk = 1.0
+        float dd = 0.0
+        for x in ra
+            e *= 1 + x
+            pk := math.max(pk, e)
+            dd := math.min(dd, e / pk - 1)
+        vv.set(22, dd)
+    // Value: the price against the chart's sell target, fair value and buy line; P/B against
+    // its own history (8 quarters at least): the share of quarters that were dearer.
+    if px > 0 and fv > 0 and sell > fv and buy < fv
+        vv.set(23, px / fv - 1)
+        c.s.set(23, f_curve(px, array.from(sell, fv, buy), array.from(0.0, 50.0, 100.0)))
+    if pb > 0 and eq > 0
+        int nh = 0
+        int ge = 0
+        for x in pbh
+            if x > 0
+                nh += 1
+                ge += x >= pb ? 1 : 0
+        vv.set(24, nh >= 8 ? float(ge) / nh : na)
+    // Inputs by engine item (tier >= 1 needed): 0 assets, 2 equity, 5 revenue, 7 gross profit,
+    // 8 EBIT, 11 OCF, 17 net income, 20 debt; 'h' = stored history (suspect data only).
+    array<float> W = array.from(10.0, 8.0, 6.0, 6.0, 6.0, 4.0, 5.0, 5.0, 5.0, 5.0, 5.0, 10.0, 10.0, 5.0, 10.0, 30.0, 15.0, 10.0, 10.0, 10.0, 10.0, 10.0, 5.0, 60.0, 20.0, 20.0)
+    array<string> DP = array.from('0 7', '0 11', '2 17', '0 17', '0 11 17', '5 7', 'h', 'h', 'h', 'h', 'h', '', '17', '0 20', '8', '', '', '0 20', '0 5 8', 'h', '', '8 20', '', '', '', '17')
+    array<int> BK = array.from(0, 1, 4, 5, 6, 7, 10, 17, 18, 21)
+    for i = 0 to 25
+        string d = sec == 1 and i == 14 ? '2 17' : DP.get(i)
+        bool ok = not (bad and d != '')
+        if d != '' and d != 'h'
+            for t in str.split(d, ' ')
+                if tier.get(int(str.tonumber(t))) < 1
+                    ok := false
+        if (i == 2 or i == 8 or i == 19 or i == 24) and not (eq > 0)
+            ok := false
+        c.ok.set(i, ok)
+        bool app = not (sec == 1 and BK.includes(i))
+        c.w.set(i, app ? W.get(i) : 0.0)
+        if not ok or not app
+            c.s.set(i, na)
+        else if i != 23
+            array<float> bp = f_bp(i, sec, zd, zg)
+            int h = int(bp.size() / 2)
+            c.s.set(i, f_curve(vv.get(i), bp.slice(0, h), bp.slice(h, bp.size())))
+    // Groups (for the rows) and pillars (60% of the applicable weight scored).
+    array<int> G = array.from(0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 3, 4, 4, 5, 5, 5, 4, 5, 4, 6, 6, 6)
+    for g = 0 to 6
+        float sw = 0.0
+        float sx = 0.0
+        for i = 0 to 25
+            if G.get(i) == g and not na(c.s.get(i))
+                sw += c.w.get(i)
+                sx += c.w.get(i) * c.s.get(i)
+        c.gs.set(g, sw > 0 ? sx / sw : na)
+    for p = 0 to 2
+        float sa = 0.0
+        float sw = 0.0
+        float sx = 0.0
+        for i = 0 to 25
+            if f_pil(i) == p
+                sa += c.w.get(i)
+                if not na(c.s.get(i))
+                    sw += c.w.get(i)
+                    sx += c.w.get(i) * c.s.get(i)
+        float cv = sa > 0 ? sw / sa : na
+        c.cov.set(p, cv)
+        c.p.set(p, cv >= 0.6 ? sx / sw : na)
+    if manip and c.p.get(0) > 50
+        c.p.set(0, 50.0)
+        c.qcap := true
+    if trap and c.p.get(2) > 50
+        c.p.set(2, 50.0)
+        c.vcap := true
+    array<string> PN = array.from('Quality', 'Low risk', 'Value')
+    for p = 0 to 2
+        if na(c.p.get(p))
+            c.why += (c.why == '' ? '' : ', ') + PN.get(p)
+    c.total := c.why == '' ? math.pow(math.max(c.p.get(0), 1) * math.max(c.p.get(1), 1) * math.max(c.p.get(2), 1), 1.0 / 3) : na
+    c
+
+// Ten-step text bar of a 0-100 score.
+f_bar(float s) =>
+    string b = ''
+    int k = na(s) ? 0 : int(math.round(s / 10))
+    for i = 1 to 10
+        b += i <= k ? '▰' : '▱'
+    b
+// Colour of a score: cl = text, background, header, green, red, amber.
+f_scol(float s, array<color> cl) =>
+    na(s) ? cl.get(1) : s >= 70 ? cl.get(3) : s >= 50 ? cl.get(5) : cl.get(4)
+f_word(float s) =>
+    na(s) ? 'N/A' : s >= 70 ? 'Strong' : s >= 50 ? 'Fair' : 'Weak'
+f_sc(float s) =>
+    na(s) ? 'N/A' : str.tostring(s, '#')
+// A metric's value as shown.
+f_fmt(int i, float x) =>
+    na(x) ? 'N/A' : i == 15 or i == 20 ? str.tostring(x, '#.##') : i == 18 ? str.tostring(x, '#.#') : i == 21 ? (x >= 99 ? 'no debt' : str.tostring(x, '#.#') + 'x') : i == 24 ? str.tostring(x * 100, '#') + '% of history dearer' : (i >= 6 and i <= 10) or i == 14 or i == 19 or i == 25 ? (x > 0 ? '+' : '') + str.tostring(x * 100, '#.#') + 'pp' : (x > 0 and i == 23 ? '+' : '') + str.tostring(x * 100, '#.#') + '%'
+f_name(int i, int sec) =>
+    array<string> NM = array.from('Gross profit / assets', 'Cash flow / assets', 'ROE', 'ROA', 'Accruals / assets', 'Gross margin', 'Change in gross profit / assets', 'Change in cash flow / assets', 'Change in ROE', 'Change in ROA', 'Change in gross margin', 'Net share issuance', 'Net payout / profits', 'Net debt issuance / assets', 'ROIC - WACC', 'Beta', 'Idiosyncratic volatility', 'Debt / assets', 'Altman Z', 'ROE volatility', 'Downside beta', 'Interest cover', 'Maximum drawdown', 'Price vs fair value', 'Book-to-market vs own history', 'Owner-earnings yield - 10Y')
+    sec == 1 and i == 14 ? 'ROE - cost of equity' : NM.get(i)
+// One metric's line for a tooltip: value -> score (share of the pillar's weight, source).
+f_line(Card c, int i) =>
+    float wp = 0.0
+    for j = 0 to 25
+        wp += f_pil(j) == f_pil(i) ? c.w.get(j) : 0.0
+    bool ex = i == 14 or (i >= 20 and i <= 23) or i == 25
+    f_name(i, c.sec) + ': ' + (c.w.get(i) == 0 ? 'not used for this sector' : f_fmt(i, c.v.get(i)) + ' -> ' + (not c.ok.get(i) ? 'not scored (placeholder, stale or suspect data)' : f_sc(c.s.get(i))) + ' (weight ' + str.tostring(c.w.get(i) / wp * 100, '#') + '%, ' + (ex ? 'extra' : 'paper') + ')') + '\n'
+
+// @function Summary-card row: the total as a bar, the three pillars, the verdict. cl = text, background, header, green, red, amber colours; ts = text size. Returns the next free row.
+export cardSum(table t, int row, Card c, array<color> cl, string ts) =>
+    string tt = "Quality, low risk and value: the traits Frazzini, Kabiller and Pedersen (Buffett's Alpha, 2018) found explain Berkshire's returns; its 1.6x leverage is left out. Each metric scores 0-100 on fixed breakpoints (not a ranking against other stocks, as the paper does). A pillar is the weighted mean of its metrics (N/A under 60% coverage); the total is their geometric mean, so one weak pillar pulls it down. Display only: fair values and the backtest do not use it. Table detail = Scorecard lists every metric.\n\nCoverage: Q " + str.tostring(nz(c.cov.get(0)) * 100, '#') + '% | R ' + str.tostring(nz(c.cov.get(1)) * 100, '#') + '% | V ' + str.tostring(nz(c.cov.get(2)) * 100, '#') + '%' + (c.qcap ? '\nQuality held at 50: Beneish flag.' : '') + (c.vcap ? '\nValue held at 50: value trap.' : '') + (c.why != '' ? '\nN/A: ' + c.why + ' has too little data.' : '')
+    float s = c.total
+    t.cell(0, row, 'Buffett score', text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts, tooltip = tt)
+    t.cell(1, row, f_bar(s) + ' ' + f_sc(s), text_color = na(s) ? cl.get(0) : f_scol(s, cl), bgcolor = cl.get(1), text_size = ts, text_font_family = font.family_monospace, tooltip = tt)
+    t.cell(2, row, 'Q ' + f_sc(c.p.get(0)) + ' · R ' + f_sc(c.p.get(1)) + ' · V ' + f_sc(c.p.get(2)), text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts)
+    t.cell(3, row, na(s) ? 'N/A' : f_word(s) + ' fit', text_color = na(s) ? cl.get(0) : color.white, bgcolor = f_scol(s, cl), text_size = ts, tooltip = tt)
+    row + 1
+
+// @function Scorecard detail: per pillar a bar header, one row per group (Value: per metric), then that pillar's info rows. info: 5 strings per row (pillar 0-2, label, value, detail, status). Returns the next free row.
+export cardRows(table t, int row, Card c, array<color> cl, string ts, array<string> info) =>
+    int r = row
+    array<string> PN = array.from('Quality', 'Low risk (higher = safer)', 'Value')
+    array<string> GN = array.from('Profitability', 'Growth (5y)', 'Payout', 'Return spread', 'Market risk', 'Balance sheet & earnings')
+    array<int> G = array.from(0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 3, 4, 4, 5, 5, 5, 4, 5, 4, 6, 6, 6)
+    for p = 0 to 2
+        float ps = c.p.get(p)
+        string ptt = ''
+        for i = 0 to 25
+            ptt += f_pil(i) == p ? f_line(c, i) : ''
+        ptt += (p == 0 and c.qcap ? '\nHeld at 50: Beneish flag.' : '') + (p == 2 and c.vcap ? '\nHeld at 50: value trap.' : '')
+        t.cell(0, r, PN.get(p), text_color = cl.get(0), bgcolor = cl.get(2), text_size = ts, tooltip = ptt)
+        t.cell(1, r, f_bar(ps), text_color = na(ps) ? cl.get(0) : f_scol(ps, cl), bgcolor = cl.get(2), text_size = ts, text_font_family = font.family_monospace, tooltip = ptt)
+        t.cell(2, r, f_sc(ps), text_color = cl.get(0), bgcolor = cl.get(2), text_size = ts)
+        t.cell(3, r, 'Coverage ' + str.tostring(nz(c.cov.get(p)) * 100, '#') + '%', text_color = cl.get(0), bgcolor = cl.get(2), text_size = ts)
+        r += 1
+        if p < 2
+            for g = (p == 0 ? 0 : 4) to (p == 0 ? 3 : 5)
+                string gtt = ''
+                int nn = 0
+                int ns = 0
+                for i = 0 to 25
+                    if G.get(i) == g and c.w.get(i) > 0
+                        gtt += f_line(c, i)
+                        nn += 1
+                        ns += na(c.s.get(i)) ? 0 : 1
+                if nn > 0
+                    float gs = c.gs.get(g)
+                    t.cell(0, r, GN.get(g), text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts, tooltip = gtt)
+                    t.cell(1, r, f_sc(gs), text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts)
+                    t.cell(2, r, str.tostring(ns) + ' / ' + str.tostring(nn) + ' metrics', text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts)
+                    t.cell(3, r, f_word(gs), text_color = na(gs) ? cl.get(0) : color.white, bgcolor = f_scol(gs, cl), text_size = ts, tooltip = gtt)
+                    r += 1
+        else
+            for i = 23 to 25
+                float s = c.s.get(i)
+                t.cell(0, r, f_name(i, c.sec), text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts, tooltip = f_line(c, i))
+                t.cell(1, r, f_fmt(i, c.v.get(i)), text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts)
+                t.cell(2, r, 'Score ' + f_sc(s), text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts)
+                t.cell(3, r, f_word(s), text_color = na(s) ? cl.get(0) : color.white, bgcolor = f_scol(s, cl), text_size = ts)
+                r += 1
+        for k = 0 to int(info.size() / 5) - 1
+            if info.size() >= 5 and info.get(5 * k) == str.tostring(p)
+                for j = 1 to 4
+                    t.cell(j - 1, r, info.get(5 * k + j), text_color = color.gray, bgcolor = cl.get(1), text_size = ts)
+                r += 1
+    r
 // @function The indicator's long text number `id`.
 // @param id Text number.
 // @returns The text, or an empty string for an unknown number.
