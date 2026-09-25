@@ -2687,7 +2687,7 @@ if barstate.islast
          nz(cash_iss, math.abs(sh_chg) < 0.3 ? sh_chg : float(na)), F_ni_c > 0 and not (na(F_dps) and na(F_netbb)) ? (nz(F_dps) * F_sh + nz(F_netbb)) / F_ni_c : float(na), (F_debt - F_debt_1y) / F_assets,
          use_bank_model ? D.roe - cost_of_equity : roic_wacc_spread, na(raw_beta_s) ? na : beta_mkt, float(na), F_debt / F_assets, altman_z, float(na), downside_beta,
          F_debt / F_assets < 0.02 ? 99.0 : F_interest > 0 ? F_ebit / F_interest : float(na), float(na), float(na), float(na), close > 0 and F_t_oe > 0 ? F_oe_ps / close - rf_local_avg / 100 : float(na)),
-         eng_t, F_suspect, F_eq, use_bank_model ? 1 : selected_industry == 'REITs' or selected_industry == 'Utilities' ? 2 : 0, z_safe_cut, z_gold_cut,
+         eng_t, F_suspect or CK.cap == 0, F_eq, use_bank_model ? 1 : selected_industry == 'REITs' or selected_industry == 'Utilities' ? 2 : 0, z_safe_cut, z_gold_cut,
          i_useBeneishCheck and F_manip and math.min(eng_t.get(19), eng_t.get(5), eng_t.get(6), eng_t.get(0)) >= 2, i_use_rkv and is_rkv_value_trap,
          ST.v, ST.q, array.from(Q_X, Q_X + 1, Q_ROE, Q_ROA, Q_GM), beta_ra, beta_rb, bsec >= 604800 ? 31557600 / bsec : trading_days * (bsec >= 86400 ? 86400 : session_sec) / bsec,
          pbh, pb, close, sell_zone_line, finalFairValue, buy_zone_line)
