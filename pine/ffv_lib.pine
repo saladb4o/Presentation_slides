@@ -738,7 +738,7 @@ f_line(Card c, int i) =>
 
 // @function Summary-card row: the total as a bar, the three pillars, the verdict. cl = text, background, header, green, red, amber colours; ts = text size. Returns the next free row.
 export cardSum(table t, int row, Card c, array<color> cl, string ts) =>
-    string tt = "Quality, low risk and value: the traits Frazzini, Kabiller and Pedersen (Buffett's Alpha, 2018) found explain Berkshire's returns; its 1.6x leverage is left out. Each metric scores 0-100 on fixed breakpoints (not a ranking against other stocks, as the paper does). A pillar is the weighted mean of its metrics (N/A under 60% coverage); the total is their geometric mean, so one weak pillar pulls it down. Display only: fair values and the backtest do not use it. Table detail = Scorecard lists every metric.\n\nCoverage: Q " + str.tostring(nz(c.cov.get(0)) * 100, '#') + '% | R ' + str.tostring(nz(c.cov.get(1)) * 100, '#') + '% | V ' + str.tostring(nz(c.cov.get(2)) * 100, '#') + '%' + (c.qcap ? '\nQuality held at 50: Beneish flag.' : '') + (c.vcap ? '\nValue held at 50: value trap.' : '') + (c.why != '' ? '\nN/A: ' + c.why + ' has too little data.' : '')
+    string tt = "Quality, low risk and value: the traits Frazzini, Kabiller and Pedersen (Buffett's Alpha, 2018) found explain Berkshire's returns; its 1.6x leverage is left out. Each metric scores 0-100 on fixed breakpoints (not a ranking against other stocks, as the paper does). A pillar is the weighted mean of its metrics (N/A under 60% coverage); the total is their geometric mean, so one weak pillar pulls it down. A missing interest cover or Altman Z passes its weight to net debt / EBITDA (and back); growth priced in, book-to-market and the owner-earnings yield count only for the fair value's share their model does not carry; price vs fair value moves toward 50 when the models disagree. Display only: fair values and the backtest do not use it. Table detail = Scorecard lists every metric.\n\nCoverage: Q " + str.tostring(nz(c.cov.get(0)) * 100, '#') + '% | R ' + str.tostring(nz(c.cov.get(1)) * 100, '#') + '% | V ' + str.tostring(nz(c.cov.get(2)) * 100, '#') + '%' + (c.qcap ? '\nQuality held at 50: Beneish flag.' : '') + (c.vcap ? '\nValue held at 50: value trap.' : '') + (c.why != '' ? '\nN/A: ' + c.why + ' has too little data.' : '')
     float s = c.total
     t.cell(0, row, 'Buffett score', text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts, tooltip = tt)
     t.cell(1, row, f_bar(s) + ' ' + f_sc(s), text_color = na(s) ? cl.get(0) : f_scol(s, cl), bgcolor = cl.get(1), text_size = ts, text_font_family = font.family_monospace, tooltip = tt)
@@ -832,10 +832,6 @@ export tx(int id) =>
         30 => 'Quadrant 2: Desperation Spiral\nHigh distress AND accounting manipulation. Extreme Danger.'
         31 => "\n\nScore is Z''-EM: safe > 5.85, distress < 4.35."
         32 => '\n\nScore is Altman Z: safe > 3.0, distress < 1.8.'
-        33 => 'Asset growth YoY {0} | EBITDA growth YoY {1}.\n\n{2}'
-        34 => 'DANGER: asset growth strictly exceeds EBITDA growth.'
-        35 => 'Assets are shrinking and EBITDA is shrinking faster.'
-        36 => 'Core cash generation (EBITDA) is keeping pace with or exceeding asset expansion.'
         37 => 'Rhodes-Kropf M/B decomposition:\n\nGrowth options (V/B): {0,number,#.##}x -- fair value vs book. Below 1.0x the business is worth less than its balance sheet.\n\nMispricing (P/V): {1,number,#.##}x -- price vs fair value.'
         38 => 'CAPM Beta: {0,number,#.##}\nDownside Beta: {1}\nRisk-free base: {2} = {3,number,#.##}%\nERP: {4,number,#.#}%\nCRP: {5,number,#.#}% (local-US spread: {6,number,#.#}%)'
         39 => '\nCost of Debt (synthetic): {0,number,#.#}%\nEffective tax: {1,number,#.#}%\n\nMacro (manual): inflation {2,number,#.##}%, real GDP {3,number,#.##}% -> terminal growth {4,number,#.##}%.'

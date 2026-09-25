@@ -1113,7 +1113,6 @@ var float F_pipe = na
 var float F_shield = na
 var float F_rev_g = na
 var float F_asset_g = na
-var float F_ebitda_g = na
 var bool F_inv_dummy = false
 var bool F_deter = false
 var float F_fwd_g = na
@@ -1540,7 +1539,6 @@ if CK.dirty
     F_shield := nz(total_debt_latest) * effective_tax
     F_rev_g := rev_growth
     F_asset_g := asset_growth
-    F_ebitda_g := ebitda_growth
     F_inv_dummy := investment_dummy
     F_deter := is_deteriorating
     F_fwd_g := fwd_eps_growth
