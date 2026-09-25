@@ -345,6 +345,76 @@ export btTable(table tb, string pos, string view, string mode, int min_n, array<
 // ==========================================
 // LONG TEXTS: the indicator's table and tooltip texts, by number
 // ==========================================
+// @function Beneish M-score (5-variable adjusted) against the year-ago quarter. A missing index = 1.0 (no change), missing accruals = 0; needs sales growth.
+export f_beneish(float rec, float rev, float cogs, float debt, float assets, float rec_p, float rev_p, float cogs_p, float debt_p, float assets_p, float ni, float ocf) =>
+    float dsri = math.min(math.max(nz((rec / rev) / (rec_p / rev_p), 1.0), 0.5), 3.0)
+    float gmi = math.min(math.max(nz(((rev_p - cogs_p) / rev_p) / ((rev - cogs) / rev), 1.0), 0.5), 3.0)
+    float sgi = math.min(math.max(rev / rev_p, 0.5), 3.0)
+    float lvgi = math.min(math.max(nz((debt / assets) / math.max(debt_p / assets_p, 0.001), 1.0), 0.5), 3.0)
+    -4.49 + 0.920 * dsri + 0.528 * gmi + 0.892 * sgi + 4.679 * nz((ni - ocf) / assets) - 0.327 * lvgi
+// Value-driver DCF: FCF = NOPAT x (1 - g / RONIC). Year by year, FCF moves from today's
+// (grown with NOPAT) to what is left after the reinvestment NEXT year's growth needs (this
+// year's investment funds it), so heavy-investment years are not compounded forward and
+// the explicit years meet the terminal value without a jump. Written on the growth path,
+// not on FCF / NOPAT, so NOPAT <= 0 converges the same way (no jump at zero NOPAT).
+// na return on capital: the cash flow is already free (no reinvestment is charged).
+// Return on new capital: today's fading to a terminal return capped at 20%, neither below
+// the discount rate (a high-rate market must not turn every unit of growth into value
+// destruction). The cap binds at the terminal, not in the high-growth years.
+export f_vdcf(float cf, float earn, float ret, float rate, float g1, float gT, int yrs) =>
+    pv = 0.0
+    cum = 1.0
+    float r0 = math.max(ret, rate)
+    float rT = math.max(math.min(ret, 0.20), rate)
+    for i = 1 to yrs by 1
+        float w = i / (yrs + 1.0)
+        float yg = g1 * (1.0 - w) + gT * w
+        float nw = (i + 1) / (yrs + 1.0)
+        float ng = i < yrs ? g1 * (1.0 - nw) + gT * nw : gT
+        float wc = i / (yrs * 1.0)
+        cum *= 1 + yg
+        float conv = na(ret) ? 1.0 : 1 - ng / (r0 * (1 - wc) + rT * wc)
+        pv := pv + (cf * cum * (1 - wc) + earn * cum * conv * wc) / math.pow(1 + rate, i)
+    float e_n = earn * cum
+    float reinv = na(ret) ? 0.0 : rT > 0 ? gT / rT : 0.0
+    float tv = e_n * (1 + gT) * (1 - reinv) / (rate - gT)
+    [pv + tv / math.pow(1 + rate, yrs), e_n > 0 ? tv / e_n : na]
+// Residual income: capital + PV of economic profit (stage-1 growth fading to terminal, as in
+// the DCF) + its terminal value.
+export f_rim(float earn, float cap, float rate, float g1, float gT, int yrs) =>
+    float v = na
+    if not na(earn) and cap > 0 and rate > gT
+        float ep = earn - cap * rate
+        pv = 0.0
+        for i = 1 to yrs by 1
+            float w = i / (yrs + 1.0)
+            ep := ep * (1 + g1 * (1 - w) + gT * w)
+            pv := pv + ep / math.pow(1 + rate, i)
+        v := cap + pv + ep * (1 + gT) / (rate - gT) / math.pow(1 + rate, yrs)
+    v
+// Rule of 40 / X: continuous in both scores. 1x EV / sales + 0.25x per Rule-of-40 point
+// (floor 1.5x); the Rule-of-X multiple (12x + 0.3x per point above 65, never below the base)
+// phases in from 55 to 65; capped at 25x. Needs a year-ago revenue (growth not na).
+export f_rulex(float g, float margin, float rev) =>
+    float v = na
+    if not na(g)
+        float r40 = (g + margin) * 100
+        float rx = (g * 2.0 + margin) * 100
+        float base_m = math.max(1.0 + r40 * 0.25, 1.5)
+        float x_m = math.max(12.0 + (rx - 65) * 0.3, base_m)
+        float ramp = math.min(math.max((rx - 55) / 10.0, 0.0), 1.0)
+        v := math.min(base_m + (x_m - base_m) * ramp, 25.0) * rev
+    v
+// A regulated asset is worth its asset base scaled by the ratio of the return the regulator
+// ALLOWS to the return investors REQUIRE: RAB x (allowed - g) / (rate - g), held to 0.5-2x.
+// g arrives held TCAP under the rate, like every engine's terminal growth.
+export f_rab(float rab, float allowed, float rate, float g) =>
+    float v = na
+    if rab > 0 and rate > 0
+        float gg = nz(g)
+        float r = allowed > 0 ? allowed : rate
+        v := rab * math.max(math.min((r - gg) / (rate - gg), 2.0), 0.5)
+    v
 // @function The indicator's long text number `id`.
 // @param id Text number.
 // @returns The text, or an empty string for an unknown number.

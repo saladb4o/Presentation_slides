@@ -7,7 +7,7 @@ Copy everything inside the code block into the Pine Editor and replace the whole
 indicator('Fundamental Fair Value Pro (FF4 + McKinsey/Rev DCF) [Real-Time + Backtest]', shorttitle = 'FFV Pro (Real)', overlay = true, dynamic_requests = true)
 // Companion library pine/ffv_lib.pine (backtester and long texts): publish it as a private
 // library named FFVLib, then replace YOUR_TV_USERNAME with your TradingView username.
-import YOUR_TV_USERNAME/FFVLib/1 as FL
+import YOUR_TV_USERNAME/FFVLib/2 as FL
 // =====================================================================
 // ARCHITECTURE: one top-to-bottom pass per bar, on two clocks
 //   1. Helpers and types   pure maths, backtest state, the model stage: enums, the
@@ -400,69 +400,6 @@ method stream(Drv d, Sx k, float v, int tier) =>
 TCAP = 0.015
 f_mult(float drv, float mult) =>
     na(drv) or drv <= 0 or na(mult) ? na : drv * mult
-// Value-driver DCF: FCF = NOPAT x (1 - g / RONIC). Year by year, FCF moves from today's
-// (grown with NOPAT) to what is left after the reinvestment NEXT year's growth needs (this
-// year's investment funds it), so heavy-investment years are not compounded forward and
-// the explicit years meet the terminal value without a jump. Written on the growth path,
-// not on FCF / NOPAT, so NOPAT <= 0 converges the same way (no jump at zero NOPAT).
-// na return on capital: the cash flow is already free (no reinvestment is charged).
-// Return on new capital: today's fading to a terminal return capped at 20%, neither below
-// the discount rate (a high-rate market must not turn every unit of growth into value
-// destruction). The cap binds at the terminal, not in the high-growth years.
-f_vdcf(float cf, float earn, float ret, float rate, float g1, float gT, int yrs) =>
-    pv = 0.0
-    cum = 1.0
-    float r0 = math.max(ret, rate)
-    float rT = math.max(math.min(ret, 0.20), rate)
-    for i = 1 to yrs by 1
-        float w = i / (yrs + 1.0)
-        float yg = g1 * (1.0 - w) + gT * w
-        float nw = (i + 1) / (yrs + 1.0)
-        float ng = i < yrs ? g1 * (1.0 - nw) + gT * nw : gT
-        float wc = i / (yrs * 1.0)
-        cum *= 1 + yg
-        float conv = na(ret) ? 1.0 : 1 - ng / (r0 * (1 - wc) + rT * wc)
-        pv := pv + (cf * cum * (1 - wc) + earn * cum * conv * wc) / math.pow(1 + rate, i)
-    float e_n = earn * cum
-    float reinv = na(ret) ? 0.0 : rT > 0 ? gT / rT : 0.0
-    float tv = e_n * (1 + gT) * (1 - reinv) / (rate - gT)
-    [pv + tv / math.pow(1 + rate, yrs), e_n > 0 ? tv / e_n : na]
-// Residual income: capital + PV of economic profit (stage-1 growth fading to terminal, as in
-// the DCF) + its terminal value.
-f_rim(float earn, float cap, float rate, float g1, float gT, int yrs) =>
-    float v = na
-    if not na(earn) and cap > 0 and rate > gT
-        float ep = earn - cap * rate
-        pv = 0.0
-        for i = 1 to yrs by 1
-            float w = i / (yrs + 1.0)
-            ep := ep * (1 + g1 * (1 - w) + gT * w)
-            pv := pv + ep / math.pow(1 + rate, i)
-        v := cap + pv + ep * (1 + gT) / (rate - gT) / math.pow(1 + rate, yrs)
-    v
-// Rule of 40 / X: continuous in both scores. 1x EV / sales + 0.25x per Rule-of-40 point
-// (floor 1.5x); the Rule-of-X multiple (12x + 0.3x per point above 65, never below the base)
-// phases in from 55 to 65; capped at 25x. Needs a year-ago revenue (growth not na).
-f_rulex(float g, float margin, float rev) =>
-    float v = na
-    if not na(g)
-        float r40 = (g + margin) * 100
-        float rx = (g * 2.0 + margin) * 100
-        float base_m = math.max(1.0 + r40 * 0.25, 1.5)
-        float x_m = math.max(12.0 + (rx - 65) * 0.3, base_m)
-        float ramp = math.min(math.max((rx - 55) / 10.0, 0.0), 1.0)
-        v := math.min(base_m + (x_m - base_m) * ramp, 25.0) * rev
-    v
-// A regulated asset is worth its asset base scaled by the ratio of the return the regulator
-// ALLOWS to the return investors REQUIRE: RAB x (allowed - g) / (rate - g), held to 0.5-2x.
-// g arrives held TCAP under the rate, like every engine's terminal growth.
-f_rab(float rab, float allowed, float rate, float g) =>
-    float v = na
-    if rab > 0 and rate > 0
-        float gg = nz(g)
-        float r = allowed > 0 ? allowed : rate
-        v := rab * math.max(math.min((r - gg) / (rate - gg), 2.0), 0.5)
-    v
 // One engine per kind of model; each returns its value and an auxiliary (the DCF's implied
 // exit multiple). EVA: capital + PV(EVA), EVA growing at terminal. Perpetuity: no growth.
 // Growing perpetuity: Gordon growth at terminal. Graham: EPS x (8.5 + 2g) x the bond-yield
@@ -473,11 +410,11 @@ f_engine(Eng e, KIn x) =>
     if e == Eng.mult
         v := f_mult(x.drv, x.mult)
     else if e == Eng.vdcf
-        [a, b] = f_vdcf(x.cf, x.earn, x.ret, x.rate, x.g1, x.gT, x.yrs)
+        [a, b] = FL.f_vdcf(x.cf, x.earn, x.ret, x.rate, x.g1, x.gT, x.yrs)
         v := a
         aux := b
     else if e == Eng.rim
-        v := f_rim(x.earn, x.cap, x.rate, x.g1, x.gT, x.yrs)
+        v := FL.f_rim(x.earn, x.cap, x.rate, x.g1, x.gT, x.yrs)
     else if e == Eng.eva
         v := x.cap + (x.earn - x.cap * x.rate) * (1 + x.gT) / (x.rate - x.gT)
     else if e == Eng.perp
@@ -487,7 +424,7 @@ f_engine(Eng e, KIn x) =>
     else if e == Eng.graham
         v := x.earn * (8.5 + 2 * x.gx * 100) * x.adj
     else if e == Eng.rulex
-        v := f_rulex(x.gx, x.adj, x.drv)
+        v := FL.f_rulex(x.gx, x.adj, x.drv)
     else if e == Eng.ref
         v := x.ref
     else
@@ -562,7 +499,7 @@ f_kin(Model m, Drv d, Pos p, KIn x) =>
 f_addon(AddOn a, KIn x, Drv d) =>
     switch a
         AddOn.pipeline => d.pipe
-        AddOn.netco => f_rab(d.netco_rab, d.allowed, x.rate, x.gT)
+        AddOn.netco => FL.f_rab(d.netco_rab, d.allowed, x.rate, x.gT)
         AddOn.shield => d.shield
         => 0.0
 // ONE EVALUATION of a row at position p: its inputs, the positive-input check, the engine,
@@ -1481,20 +1418,7 @@ if CK.dirty
     is_manipulator = false
     float m_score = na
     if i_useBeneishCheck
-        float rec_prev = Y4.get(Q_REC)
-        float cogs_prev = Y4.get(Q_COGS)
-        float dsri = (accounts_receivable_ttm / total_revenue_ttm) / (rec_prev / total_revenue_ttm_prev)
-        float gmi = ((total_revenue_ttm_prev - cogs_prev) / total_revenue_ttm_prev) / ((total_revenue_ttm - cogs_ttm) / total_revenue_ttm)
-        float sgi = total_revenue_ttm / total_revenue_ttm_prev
-        float lvgi = (total_debt_latest / total_assets_fq) / math.max((total_debt_1y_ago / total_assets_prev), 0.001)
-        float tata = (net_income_ttm - ocf_ttm) / total_assets_fq
-        // [NEUTRAL] A missing index = 1.0 (no change), missing accruals = 0; needs sales growth.
-        dsri := math.min(math.max(nz(dsri, 1.0), 0.5), 3.0)
-        gmi := math.min(math.max(nz(gmi, 1.0), 0.5), 3.0)
-        sgi := math.min(math.max(sgi, 0.5), 3.0)
-        lvgi := math.min(math.max(nz(lvgi, 1.0), 0.5), 3.0)
-        tata := nz(tata)
-        m_score := -4.49 + (0.920 * dsri) + (0.528 * gmi) + (0.892 * sgi) + (4.679 * tata) - (0.327 * lvgi)
+        m_score := FL.f_beneish(accounts_receivable_ttm, total_revenue_ttm, cogs_ttm, total_debt_latest, total_assets_fq, Y4.get(Q_REC), total_revenue_ttm_prev, Y4.get(Q_COGS), total_debt_1y_ago, total_assets_prev, net_income_ttm, ocf_ttm)
         is_manipulator := m_score > -1.78
     // Owners' earnings = OCF - maintenance capex; growth capex = sales growth x net PPE / sales
     // (Greenwald: the capital a unit of new sales ties up; gross PPE counts retired assets).
