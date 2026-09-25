@@ -694,13 +694,19 @@ i_bt_fees = input.float(0.5, 'Round-trip Fees & Slippage %', group = group_bt, t
 i_bt_win_threshold = input.float(0.0, 'Min Profit % to count as Win', group = group_bt, tooltip = 'Set to > 0 if you want to ignore tiny gains (e.g., 2%).') / 100
 i_report_lag = input.int(45, 'Report lag (days)', minval = 0, maxval = 120, group = group_bt, tooltip = "request.financial returns a quarter's numbers from the START of the next period -- weeks before they were published. Each new value is released on the next earnings report date, or after this many days at most. 0 restores the old (look-ahead) behaviour. The latest value is always released on the last bar.")
 group_cf = 'Companion Feed'
-i_cf_on = input.bool(false, 'Use FFV Companion Feed', group = group_cf, tooltip = 'Add FFV Companion Feed to the chart first, then pick its 8 plots below. Its values only fill gaps the engine could not solve exactly. A wrong or missing link, or a different report lag, disables the whole feed.')
+i_cf_on = input.bool(false, 'Use FFV Companion Feed', group = group_cf, tooltip = "Add FFV Companion Feed to the chart first, then pick its 14 plots below, each by its own name. Its values only fill gaps the engine could not solve exactly, and turn owner earnings into Buffett's definition. A wrong or missing link, or a different report lag, disables the whole feed.")
 i_cf_eq = input.source(close, 'Feed: Equity', group = group_cf)
 i_cf_gp = input.source(close, 'Feed: Gross profit', group = group_cf)
 i_cf_ed = input.source(close, 'Feed: EBITDA', group = group_cf)
 i_cf_cx = input.source(close, 'Feed: Capex', group = group_cf)
 i_cf_da = input.source(close, 'Feed: D&A', group = group_cf)
-i_cf_oe = input.source(close, 'Feed: Owner earnings per share', group = group_cf)
+i_cf_im = input.source(close, 'Feed: Impairments', group = group_cf)
+i_cf_wc = input.source(close, 'Feed: Working capital', group = group_cf)
+i_cf_aj = input.source(close, 'Feed: OE adjustment', group = group_cf)
+i_cf_sh = input.source(close, 'Feed: Shares', group = group_cf)
+i_cf_cs = input.source(close, 'Feed: Cash', group = group_cf)
+i_cf_db = input.source(close, 'Feed: Debt', group = group_cf)
+i_cf_cl = input.source(close, 'Feed: Current liabilities', group = group_cf)
 i_cf_codes = input.source(close, 'Feed: Codes', group = group_cf)
 i_cf_chk = input.source(close, 'Feed: Check', group = group_cf)
 i_acquirer_mult = input.float(10.0, "Acquirer's Multiple Target (EV/EBIT)", group = group_iv, tooltip = "Tobias Carlisle's standard is 10x. Raise this to 15x or 20x for large-cap/growth stocks.")
@@ -996,19 +1002,23 @@ fin_changed = FL.release(fin_raw, fin_pend, fin_known, fin_seen, i_report_lag, r
 // (weighted mantissas, FL.mant) recomputes: a link left on the close fails it at any scale.
 // Codes: lag + 1000 x sum(code_i x 4^i), code 1 reported, 2 reported parts (tier 2),
 // 3 from a ratio (tier 1), 0 none.
-array<float> cf_v = array.from(i_cf_eq, i_cf_gp, i_cf_ed, i_cf_cx, i_cf_da, i_cf_oe)
-float cf_sum = 8 * FL.mant(i_cf_codes)
+array<float> cf_v = array.from(i_cf_eq, i_cf_gp, i_cf_ed, i_cf_cx, i_cf_da, i_cf_im, i_cf_wc, i_cf_aj, i_cf_sh, i_cf_cs, i_cf_db, i_cf_cl)
+float cf_sum = 14 * FL.mant(i_cf_codes)
 for [k, x] in cf_v
     cf_sum += (k + 2) * FL.mant(x)
 bool cf_ok = i_cf_on and not na(i_cf_codes) and i_cf_codes % 1000 == i_report_lag and math.abs(i_cf_chk - cf_sum) <= 1e-6
 int cf_c = cf_ok ? int(i_cf_codes / 1000) : 0
 array<int> cf_t = array.new_int(0)
-for k = 0 to 5
+// A new feed value is new data (it triggers a rebuild).
+var array<float> cf_last = array.new_float(12, na)
+bool cf_new = false
+for [k, x] in cf_v
     int c = int(cf_c / math.pow(4, k)) % 4
     cf_t.push(c == 3 ? 1 : 2)
-// A new feed value is new data: every witness runs on every bar ('or' is lazy).
-bool cf_n0 = f_fresh(i_cf_eq), bool cf_n1 = f_fresh(i_cf_gp), bool cf_n2 = f_fresh(i_cf_ed), bool cf_n3 = f_fresh(i_cf_cx), bool cf_n4 = f_fresh(i_cf_da), bool cf_n5 = f_fresh(i_cf_oe)
-fin_changed := fin_changed or cf_ok and (cf_n0 or cf_n1 or cf_n2 or cf_n3 or cf_n4 or cf_n5)
+    if not na(x) and x != cf_last.get(k)
+        cf_new := true
+        cf_last.set(k, x)
+fin_changed := fin_changed or cf_ok and cf_new
 // ---------------------------------------------------------------------
 // 3.3 QUARTER TRIGGER, RELEASE CLOCK AND QUARTER STORE
 // ---------------------------------------------------------------------
@@ -1036,7 +1046,7 @@ CK.step(is_new_quarter, fin_changed, bpy)
 int Q_FLOW = 0, int Q_RAT = 14, int Q_RV0 = 35, int Q_AS0 = 36, int Q_PN0 = 37, int Q_RND = 38, int Q_EPS0 = 39
 int Q_ROA = 40, int Q_CR = 41, int Q_LEV = 42, int Q_GM = 43, int Q_AT = 44, int Q_SH = 45, int Q_EBIT = 46
 int Q_REV = 47, int Q_AS = 48, int Q_EBITDA = 49, int Q_DEBT = 50, int Q_REC = 51, int Q_COGS = 52
-int Q_PEQ = 53, int Q_ROE = 54, int Q_OP = 55, int Q_PX = 56, int Q_FFV = 57, int Q_FREL = 58, int Q_FV = 59
+int Q_PEQ = 53, int Q_ROE = 54, int Q_OP = 55, int Q_PX = 56, int Q_FFV = 57, int Q_FREL = 58, int Q_MNT = 59, int Q_FV = 60
 int Q_MULT = Q_FV + MD.size()
 var QStore ST = QStore.new(matrix.new<float>(128, Q_MULT + MD.size(), na))
 // FIRM (F_*): report data, rebuilt when the clock marks it dirty. Solved items (sh ... nd) with their
@@ -1094,6 +1104,7 @@ var float F_roic = na
 var float F_netco_sh = na
 var float F_netco_rab = na
 var float F_oe_ps = na
+var int F_t_oe = 0
 var float F_pipe = na
 var float F_shield = na
 var float F_rev_g = na
@@ -1179,7 +1190,7 @@ if CK.dirty
     float ocf_ttm = fin.get(10)
     float ni_rep_ttm = fin.get(13) // attributable to the parent
     float minority_fq = fin.get(14)
-    float curr_liab_fq = fin.get(20)
+    float curr_liab_fq = nz(fin.get(20), cf_ok ? cf_v.get(11) : na)
     float total_debt_latest = fin.get(21)
     float cash_latest = fin.get(22)
     float receiv_fq = fin.get(24)
@@ -1215,6 +1226,9 @@ if CK.dirty
     t_shares := not na(calc_shares) ? 3 : 0
     if na(calc_shares) and eps_ttm != 0 and net_income_ttm / eps_ttm > 0
         calc_shares := net_income_ttm / eps_ttm
+        t_shares := 2
+    if na(calc_shares) and cf_ok and cf_v.get(8) > 0
+        calc_shares := cf_v.get(8)
         t_shares := 2
     if na(calc_shares) and not na(mem_shares)
         calc_shares := mem_shares
@@ -1269,8 +1283,9 @@ if CK.dirty
         for p = 0 to 3
             // The feed fills only what the exact identities left open, then they run again.
             if st == 0 and p == 2 and cf_ok
-                for [k, i] in array.from(iEQ, iGP, iED, iCX, iDA)
-                    f_put(i, cf_v.get(k), cf_t.get(k))
+                for [k, i] in array.from(iEQ, iGP, iED, iCX, iDA, -1, -1, -1, -1, iCS, iDB)
+                    if i >= 0
+                        f_put(i, cf_v.get(k), cf_t.get(k))
             for k = 0 to 5
                 int a = id3.get(3 * k), int b = id3.get(3 * k + 1), int c = id3.get(3 * k + 2)
                 float va = f_g(a), float vb = f_g(b), float vc = f_g(c)
@@ -1378,14 +1393,10 @@ if CK.dirty
     // R&D is capitalised over 3 years, straight line. A year with no R&D figure (before the
     // history, or before the field starts) is taken as 10% below the year after it, so every
     // vintage is amortised: the store keeps the raw series, where missing is na, not 0.
-    float safe_rnd = nz(rnd_ttm)
-    float rnd_1y_ago = nz(Y4.get(Q_RND), safe_rnd * 0.9)
-    float rnd_2y_ago = nz(Y8.get(Q_RND), rnd_1y_ago * 0.9)
-    float rnd_3y_ago = nz(Y12.get(Q_RND), rnd_2y_ago * 0.9)
-    float rnd_amortization = (rnd_1y_ago + rnd_2y_ago + rnd_3y_ago) / 3.0
     // The unamortised part is an asset: with it outside invested capital, ROIC (and EVA / RIM)
     // would count the capitalised R&D in NOPAT against a capital base that leaves it out.
-    float research_asset = safe_rnd + rnd_1y_ago * 2.0 / 3.0 + rnd_2y_ago / 3.0
+    float safe_rnd = nz(rnd_ttm)
+    [rnd_amortization, research_asset] = FL.f_rnd(safe_rnd, Y4.get(Q_RND), Y8.get(Q_RND), Y12.get(Q_RND))
     // A missing tax line falls back to 21% as a loss year does (it made NOPAT and WACC na).
     float effective_tax = pretax_income_ttm > 0 ? math.min(math.max(nz(income_tax_ttm / pretax_income_ttm, 0.21), 0.0), 0.35) : 0.21
     float nopat_adjusted = (ebit_ttm + safe_rnd - rnd_amortization) * (1 - effective_tax)
@@ -1438,14 +1449,28 @@ if CK.dirty
     // Owners' earnings = OCF - maintenance capex; growth capex = sales growth x net PPE / sales
     // (Greenwald: the capital a unit of new sales ties up; gross PPE counts retired assets).
     float oe_per_share = na
+    int t_oe = t_ocf
     if calc_ppe_net > 0 and total_revenue_ttm > 0 and not na(total_revenue_ttm_prev)
         float abs_total_capex = math.abs(calc_capex)
         float growth_capex = math.min(math.max(0, (total_revenue_ttm - total_revenue_ttm_prev) * (calc_ppe_net / total_revenue_ttm)), abs_total_capex)
-        float owners_earnings = ocf_ttm - (abs_total_capex - growth_capex)
+        float mnt = abs_total_capex - growth_capex
+        ST.write(Q_MNT, mnt)
+        float owners_earnings = ocf_ttm - mnt
+        // With the feed, Buffett's definition (1986): net income + D&A + impairments - the
+        // 3-year average maintenance capex + a lasting working-capital build-up (the feed's
+        // 3-year average; a release is not counted) + the opt-in adjustment. Every engine
+        // input keeps its tier: the result is rated by the weakest.
+        if cf_ok and not na(cf_v.get(6))
+            float ms = 0.0
+            int mn = 0
+            for y = 0 to 2
+                float x = ST.at(Q_MNT, 4 * y)
+                if not na(x)
+                    ms += x
+                    mn += 1
+            owners_earnings := net_income_ttm + f_g(iDA) + nz(cf_v.get(5)) - ms / mn + math.min(cf_v.get(6), 0) + nz(cf_v.get(7))
+            t_oe := math.min(math.min(t_ni, f_tg(iDA)), f_tg(iCX))
         oe_per_share := shares_out_latest > 0 ? owners_earnings / shares_out_latest : na
-    // Buffett's owner earnings from the feed when it has them (net income + D&A - maintenance capex).
-    if cf_ok and not na(i_cf_oe)
-        oe_per_share := i_cf_oe
     // Telecom unbundling: NetCo share = net PPE / invested capital (held to 30-90%; no PPE, no
     // split). NetCo = that share of invested capital (the network, net PPE) at a RAB multiple;
     // ServeCo = the rest of the unlevered FCF and NOPAT through the value-driver DCF. The two
@@ -1501,6 +1526,7 @@ if CK.dirty
     F_netco_sh := netco_sh
     F_netco_rab := netco_sh * invested_capital_adj
     F_oe_ps := oe_per_share
+    F_t_oe := t_oe
     F_pipe := nz(rnd_ttm) * 5.0 * 0.15
     F_shield := nz(total_debt_latest) * effective_tax
     F_rev_g := rev_growth
@@ -1576,37 +1602,11 @@ if beta_sample and not na(asset_p) and not na(mkt_bench_p)
             beta_rb.shift()
     beta_last_a := asset_p
     beta_last_b := mkt_bench_p
-// Full beta and downside beta from the same sampled pairs. Needs 12+ pairs.
-f_beta_pair(array<float> ra, array<float> rb, bool downside_only) =>
-    sa = 0.0
-    sb = 0.0
-    n = 0
-    int sz = rb.size()
-    float out = na
-    if sz > 0
-        for i = 0 to sz - 1
-            float b = rb.get(i)
-            if not downside_only or b < 0
-                sa += ra.get(i)
-                sb += b
-                n += 1
-        if n >= 12
-            float ma = sa / n
-            float mb = sb / n
-            cov = 0.0
-            vb = 0.0
-            for i = 0 to sz - 1
-                float b = rb.get(i)
-                if not downside_only or b < 0
-                    cov += (ra.get(i) - ma) * (b - mb)
-                    vb += (b - mb) * (b - mb)
-            out := vb > 0 ? cov / vb : na
-    out
 var float downside_beta = na
 var float raw_beta_s = na
 if beta_sample
-    raw_beta_s := f_beta_pair(beta_ra, beta_rb, false)
-    downside_beta := f_beta_pair(beta_ra, beta_rb, true)
+    raw_beta_s := FL.f_beta_pair(beta_ra, beta_rb, false)
+    downside_beta := FL.f_beta_pair(beta_ra, beta_rb, true)
 // ==========================================
 // AUTO-PREMIUM CALCULATION
 // ==========================================
@@ -1900,7 +1900,7 @@ f_drivers(Clock ck, Drv d, Claims c) =>
     // Equity Cash Flow: a normalised ROE (the 5-year median, else today's).
     d.stream(Sx.roe_n, nz(H_roe_med, roe), tq)
     d.stream(Sx.dps, F_dps, cap)
-    d.stream(Sx.oe_ps, F_oe_ps > 0 and coe > 0 ? F_oe_ps : na, t_o)
+    d.stream(Sx.oe_ps, F_oe_ps > 0 and coe > 0 ? F_oe_ps : na, math.min(F_t_oe, cap))
     d.stream(Sx.nopat_n, F_nopat_n, tb)
     // [FIX GRAHAM] Graham needs real positive earnings; growth held to 0-15% (Graham meant a
     // 7-10 year rate); 4.4 / Y rescales for bond yields, capped at 1.0 so it only penalises.

@@ -434,6 +434,38 @@ export release(array<float> raw, array<float> pend, array<float> known, array<in
 // @function Check-value term: the mantissa of x (x / 10^floor(log10|x|)), 0 for na or 0. Summed with weights over every value the companion sends, so each link is checked at its own scale.
 export mant(float x) =>
     na(x) or x == 0 ? 0.0 : x / math.pow(10, math.floor(math.log10(math.abs(x))))
+// @function R&D capitalised over 3 years, straight line: [amortisation, unamortised asset]. A year with no figure is taken as 10% below the year after it.
+export f_rnd(float r0, float r1, float r2, float r3) =>
+    float a1 = nz(r1, r0 * 0.9)
+    float a2 = nz(r2, a1 * 0.9)
+    float a3 = nz(r3, a2 * 0.9)
+    [(a1 + a2 + a3) / 3.0, r0 + a1 * 2.0 / 3.0 + a2 / 3.0]
+// @function Full beta and downside beta from the same sampled pairs. Needs 12+ pairs.
+export f_beta_pair(array<float> ra, array<float> rb, bool downside_only) =>
+    sa = 0.0
+    sb = 0.0
+    n = 0
+    int sz = rb.size()
+    float out = na
+    if sz > 0
+        for i = 0 to sz - 1
+            float b = rb.get(i)
+            if not downside_only or b < 0
+                sa += ra.get(i)
+                sb += b
+                n += 1
+        if n >= 12
+            float ma = sa / n
+            float mb = sb / n
+            cov = 0.0
+            vb = 0.0
+            for i = 0 to sz - 1
+                float b = rb.get(i)
+                if not downside_only or b < 0
+                    cov += (ra.get(i) - ma) * (b - mb)
+                    vb += (b - mb) * (b - mb)
+            out := vb > 0 ? cov / vb : na
+    out
 // @function The indicator's long text number `id`.
 // @param id Text number.
 // @returns The text, or an empty string for an unknown number.
