@@ -38,8 +38,20 @@ var array<float> pend = array.new_float(NR, na)
 var array<float> known = array.new_float(NR, na)
 var array<int> seen = array.new_int(NR, 0)
 bool changed = FL.release(raw, pend, known, seen, i_lag, report_bar)
+// A balance item unchanged for 4 quarters (the last-FY impairments: 8) is stale: dropped,
+// not carried, so an abandoned field never passes as current. nq counts store quarters.
+var int nq = 0
+var array<float> lastv = array.new_float(NR, na)
+var array<int> lastq = array.new_int(NR, 0)
+var array<int> BAL = array.from(0, 1, 2, 15, 23, 24, 25, 26, 27, 28, 29)
+for i in BAL
+    float x = known.get(i)
+    if not na(x) and x != lastv.get(i)
+        lastv.set(i, x)
+        lastq.set(i, nq)
 K(int i) =>
-    known.get(i)
+    float x = known.get(i)
+    BAL.includes(i) and nq - lastq.get(i) >= (i == 15 ? 8 : 4) ? na : x
 // TradingView margins may come as percent: a margin above 3 is read as percent.
 pct(float x) =>
     na(x) ? na : math.abs(x) > 3 ? x / 100 : x
@@ -61,6 +73,7 @@ int min_gap = math.max(1, int(bpy * 45 / 365.25))
 var int last_q = -100000
 if (fr1 or fr2 or fr3 or fr4) and bar_index - last_q >= min_gap
     last_q := bar_index
+    nq += 1
     Q.add_row(0, array.new_float(13, na))
     if Q.rows() > 16
         Q.remove_row(16)
@@ -118,8 +131,13 @@ if Q.rows() > 0 and (changed or last_q == bar_index)
     [g, cg] = pick(K(3), 1, rev > 0 ? gm * rev : na, 3, rev > 0 ? rev * (1 - cr) : na, 3)
     put(1, g, cg)
     float da1 = ttm(0, 4), float dd = ttm(0, 0), float am = ttm(0, 5)
+    // EBITDA backup needs amortisation too (depreciation alone understates it): no
+    // amortisation figure -> depreciation only, rated as a ratio.
     float em = pct(K(9))
-    [ed, ced] = pick(K(6), 1, K(7) + dd, 2, rev > 0 ? em * rev : na, 3)
+    [ed, ced] = pick(K(6), 1, not na(am) ? K(7) + dd + am : na, 2, rev > 0 ? em * rev : na, 3)
+    if na(ed) and not na(K(7) + dd)
+        ed := K(7) + dd
+        ced := 3
     put(2, ed, ced)
     float cx1 = ttm(0, 1), float cxf = ttm(0, 2), float cxo = ttm(0, 3)
     [cx, ccx] = pick(-math.abs(cx1), 1, -(math.abs(cxf) + math.abs(nz(cxo))), 2, na, 0)

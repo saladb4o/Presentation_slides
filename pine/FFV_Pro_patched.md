@@ -1473,8 +1473,9 @@ if CK.dirty
                 if not na(x)
                     ms += x
                     mn += 1
-            owners_earnings := net_income_ttm + f_g(iDA) + nz(cf_v.get(5)) - ms / mn + math.min(cf_v.get(6), 0) + nz(cf_v.get(7))
-            t_oe := math.min(math.min(t_ni, f_tg(iDA)), f_tg(iCX))
+            float da_oe = nz(cf_v.get(4), f_g(iDA)) // cash-flow D&A (incl. amortisation) first
+            owners_earnings := net_income_ttm + da_oe + nz(cf_v.get(5)) - ms / mn + math.min(cf_v.get(6), 0) + nz(cf_v.get(7))
+            t_oe := math.min(math.min(t_ni, na(cf_v.get(4)) ? f_tg(iDA) : cf_t.get(4)), f_tg(iCX))
         oe_per_share := shares_out_latest > 0 ? owners_earnings / shares_out_latest : na
     // Telecom unbundling: NetCo share = net PPE / invested capital (held to 30-90%; no PPE, no
     // split). NetCo = that share of invested capital (the network, net PPE) at a RAB multiple;
