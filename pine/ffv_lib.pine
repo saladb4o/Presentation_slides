@@ -1,0 +1,402 @@
+//@version=6
+// @description Companion library for Fundamental Fair Value Pro: the no-repaint backtester
+// (state, engine, three-view dashboard) and the indicator's long table and tooltip texts.
+// It lives here because a library compiles on its own, so this code does not count toward
+// the indicator's compile-size limit. Publish it as a PRIVATE library named FFVLib; after
+// any change, publish a new version and bump the number in the indicator's import line.
+library('FFVLib')
+// ==========================================
+// BACKTEST STATE (one ModelStats per registry model)
+// ==========================================
+// @type One period's closed trades.
+export type PeriodStats
+    int wins = 0
+    int total = 0
+    float gross_profit = 0.0
+    float gross_loss = 0.0
+    array<float> closed_returns
+    array<float> closed_drawdowns
+    array<float> closed_ann_returns
+    array<float> closed_discounts
+    array<float> closed_holds
+// @type One open trade: entry price, lowest low since entry, entry bar, entry discount, period, dividends accrued.
+export type Trade
+    float px
+    float mn
+    int bar
+    float disc
+    int per
+    float div = 0.0
+// @type One model's backtest: three periods, its open trades.
+export type ModelStats
+    PeriodStats is_stats
+    PeriodStats oos_stats
+    PeriodStats fwd_stats
+    array<Trade> tr
+    int straddled = 0
+    int last_entry = -999
+f_new_period() =>
+    PeriodStats.new(0, 0, 0.0, 0.0, array.new_float(), array.new_float(), array.new_float(), array.new_float(), array.new_float())
+// @function A fresh, empty ModelStats.
+// @returns ModelStats
+export newModel() =>
+    ModelStats.new(f_new_period(), f_new_period(), f_new_period(), array.new<Trade>())
+// Median of a sorted copy: the mean of the two middle values when the count is even.
+f_lmedian(array<float> a) =>
+    int n = a.size()
+    float r = na
+    if n > 0
+        array<float> s = a.copy()
+        s.sort()
+        r := n % 2 == 1 ? s.get(int(n / 2)) : (s.get(int(n / 2) - 1) + s.get(int(n / 2))) / 2.0
+    r
+// --- HELPER: ARRAY CORRELATION (FOR TIME-SERIES IC) ---
+f_array_correl(array<float> arr_x, array<float> arr_y) =>
+    int n = arr_x.size()
+    float res = na
+    if n > 1
+        float mean_x = arr_x.avg()
+        float mean_y = arr_y.avg()
+        float num = 0.0, float den_x = 0.0, float den_y = 0.0
+        for i = 0 to n - 1
+            float dx = arr_x.get(i) - mean_x
+            float dy = arr_y.get(i) - mean_y
+            num += (dx * dy)
+            den_x += (dx * dx)
+            den_y += (dy * dy)
+        if den_x > 0 and den_y > 0
+            res := num / math.sqrt(den_x * den_y)
+    res
+// @function One bar of one model's rolling backtest: accrue, close exits, open an entry.
+// @param stats_obj The model's state.
+// @param current_fv Fair value on this bar (the baseline passes 10x price).
+// @param current_close Close.
+// @param current_low Low.
+// @param bar Bar index.
+// @param dps_bar Dividend per share accrued per bar.
+// @param bpy Bars per year.
+// @param exit_prem Exit when price > FV x (1 + this).
+// @param max_hold Holding period in bars.
+// @param max_open Open tranche cap (0 = unlimited).
+// @param current_period Period 1-3 (0 = outside every period).
+// @param entry_margin Buy below FV x (1 - this).
+// @param cooldown Bars between entries.
+// @param drop_straddle Exclude trades that straddle a period boundary.
+// @param fees Round-trip fees.
+// @param win_th Minimum return that counts as a win.
+export update(ModelStats stats_obj, float current_fv, float current_close, float current_low, int bar, float dps_bar, int bpy, float exit_prem, int max_hold, int max_open, int current_period, float entry_margin, int cooldown, bool drop_straddle, float fees, float win_th) =>
+    int open_trades = stats_obj.tr.size()
+    target_hit = current_fv > 0 and current_close >= current_fv * (1.0 + exit_prem)
+    if open_trades > 0
+        for i = open_trades - 1 to 0
+            t = stats_obj.tr.get(i)
+            float e_price = t.px
+            int e_period = t.per
+            t.div += dps_bar
+            t.mn := math.min(t.mn, current_low)
+            float new_min = t.mn
+            int bars_held = bar - t.bar
+            if target_hit or bars_held >= max_hold
+                straddles = (current_period > 0) and (current_period != e_period)
+                skip_trade = straddles and drop_straddle
+                if straddles
+                    stats_obj.straddled += 1
+                active_stats = e_period == 1 ? stats_obj.is_stats : (e_period == 2 ? stats_obj.oos_stats : stats_obj.fwd_stats)
+                active_stats.total += skip_trade ? 0 : 1
+                float years_held = math.max(bars_held / float(bpy), 0.083)
+                float raw_exit_price = current_close + t.div
+                float net_return_pct = ((raw_exit_price - e_price) / e_price) - fees
+                float ann_ret_pct = (math.pow(1.0 + math.max(net_return_pct, -0.999), 1.0 / years_held) - 1.0) * 100
+                float max_dd_pct = ((new_min - e_price) / e_price) * 100
+                if not skip_trade
+                    if net_return_pct > 0
+                        active_stats.gross_profit += net_return_pct
+                    else
+                        active_stats.gross_loss += math.abs(net_return_pct)
+                    if net_return_pct > win_th
+                        active_stats.wins += 1
+                    active_stats.closed_returns.push(net_return_pct)
+                    active_stats.closed_drawdowns.push(max_dd_pct)
+                    active_stats.closed_ann_returns.push(ann_ret_pct)
+                    active_stats.closed_discounts.push(t.disc)
+                    active_stats.closed_holds.push(years_held)
+                // [PERF] SWAP-AND-POP (loop runs descending, order is never read).
+                stats_obj.tr.set(i, stats_obj.tr.last())
+                stats_obj.tr.pop()
+    // Entry Logic (max_open 0 = unlimited)
+    int n_open = stats_obj.tr.size()
+    if current_period > 0 and current_fv > 0 and (max_open <= 0 or n_open < max_open)
+        float buy_limit = current_fv * (1.0 - entry_margin)
+        if current_close <= buy_limit and (n_open == 0 or (bar - stats_obj.last_entry) >= cooldown)
+            stats_obj.tr.push(Trade.new(current_close, current_close, bar, (current_fv - current_close) / current_close, current_period))
+            stats_obj.last_entry := bar
+    true
+f_calc_vacagr(PeriodStats stats) =>
+    float geo_cagr = na
+    int n_ann = stats.closed_ann_returns.size()
+    if n_ann > 0
+        comp_mult = 1.0
+        for r in stats.closed_ann_returns
+            comp_mult *= math.max(1.0 + r / 100.0, 0.001)
+        geo_cagr := (math.pow(comp_mult, 1.0 / n_ann) - 1.0) * 100.0
+    geo_cagr
+// =====================================================================
+// BACKTEST RENDERER -- 3 VIEWS
+// =====================================================================
+// One period's metrics: [trades, win %, expectancy, MAE, IC, median trade, average hold, VACAGR].
+f_period_metrics(PeriodStats stats) =>
+    int n = stats.total
+    float wr = n > 0 ? (stats.wins / float(n)) * 100.0 : na
+    float avg_win = stats.wins > 0 ? (stats.gross_profit / stats.wins) : 0.0
+    float avg_loss = (n - stats.wins) > 0 ? (stats.gross_loss / (n - stats.wins)) : 0.0
+    float expectancy = n > 0 ? ((wr / 100.0) * avg_win) - ((1.0 - (wr / 100.0)) * avg_loss) : na
+    float mae = stats.closed_drawdowns.size() > 0 ? stats.closed_drawdowns.min() : na
+    float ic = f_array_correl(stats.closed_discounts, stats.closed_returns)
+    float med_ret = f_lmedian(stats.closed_returns)
+    float avg_hold = stats.closed_holds.size() > 0 ? stats.closed_holds.avg() : na
+    [n, wr, expectancy, mae, ic, med_ret, avg_hold, f_calc_vacagr(stats)]
+// Median trade annualised over the average hold (floor 3 months), in %: comparable across
+// holding periods, unlike a raw median (scales with hold) or VACAGR (short holds dominate).
+f_med_ann(float med_ret, float avg_hold) =>
+    na(med_ret) ? na : (math.pow(1 + math.max(med_ret, -0.999), 1 / math.max(nz(avg_hold, 1.0), 0.25)) - 1) * 100
+f_conf_col(int n, int min_n) =>
+    n == 0 ? color.new(color.gray, 85) : n < min_n ? color.new(color.gray, 75) : color(na)
+// Period 1 = in-sample, 2 = out-of-sample, 3 = forward.
+f_ps(ModelStats m, int which) =>
+    which == 1 ? m.is_stats : which == 2 ? m.oos_stats : m.fwd_stats
+f_format_period(PeriodStats stats, int min_n) =>
+    [pn, pwr, pex, pmae, pic, pmed, phold, pvac] = f_period_metrics(stats)
+    if pn == 0
+        ["N/A", "No trades in this period.", color.new(color.gray, 80), color.gray]
+    else
+        float md = nz(f_med_ann(pmed, phold))
+        main_txt = str.tostring(md, "#.0") + "%/y (" + str.tostring(pwr, "#.0") + "%) n=" + str.tostring(pn)
+        tt = str.format('Trades: {0}\nIC (Alpha): {1}\nExpectancy: {2}\nMedian trade: {3}\nMean trade: {4,number,#.0}%\nVACAGR: {5}\nAvg hold: {6}\nMAE (per-trade): {7}\n\nHeadline = median trade (after fees, dividends accrued) annualised over the average hold. VACAGR annualizes each trade with a 1-month floor, so short holds dominate it.', str.tostring(pn), (not na(pic) ? str.tostring(pic, "#.00") : "N/A"), (not na(pex) ? str.format('{0,number,#.0}%', pex * 100) : "N/A"), (not na(pmed) ? str.format('{0,number,#.0}%', pmed * 100) : "N/A"), stats.closed_returns.avg() * 100, (not na(pvac) ? str.format('{0,number,#.0}%', pvac) : "N/A"), (not na(phold) ? str.format('{0,number,#.0}y', phold) : "N/A"), (not na(pmae) ? str.format('{0,number,#.0}%', pmae) : "N/A"))
+        dim_col = f_conf_col(pn, min_n)
+        bg_col = not na(dim_col) ? dim_col : md >= 15.0 ? color.yellow : md > 0 ? color.new(color.green, 70) : color.new(color.red, 70)
+        txt_col = not na(dim_col) ? color.silver : md >= 15.0 ? color.black : color.white
+        [main_txt, tt, bg_col, txt_col]
+// One dashboard cell (small text) and the left-aligned model-name cell.
+f_btc(table tb, int c, int r, string t, color bg, color tc, string tt = '') =>
+    tb.cell(c, r, t, bgcolor = bg, text_color = tc, text_size = size.small, tooltip = tt)
+f_btn(table tb, int r, string name) =>
+    tb.cell(0, r, name, bgcolor = color.new(color.black, 50), text_color = color.white, text_size = size.small, text_halign = text.align_left)
+// --- VIEW 1: MATRIX (all three periods) ---
+f_fill_matrix_row(table tb, int min_n, int row, string name, ModelStats m) =>
+    f_btn(tb, row, name)
+    for c = 1 to 3
+        [txt, tt, bg, tcol] = f_format_period(f_ps(m, c), min_n)
+        f_btc(tb, c, row, txt, bg, tcol, tt)
+// --- VIEW 2: FOCUS (one period, metrics as columns) ---
+f_fill_focus_row(table tb, int min_n, int row, string name, ModelStats m, int which) =>
+    [pn, pwr, pex, pmae, pic, pmed, phold, pvac] = f_period_metrics(f_ps(m, which))
+    grey = f_conf_col(pn, min_n)
+    base = not na(grey) ? grey : color.new(color.black, 70)
+    txt = not na(grey) ? color.silver : color.white
+    f_btn(tb, row, name)
+    f_btc(tb, 1, row, pn == 0 ? "-" : str.tostring(pn), base, txt, m.straddled > 0 ? "straddling trades excluded: " + str.tostring(m.straddled) : "")
+    f_btc(tb, 2, row, na(pic) ? "-" : str.tostring(pic, "#.00"), not na(grey) ? grey : na(pic) ? color.new(color.gray, 80) : pic > 0.3 ? color.new(color.green, 30) : pic > 0 ? color.new(color.green, 70) : color.new(color.red, 60), txt, "Correlation between entry discount and realised return. Near zero = the fair value carries no predictive information.")
+    f_btc(tb, 3, row, na(pex) ? "-" : str.tostring(pex * 100, "#.0") + "%", not na(grey) ? grey : na(pex) ? color.new(color.gray, 80) : pex > 0 ? color.new(color.green, 60) : color.new(color.red, 60), txt)
+    // Median, Win%, Hold (years), MAE, VACAGR
+    array<float> fx = array.from(pmed * 100, pwr, phold, pmae, pvac)
+    for c = 4 to 8
+        float x = fx.get(c - 4)
+        f_btc(tb, c, row, na(x) ? "-" : str.tostring(x, c == 6 ? "#.1" : "#.0") + (c == 6 ? "y" : "%"), base, txt, c == 8 ? "VACAGR floors holding period at 1 month. Read with Median and Hold." : "")
+// --- VIEW 3: ROBUSTNESS VERDICT (vs the always-in baseline) ---
+f_fill_robust_row(table tb, int min_n, int row, string name, ModelStats m, ModelStats b) =>
+    v = array.new_float(0)
+    n = array.new_int(0)
+    edge_sum = 0.0
+    beats_all = true
+    for w = 1 to 3
+        [pn, pwr, pex, pmae, pic, pmed, phold, pvac] = f_period_metrics(f_ps(m, w))
+        // [FIX BASELINE] "Stable" also requires beating simply being invested.
+        // Annualised median trade (%/y), the same headline as the matrix.
+        [bn, bwr, bex, bmae, bic, bmed, bhold, bvac] = f_period_metrics(f_ps(b, w))
+        float q = nz(f_med_ann(bmed, bhold))
+        float pv = f_med_ann(pmed, phold)
+        v.push(pv)
+        n.push(pn)
+        edge_sum += nz(pv) - q
+        beats_all := beats_all and nz(pv) > q
+    float v1 = v.get(0), float v2 = v.get(1), float v3 = v.get(2)
+    float edge = edge_sum / 3.0
+    enough = n.min() >= min_n
+    float spread = math.max(nz(v1), nz(v2), nz(v3)) - math.min(nz(v1), nz(v2), nz(v3))
+    all_pos = nz(v1, -1) > 0 and nz(v2, -1) > 0 and nz(v3, -1) > 0
+    // Insufficient, Overfit (strong in period 1, weak later), Decaying, Stable, No edge, Mixed
+    int vk = not enough ? 0 : v1 > 0 and (nz(v2) <= 0 or nz(v3) <= 0) ? 1 : v1 > v2 and v2 > v3 and spread > 10 ? 2 : all_pos and spread < 20 ? (beats_all ? 3 : 4) : 5
+    verdict = array.from("Insufficient", "Overfit", "Decaying", "Stable", "No edge", "Mixed").get(vk)
+    vcol = array.from(color.new(color.gray, 60), color.new(color.red, 20), color.new(color.orange, 30), color.new(color.green, 20), color.new(color.orange, 40), color.new(color.gray, 40)).get(vk)
+    vtip = array.from(str.format('Fewer than {0} trades in at least one period. No verdict is defensible.', str.tostring(min_n)), "Strong in period 1, weak or negative later. The parameters fit the first window, not the phenomenon.", "Monotonically falling across periods. The edge may be closing.", "Positive in all three periods, contained dispersion, and ahead of the always-in baseline in each.", "Stable and positive, but not better than simply being invested.", "No clean pattern. Treat as unproven rather than broken.").get(vk)
+    f_btn(tb, row, name)
+    for c = 1 to 3
+        float vc = v.get(c - 1)
+        int nc = n.get(c - 1)
+        f_btc(tb, c, row, na(vc) ? "-" : str.tostring(vc, "#.0"), color.new(color.black, 70), nc < min_n ? color.silver : color.white, "n=" + str.tostring(nc))
+    f_btc(tb, 4, row, enough ? str.tostring(spread, "#.0") : "-", color.new(color.black, 70), color.white)
+    f_btc(tb, 5, row, verdict, vcol, color.white, vtip)
+    f_btc(tb, 6, row, enough ? (edge > 0 ? "+" : "") + str.tostring(edge, "#.0") : "-", enough ? (edge > 0 ? color.new(color.green, 60) : color.new(color.red, 60)) : color.new(color.black, 70), color.white)
+    f_btc(tb, 7, row, "", color.new(color.black, 100), color.white)
+    f_btc(tb, 8, row, "", color.new(color.black, 100), color.white)
+// @function Draws the dashboard on the last bar: header, one row per model, the footer.
+// @param tb The dashboard table (9 x 32, created by the indicator).
+// @param pos Position setting.
+// @param view Backtest View setting.
+// @param mode Period Mode setting.
+// @param min_n Minimum trades for a valid cell.
+// @param names Row labels, the Baseline last.
+// @param stats Row states, in the same order.
+// @param base The always-in baseline.
+// @param hidden Rows compact mode hides.
+export btTable(table tb, string pos, string view, string mode, int min_n, array<string> names, array<ModelStats> stats, ModelStats base, int hidden) =>
+    tb.set_position(pos == 'top_left' ? position.top_left : pos == 'middle_left' ? position.middle_left : pos == 'bottom_center' ? position.bottom_center : pos == 'top_center' ? position.top_center : position.bottom_left)
+    tb.clear(0, 0, 8, 31)
+    mode_tag = mode == 'Auto-Split' ? " [auto-split]" : mode == 'Full Period' ? " [pooled]" : ""
+    v_mx = view == 'Matrix (all periods)'
+    v_rb = view == 'Robustness verdict'
+    array<string> hd = v_mx ? array.from('Valuation Model Matrix', 'Period 1\n(In-Sample)', 'Period 2\n(Out-of-Sample)', 'Period 3\n(Forward)') : v_rb ? array.from('Robustness', 'P1', 'P2', 'P3', 'Spread', 'Verdict', 'vs Base') : array.from(view, 'n', 'IC', 'Expect', 'Median', 'Win%', 'Hold', 'MAE', 'VACAGR')
+    for c = 0 to hd.size() - 1
+        tt = c == 0 ? 'The inputs were chosen after seeing this whole history, so for the SETTINGS every period is in-sample. Read P2/P3 as a stability check, not proof of an edge.' : v_mx ? 'Median trade, annualised over the average hold (%/y) (Win%) n=trades' : v_rb ? (c == 6 ? 'Average median-trade edge over the always-in baseline across the three periods.' : '') : c == 2 ? 'Discount-to-return correlation: does a bigger discount predict a bigger return?' : c == 7 ? 'Per-trade maximum adverse excursion, NOT portfolio drawdown.' : ''
+        f_btc(tb, c, 0, hd.get(c) + (c == 0 ? mode_tag : ''), c == 0 ? color.new(color.purple, 30) : color.new(color.blue, 20), c == 0 ? color.yellow : color.white, tt)
+    // --- DISPATCHER ---
+    for [k, st] in stats
+        if v_mx
+            f_fill_matrix_row(tb, min_n, k + 1, names.get(k), st)
+        else if v_rb
+            f_fill_robust_row(tb, min_n, k + 1, names.get(k), st, base)
+        else
+            f_fill_focus_row(tb, min_n, k + 1, names.get(k), st, view == 'Focus: Period 1' ? 1 : view == 'Focus: Period 2' ? 2 : 3)
+    int btrowidx = stats.size() + 1
+    // Footer: what compact mode hides (doubles as the padding row TV needs)
+    tb.cell(0, btrowidx, hidden > 0 ? '+' + str.tostring(hidden) + ' hidden (Show all)' : " ", bgcolor = color.new(color.black, 100), text_color = hidden > 0 ? color.gray : color.new(color.white, 100), text_size = size.tiny, text_halign = text.align_left)
+    for c = 1 to 3
+        tb.cell(c, btrowidx, " ", bgcolor = color.new(color.black, 100), text_color = color.new(color.white, 100))
+    true
+// ==========================================
+// LONG TEXTS: the indicator's table and tooltip texts, by number
+// ==========================================
+// @function The indicator's long text number `id`.
+// @param id Text number.
+// @returns The text, or an empty string for an unknown number.
+export tx(int id) =>
+    switch id
+        0 => 'Growth: Rule of 40, DCF & RIM|PE PS FCF EV DCF RIM R40 ROIC SLN SHY|DCF RIM R40'
+        1 => 'rNPV & Pipeline Focus|PE PS FCF PB EV DCF EPV ACQ RNPV ROIC SLN SHY'
+        2 => 'RIM & Equity Cash Flow|PE PB TBV RIM GRA ECF SHY|RIM'
+        3 => 'AFFO DCF & Property Multiples|PB EV CF AFFO ADCF SHY'
+        4 => 'Cyclically-Adjusted Value (CAPE)|PE FCF PB TBV EV CF EPV GRA ACQ OE CAPE ROIC SHY'
+        5 => 'APV & Cyclical Quality|PE FCF PB EV CF DCF EPV GRA ACQ OE APV CAPE GPA ROIC SLN'
+        6 => 'EVA & ROIC Spread|PE PS FCF EV CF DCF EPV GRA ACQ OE EVA GPA ROIC SHY'
+        7 => 'Brand Economics & EVA|PE PS FCF EV CF DCF EPV GRA ACQ OE EVA CAPE GPA ROIC SLN'
+        8 => 'Telecom Unbundling (NetCo + ServeCo)|PE FCF PB EV CF DCF EPV GRA ACQ OE UNB ROIC SHY'
+        9 => 'DDM & Regulated Returns|PE PB EV CF EPV RIM GRA ACQ OE DDM ROIC SHY'
+        10 => 'General (All Models Active)|PE PS FCF PB TBV EV CF DCF GRA EPV RIM ACQ OE GPA ROIC SLN SHY'
+        11 => 'not allocated by the framework'
+        12 => 'WARNING: the Standard Composite is in the blend alongside {0} of the models it already contains. Those are counted twice.'
+        13 => 'a higher rate raises it (negative economic profit, or NOPAT below capital x growth).'
+        14 => 'growth destroys value here (the return on new capital is below its cost).'
+        15 => 'terminal growth destroys value (negative economic profit).'
+        16 => 'its multiple percentiles are inverted.'
+        17 => 'Avg ratio (base): {0,number,#.##}x\nCurrent: {1}\n\nBear multiple: {2}\nBull multiple: {3}\n\nBear/Bull are percentiles of this ticker\'\'s own stored ratio history applied to the same per-share base, held at the average when a percentile sits on the wrong side of it. Blank = too few observations.\nP/E and EV/EBITDA also blend in next year\'\'s driver, discounted one year at CoE less the dividend yield.\n[xx%] = weight in the live blend.'
+        18 => 'Ours: model dispersion (stdev / FV). Street: (high - low) / median.'
+        19 => '. Street: sqrt(analysts) / sqrt(10).'
+        20 => 'Ours: exp(-log error / 0.3). Street: target age '
+        21 => 'Ours: data-quality tier less 0.2 per red flag (value trap, M-score, distress, data sanity). Street: share of ratings in the largest bucket.'
+        22 => 'Score 0-100 = Agreement 35% + Depth 20% + Reliability 25% + Quality 20%.\n\nComponent: ours / street'
+        23 => '\n\nOur reliability is earned: composite log error vs price {0}Q later{1}. The street has no history, so FRESHNESS of the targets stands in.'
+        24 => ' (not enough history, set to 0.3)'
+        25 => 'Gap ours vs street PV: {0} (agree band +/-{1,number,#}%).{2}'
+        26 => '\nRating score: {0,number,#.0} (1 strong buy - 5 strong sell), {1,number,#} ratings.'
+        27 => 'Quadrant 1: Safe & Honest\nSafe from bankruptcy & honest accounting.'
+        28 => 'Quadrant 4: Failing but Honest\nHigh distress risk, but financials are truthful. (Value Trap or Turnaround)'
+        29 => 'Quadrant 3: Fake Safe\nLooks financially healthy, but earnings are likely manipulated. DO NOT TRUST.'
+        30 => 'Quadrant 2: Desperation Spiral\nHigh distress AND accounting manipulation. Extreme Danger.'
+        31 => "\n\nScore is Z''-EM: safe > 5.85, distress < 4.35."
+        32 => '\n\nScore is Altman Z: safe > 3.0, distress < 1.8.'
+        33 => 'Asset growth YoY {0} | EBITDA growth YoY {1}.\n\n{2}'
+        34 => 'DANGER: asset growth strictly exceeds EBITDA growth.'
+        35 => 'Assets are shrinking and EBITDA is shrinking faster.'
+        36 => 'Core cash generation (EBITDA) is keeping pace with or exceeding asset expansion.'
+        37 => 'Rhodes-Kropf M/B decomposition:\n\nGrowth options (V/B): {0,number,#.##}x -- fair value vs book. Below 1.0x the business is worth less than its balance sheet.\n\nMispricing (P/V): {1,number,#.##}x -- price vs fair value.'
+        38 => 'CAPM Beta: {0,number,#.##}\nDownside Beta: {1}\nRisk-free base: {2} = {3,number,#.##}%\nERP: {4,number,#.#}%\nCRP: {5,number,#.#}% (local-US spread: {6,number,#.#}%)'
+        39 => '\nCost of Debt (synthetic): {0,number,#.#}%\nEffective tax: {1,number,#.#}%\n\nMacro (manual): inflation {2,number,#.##}%, real GDP {3,number,#.##}% -> terminal growth {4,number,#.##}%.'
+        40 => '\nLeverage: net debt {0,number,#.#}x EBITDA (> 4.5x).'
+        41 => '\nBeneish M-score {0,number,#.##} > -1.78: earnings manipulation risk.'
+        42 => '\nPiotroski F-score {0,number,#} (3 or less).'
+        43 => '\nRhodes-Kropf value trap (V/B {0,number,#.##}x).'
+        44 => '\nDiscount rate {0,number,#.#}% ({1}).'
+        45 => '\nImplied exit EV/NOPAT {0,number,#.#}x (> 30x): the DCF leans on a rich terminal value.'
+        46 => '\nSloan accruals {0}: earnings running ahead of cash.'
+        47 => 'Nothing tripped. Checks: leverage, Z+M, Piotroski, capital allocation, RKV value trap, discount rate, exit multiple, accruals.'
+        48 => 'Valuation framework in use (Industry-Specific Valuation). Values are live on the last bar.\n\nScenario cells: green = price below that case, amber = within +/-{0,number,#}%, red = price above it.\n\nMore rows: Display Options > Table detail.'
+        49 => '\n{0}: {1} x {2,number,#}% = {3}'
+        50 => '{0}\n\nView mix: own history {1,number,#}%, rules {2,number,#}%, intrinsic {3,number,#}%{4}'
+        51 => ' (own history capped at {0,number,#}%).'
+        52 => 'Weight = inverse prediction error against price '
+        53 => ' quarters later, x data-quality tier.'
+        54 => 'No member has 4+ paired quarters yet, so the weights are equal x data-quality tier.'
+        55 => 'Omnibus unavailable (no member survived gating), so this is the Standard composite.\n\n'
+        56 => 'No model has a predictive track record yet, so the blend is EQUAL-WEIGHTED (x data-quality tier).'
+        57 => 'Weights = inverse error of each model fair value against the price '
+        58 => '\n\nSince the last report: {0,number,#.#}% = the release bar {1,number,#.#}% + prices, rates and time since {2,number,#.#}% (of the last value before it).'
+        59 => '\nBear/Bull apply the same weights to each model own bear and bull case.\n\nMembers (value x share = contribution):{0}\n\nEvery model: Table detail > Models.'
+        60 => 'Price against OUR base value above. Width = (Bull - Bear) / Base: under 30% tight, over 60% wide.'
+        61 => 'Pos: where the price sits on the path from Bear (-1) through Base (0) to Bull (+1), with every axis and lever moved the same share of the way.\n\nRate: the fair value change for +100bp on every discount rate{0}\n\nBear gap {1} of Base, by axis (Shapley: each axis averaged over every order of moving them):'
+        62 => ' (one-sided: a rate is within 100bp of its 2% floor).'
+        63 => '\n\n{0} member(s) out of order (!): Table detail > Models.'
+        64 => '{0,number,#} analysts. 12-month targets ({1} / {2} / {3}) discounted to today at CoE {4,number,#.#}% less dividend yield, so they compare with our value. Display only: never in the blend, the plot or the backtest.\n\nRange overlap with ours: {5}.'
+        65 => '(Ours x our score + Street PV x street score) / sum of scores. Display only.'
+        66 => 'TradingView has no analyst targets for this symbol.'
+        67 => 'Hover a row for its breakdown. Every row: Table detail > Health.'
+        68 => 'Net debt / EBITDA: {0} ({1}).\n<0 net cash | <1.5 conservative | 1.5-3 moderate | 3-4.5 elevated | >4.5 high.{2}'
+        69 => 'Reverse DCF on the DCF shown: the stage-1 growth ({0} years, fading to terminal {1}) at which it equals the price, against the {2} it uses. N/A: no growth from -50% to +100% reaches the price.\n\nForward growth leg ({3}): {4}.\nImplied exit EV/NOPAT in year {0}: {5}.'
+        70 => ', the average of spot {0} and forward {1}'
+        71 => '{0}{1}{2}{3}, / {4} shares = {5}{6}.'
+        72 => '; forward leg {0}, blended {1}'
+        73 => 'Share of the live blend by view: a multiple of the ticker own history, a rule (Graham, Rule of 40, Acquirer), or intrinsic (perpetuities, growth paths, excess returns).'
+        74 => '% (a level the family cap cannot reach is lifted to the reachable floor + 1 point).'
+        75 => ' Settings > Cap own-history multiples.'
+        76 => '[xx%] = weight in the live blend (Standard or Omnibus). * = synthetic base multiple (under 4 quarters of history).'
+        77 => 'SYNTHETIC: fewer than 4 quarters of history, so the base multiple is a default (none stored) or the average of the few quarters stored.\n\n'
+        78 => 'CAPE: 10-year inflation-adjusted EPS, against a history of the same (Shiller) P/E.\n\n'
+        79 => 'RIM R40 GRA ACQ DCF EPV RNPV ECF ADCF UNB APV EVA DDM'
+        80 => '%\n(Hyper-Growth Premium Unlocked!)'
+        81 => 'N/A (needs a year-ago revenue)'
+        82 => '\n\nASSUMPTION: fixed EV/Sales rule -- 1x + 0.25x per Rule-of-40 point (floor 1.5x); the Rule-of-X multiple (12x + 0.3x per point above 65, never below that base) phases in as Rule-of-X goes from 55 to 65; capped at 25x.'
+        83 => 'Needs positive EPS. Growth capped at 15%; the 4.4/Y bond-yield factor is capped at 1.0.'
+        84 => 'Bear/Bull shift the EBIT multiple by +/-'
+        85 => 'ASSUMPTION (not fitted, no trial-outcome data): pipeline = 5x annual R&D, 15% risk-adjusted, added to the DCF firm value. In the Omnibus it replaces the DCF, which it contains.'
+        86 => '% = net PPE / invested capital (30-90%). NetCo = that share of invested capital (the network) at a RAB multiple; ServeCo = the rest of the unlevered FCF and NOPAT through the DCF at WACC. Less '
+        87 => 'Unlevered FCF (FCF + after-tax interest) and NOPAT at WACC, less '
+        88 => '. Over stage 1, FCF moves from the current cash flow to what is left after the reinvestment next-year growth needs, NOPAT x (1 - g / RONIC); RONIC moves from the current ROIC to a terminal ROIC capped at 20% (never below WACC).\n\nBear/Bull move the discount rate, terminal growth AND stage-1 growth.'
+        89 => 'Equity model: net income - CoE x book value'
+        90 => 'Entity model: NOPAT - WACC x invested capital (incl. capitalised R&D)'
+        91 => ', growing at the stage-1 rate and fading to terminal over '
+        92 => 'FCFE = net income x (1 - g / ROE): the equity a firm must retain to grow comes off, two-stage at the cost of equity. ROE '
+        93 => ' (5-year median). For a bank, debt is raw material, not financing, so net borrowing is not counted as cash to shareholders.'
+        94 => 'FCF (the AFFO proxy) at the cost of equity. FCF is already after capex, so the terminal value takes no second reinvestment charge.'
+        95 => 'Unlevered FCF through the two-stage DCF at the unlevered cost of capital '
+        96 => ' (the cost of equity less the leverage part of beta), plus the tax shield on debt (debt x tax), less '
+        97 => 'Normalised NOPAT (EBIT averaged over up to 3 years) / WACC, no growth, less '
+        98 => 'OCF less maintenance capex (growth capex = sales growth x net PPE / sales): after interest, so a no-growth perpetuity at the cost of equity.'
+        99 => 'Invested capital (incl. capitalised R&D) + PV(EVA), less '
+        100 => 'Gordon growth on the trailing dividend.\nDPS: '
+        101 => 'No member survived gating, so the fair value is the Standard composite, not an Omnibus value.'
+        102 => 'Share of the blend. Weight = inverse prediction error against price {0} quarters later, x data-quality tier.\n\n'
+        103 => 'No member has 4+ paired quarters yet, so the weights are equal x data-quality tier.\n\n'
+        104 => 'Analyst targets are 12-month-forward prices; the summary PV row discounts them to today. Display only.'
+        105 => 'Low / median / high analyst target.'
+        106 => 'Reverse DCF on the DCF shown: the stage-1 growth at which it equals each street PV. At our value: {0}; the DCF uses {1}.'
+        107 => 'Target / FY consensus EPS. Percentile in the stock own P/E history: Base {0}, Bull {1}. Red = above the 90th.'
+        108 => 'Rating score {0,number,#.0} (1 strong buy - 5 strong sell), {1,number,#} ratings.'
+        109 => 'No buy / hold / sell ratings on TradingView.'
+        110 => 'Age of the latest target (freshness drives street reliability). Overlap = the shared part of our Bear-Bull range and the street range; near 0% means we disagree on the whole distribution.'
+        111 => 'Net debt as a multiple of TTM EBITDA.\n\n<0 net cash | <1.5 conservative | 1.5-3 moderate | 3-4.5 elevated | >4.5 high.\n\nCapital-intensive sectors run structurally higher.'
+        112 => 'Long-run inflation and real GDP growth are assumptions, not feeds. Set them in Industry-Specific Valuation. auto = per-currency default.'
+        113 => 'Owner Earnings yield: {0,number,#.##}%\n10Y hurdle: {1,number,#.##}%\nSpread: {2}{3,number,#.##}%'
+        114 => 'Terminal value / final-year NOPAT inside the DCF: a firm-value multiple, not a P/E. Above 30x the value leans on a rich exit.'
+        115 => 'Nine binary tests of profitability, leverage / liquidity and operating efficiency.'
+        116 => '(Net Income - Operating Cash Flow) / Total Assets.\n\nSloan (1996) is a RETURNS anomaly, not a fraud test. Beneish M-Score in the Z+M row is the manipulation model.'
+        117 => 'COMP DCF GRA EPV RIM R40 PE PS FCF PB TBV EV CF AFFO ACQ OE RNPV ECF ADCF UNB APV EVA DDM'
+        => ''
