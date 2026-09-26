@@ -508,7 +508,7 @@ export type Card
     array<float> p
     array<float> cov
     array<float> pt
-    array<int> by
+    array<int> sb
     float total = na
     string why = ''
     bool qcap = false
@@ -703,9 +703,9 @@ export f_card(array<float> v, array<int> tier, bool bad, float eq, int sec, floa
     array<int> SB = array.from(28, 28, 21)
     for [k, a] in array.from(21, 18, 28)
         int b = SB.get(k)
-        if na(c.s.get(a)) and c.w.get(a) > 0 and not na(c.s.get(b)) and not c.by.includes(b)
+        if na(c.s.get(a)) and c.w.get(a) > 0 and not na(c.s.get(b)) and not c.sb.includes(b)
             we.set(b, we.get(b) + c.w.get(a))
-            c.by.set(a, b)
+            c.sb.set(a, b)
     // Groups (for the rows) and pillars (60% of the applicable weight scored or stood in for).
     for g = 0 to 7
         float sw = 0.0
@@ -761,10 +761,10 @@ f_name(int i, int sec) =>
     sec == 1 and i == 14 ? 'ROE - cost of equity' : sec == 1 and i == 17 ? 'Equity / assets' : sec == 1 and i == 27 ? 'Asset growth (3y)' : NM.get(i)
 // One metric's line for a tooltip: value -> score (share of the pillar's weight, source).
 f_line(Card c, int i) =>
-    int by = c.by.get(i)
+    int bi = c.sb.get(i)
     bool ex = i == 14 or (i >= 20 and i <= 23) or i >= 25
     string ag = i == 23 and not na(c.agree) and c.agree < 1 ? ', models disagree: kept ' + str.tostring(c.agree * 100, '#') + '% of its distance from 50' : i == 12 and c.kept ? ', the profits kept earn ' + f_fmt(14, c.v.get(14)) + ' over the cost of capital: scored as paid out' : ''
-    f_name(i, c.sec) + ': ' + (c.w.get(i) == 0 ? (i == 24 or i == 25 or i == 29 ? 'not used: the fair value already holds that model' : 'not used for this sector') : (i == 27 and not na(c.eg) and not na(c.v.get(i)) ? 'assets ' + f_fmt(i, c.v.get(i)) + ' / EBITDA ' + f_fmt(i, c.eg) + ' a year' + (c.v.get(i) > 0 and c.v.get(i) > c.eg ? ' (empire builder)' : c.v.get(i) < 0 and c.eg < c.v.get(i) ? ' (deteriorating)' : ' (efficient)') : f_fmt(i, c.v.get(i)) + (i == 27 and not na(c.v.get(i)) and c.sec != 1 ? ' assets a year, EBITDA growth N/A' : i == 27 and not na(c.v.get(i)) ? ' a year' : '')) + ' -> ' + (by >= 0 ? 'N/A, weight passed to ' + f_name(by, c.sec) : not c.ok.get(i) ? 'not scored (placeholder, stale or suspect data)' : f_sc(c.s.get(i))) + ' (weight ' + str.tostring((by >= 0 ? 0.0 : c.w.get(i)) / c.pt.get(f_pil(i)) * 100, '#') + '%, ' + (ex ? 'extra' : 'paper') + ag + ')') + '\n'
+    f_name(i, c.sec) + ': ' + (c.w.get(i) == 0 ? (i == 24 or i == 25 or i == 29 ? 'not used: the fair value already holds that model' : 'not used for this sector') : (i == 27 and not na(c.eg) and not na(c.v.get(i)) ? 'assets ' + f_fmt(i, c.v.get(i)) + ' / EBITDA ' + f_fmt(i, c.eg) + ' a year' + (c.v.get(i) > 0 and c.v.get(i) > c.eg ? ' (empire builder)' : c.v.get(i) < 0 and c.eg < c.v.get(i) ? ' (deteriorating)' : ' (efficient)') : f_fmt(i, c.v.get(i)) + (i == 27 and not na(c.v.get(i)) and c.sec != 1 ? ' assets a year, EBITDA growth N/A' : i == 27 and not na(c.v.get(i)) ? ' a year' : '')) + ' -> ' + (bi >= 0 ? 'N/A, weight passed to ' + f_name(bi, c.sec) : not c.ok.get(i) ? 'not scored (placeholder, stale or suspect data)' : f_sc(c.s.get(i))) + ' (weight ' + str.tostring((bi >= 0 ? 0.0 : c.w.get(i)) / c.pt.get(f_pil(i)) * 100, '#') + '%, ' + (ex ? 'extra' : 'paper') + ag + ')') + '\n'
 
 // @function Summary-card row: the total as a bar, the three pillars, the verdict. cl = text, background, header, green, red, amber colours; ts = text size. Returns the next free row.
 export cardSum(table t, int row, Card c, array<color> cl, string ts) =>
