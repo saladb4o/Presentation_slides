@@ -1451,7 +1451,7 @@ if CK.dirty
     is_manipulator = false
     float m_score = na
     if i_useBeneishCheck
-        m_score := FL.f_beneish(accounts_receivable_ttm, total_revenue_ttm, cogs_ttm, total_debt_latest, total_assets_fq, Y4.get(Q_REC), total_revenue_ttm_prev, Y4.get(Q_COGS), total_debt_1y_ago, total_assets_prev, net_income_ttm, ocf_ttm)
+        m_score := FL.f_beneish(accounts_receivable_ttm, total_revenue_ttm, cogs_ttm, total_debt_latest, total_assets_fq, Y4.get(Q_REC), total_revenue_ttm_prev, Y4.get(Q_COGS), total_debt_1y_ago, Y4.get(Q_AS), net_income_ttm, ocf_ttm)
         is_manipulator := m_score > -1.78
     // Owners' earnings = OCF - maintenance capex; growth capex = sales growth x net PPE / sales
     // (Greenwald: the capital a unit of new sales ties up; gross PPE counts retired assets).
