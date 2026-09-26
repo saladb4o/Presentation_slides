@@ -2,7 +2,10 @@
 // FFV Sector Check: do the VNAllShare sector indices load, how much history do they have, and
 // which index does the Timing row in FFV Pro pick for this chart's stock? Run it on a daily
 // chart of a Vietnamese stock and send back a screenshot of the table. Uses 12 requests.
-// Import the same FFVLib version as FFV Pro (the sector mapping lives there).
+// Import the same FFVLib version as FFV Pro (the sector mapping lives there). Auto-detected: the
+// index for TradingView's sector and industry fields, which FFV Pro uses with Auto-Detect,
+// Energy/Materials or General/Diversified; a manually chosen framework or FFV Pro's sector index
+// setting picks another.
 indicator('FFV Sector Check', overlay = true)
 import YOUR_TV_USERNAME/FFVLib/3 as FL
 
@@ -38,8 +41,8 @@ f_c(int c, int r, string s, color col = color.white) =>
     table.cell(tb, c, r, s, text_color = col, text_size = size.small, text_halign = c == 0 ? text.align_left : text.align_center)
 if barstate.islast
     string auto = FL.f_secidx(syminfo.sector, syminfo.industry)
-    f_c(0, 0, syminfo.ticker + ': ' + syminfo.sector + ' / ' + syminfo.industry, color.yellow)
-    f_c(1, 0, 'Timing uses', color.yellow)
+    f_c(0, 0, syminfo.ticker + ': ' + (na(syminfo.sector) ? 'no sector' : syminfo.sector) + ' / ' + (na(syminfo.industry) ? 'no industry' : syminfo.industry), color.yellow)
+    f_c(1, 0, 'Auto-detected', color.yellow)
     f_c(2, 0, auto == '' ? 'none (sector not checked)' : auto, color.yellow)
     f_c(0, 1, 'Index')
     f_c(1, 1, 'First')
@@ -55,4 +58,4 @@ if barstate.islast
         f_c(2, i + 2, na(c) ? '-' : str.tostring(W.get(i)), na(c) ? color.gray : W.get(i) >= 27 ? color.green : color.orange)
         f_c(3, i + 2, na(c) ? 'N/A' : str.tostring(c, '#.##'))
         f_c(4, i + 2, na(c) or na(o) or o <= 0 ? 'N/A' : str.tostring((c / o - 1) * 100, '#.#') + '%')
-    f_c(0, 14, 'Weeks: weekly bars loaded on this chart (the Timing row needs 27). Yellow: the index the Timing row picks.', color.gray)
+    f_c(0, 14, 'Weeks: weekly bars on this chart (Timing needs 27). Yellow: the auto-detected index.', color.gray)

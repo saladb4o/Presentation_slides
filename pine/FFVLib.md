@@ -509,7 +509,7 @@ export f_beta_pair(array<float> ra, array<float> rb, bool downside_only) =>
 // @field cf The companion feed is linked (the debt service cover and the quick ratio need it).
 // @field anc Price vs fair value's 90 point: the lower of the buy line and the Bear value.
 // @field bear The 90 point is the Bear value (under the buy line).
-// @field tm Timing row: stock cell, sector cell, status ('' when not built).
+// @field tm Timing row: stock cell, sector cell, status (na when not built).
 // @field tt Timing tooltip.
 // @field tc Timing status colour: 1 green, -1 amber, 0 plain.
 export type Card
@@ -889,23 +889,26 @@ f_pct(float x) =>
 
 f_sg(float x) =>
     (x > 0 ? '+' : '') + str.tostring(x, '0.00')
+f_pa(float x) =>
+    na(x) ? 'N/A' : f_pct(x)
 
 // @function VNAllShare sector index (HOSE ticker, no prefix) for TradingView's sector and industry fields, following GICS; '' where HOSE has none (telecom, miscellaneous).
 export f_secidx(simple string sec, simple string ind) =>
+    string d = na(ind) ? '' : ind
     switch sec
-        'Finance' => str.contains(ind, 'Real Estate') ? 'VNREAL' : 'VNFIN'
+        'Finance' => str.contains(d, 'Real Estate') ? 'VNREAL' : 'VNFIN'
         'Energy Minerals' => 'VNENE'
-        'Industrial Services' => str.contains(ind, 'Oilfield') or str.contains(ind, 'Drilling') or str.contains(ind, 'Pipelines') ? 'VNENE' : 'VNIND'
+        'Industrial Services' => str.contains(d, 'Oilfield') or str.contains(d, 'Drilling') or str.contains(d, 'Pipelines') ? 'VNENE' : 'VNIND'
         'Non-Energy Minerals' => 'VNMAT'
-        'Process Industries' => str.contains(ind, 'Agricultural Commodities') ? 'VNCONS' : str.contains(ind, 'Textiles') ? 'VNCOND' : 'VNMAT'
+        'Process Industries' => str.contains(d, 'Agricultural Commodities') ? 'VNCONS' : str.contains(d, 'Textiles') ? 'VNCOND' : 'VNMAT'
         'Producer Manufacturing' => 'VNIND'
         'Transportation' => 'VNIND'
         'Commercial Services' => 'VNIND'
-        'Distribution Services' => str.contains(ind, 'Food') ? 'VNCONS' : str.contains(ind, 'Medical') ? 'VNHEAL' : str.contains(ind, 'Electronics') ? 'VNIT' : 'VNIND'
+        'Distribution Services' => str.contains(d, 'Food') ? 'VNCONS' : str.contains(d, 'Medical') ? 'VNHEAL' : str.contains(d, 'Electronics') ? 'VNIT' : 'VNIND'
         'Consumer Durables' => 'VNCOND'
         'Consumer Services' => 'VNCOND'
-        'Retail Trade' => str.contains(ind, 'Food Retail') or str.contains(ind, 'Drugstore') ? 'VNCONS' : 'VNCOND'
-        'Consumer Non-Durables' => str.contains(ind, 'Apparel') ? 'VNCOND' : 'VNCONS'
+        'Retail Trade' => str.contains(d, 'Food Retail') or str.contains(d, 'Drugstore') ? 'VNCONS' : 'VNCOND'
+        'Consumer Non-Durables' => str.contains(d, 'Apparel') ? 'VNCOND' : 'VNCONS'
         'Health Technology' => 'VNHEAL'
         'Health Services' => 'VNHEAL'
         'Electronic Technology' => 'VNIT'
@@ -945,11 +948,11 @@ export f_timing(Card c, array<float> s, array<float> x, array<float> m, float rf
     float mr = f_wk(m, 0) / f_wk(m, 26) - 1
     float d = xs == '' ? na : xr - mr
     bool up = sc > 0
-    bool pass = (c.vw == 'Strong' or c.vw == 'Fair') and c.p.get(2) >= 50
-    string ln = na(sc) ? 'N/A: needs a daily or weekly chart and a year of weekly prices' : not pass ? "n/a: doesn't pass the screen (a Strong or Fair verdict and value 50+)" : up ? 'Trend up' + (na(d) ? ' (sector not checked)' : d > 0 ? ', sector leading' : ', sector lagging') : na(d) ? 'Trend down (sector not checked)' : d > 0 ? 'Neutral: trend down, sector leading' : 'Wait: trend down, sector lagging'
+    bool pass = (c.vw == 'Strong' or c.vw == 'Fair') and math.round(c.p.get(2)) >= 50
+    string ln = na(sc) ? 'N/A: needs a daily or weekly chart and a year of weekly prices' : not pass ? (c.vw == 'N/A' ? 'n/a: the scorecard has no verdict (too little data)' : "n/a: doesn't pass the screen (a Strong or Fair verdict and value 50+)") : up ? 'Trend up' + (na(d) ? ' (sector not checked)' : d > 0 ? ', sector leading' : ', sector lagging') : na(d) ? 'Trend down (sector not checked)' : d > 0 ? 'Neutral: trend down, sector leading' : 'Wait: trend down, sector lagging'
     c.tc := na(sc) or not pass ? 0 : up ? 1 : na(d) or d <= 0 ? -1 : 0
     c.tm := array.from(na(sc) ? 'N/A' : (up ? 'Up ' : 'Down ') + f_sg(sc), xs == '' ? 'Sector not checked' : na(d) ? xs + ' N/A' : xs + ' ' + (d > 0 ? '+' : '') + str.tostring(d * 100, '0.0') + ' pts', na(sc) or not pass ? 'n/a' : up ? 'Trend up' : na(d) ? 'Trend down' : d > 0 ? 'Neutral' : 'Wait')
-    c.tt := ln + str.format('\n\nStock (MSCI momentum): 6-1 return {0}, 12-1 return {1}, volatility {2} a year from {3,number,#} weekly returns, local 10-year yield {4,number,#.##}% -> score {5} (0 = the bond yield).', f_pct(r6), f_pct(r12), na(sd) ? 'N/A' : str.tostring(sd * 100, '#') + '%', n, rf * 100, na(sc) ? 'N/A' : f_sg(sc)) + (xs == '' ? str.format('\nSector: not checked (no index for this sector or market; the override setting can name one).\nStock vs {0}, last 6 months: {1} vs {2} (information only).', mk, f_pct(f_wk(s, 0) / f_wk(s, 26) - 1), f_pct(mr)) : str.format('\nSector ({0}), last 6 months: {1} vs {2} {3}{4}.\nStock, last 6 months: {5} (information only).', xs, f_pct(xr), mk, f_pct(mr), na(xr) ? ': the index did not load or has under 6 months of history' : '', f_pct(f_wk(s, 0) / f_wk(s, 26) - 1))) + '\n\nStock trend: MSCI Momentum Indexes, as published: the 6-1 and 12-1 returns (months as 4, 26 and 52 weeks) less the risk-free rate, each over the volatility of up to 3 years of weekly returns, averaged; 6-1 alone when 12 months of history are missing. Up = above 0. MSCI uses the short-term rate (only the 10-year yield is loaded) and ranks against a universe (not available here). Sector: Moskowitz and Grinblatt (1999) found industry momentum strongest in the latest month, so the sector keeps it: its last 6 months against the market. Lagging its sector is not a warning: industry momentum explains much of stock momentum. Wait needs both the stock and its sector behind.\n\nDisplay only. Evidence is from the US; in Vietnam it is thin: a HOSE study (2017-2026, not peer-reviewed) found no 12-month momentum and that last month\'s losers kept losing, and value works best among recent losers (Asness 1997), so waiting can miss part of a rebound.'
+    c.tt := ln + str.format('\n\nStock (MSCI momentum): 6-1 return {0}, 12-1 return {1}, volatility {2} ({3,number,#} weekly returns), local 10-year yield {4,number,#.##}% -> score {5} (0 = the bond yield).', f_pa(r6), f_pa(r12), na(sd) ? 'N/A, needs 52' : str.tostring(sd * 100, '#') + '% a year', n, rf * 100, na(sc) ? 'N/A' : f_sg(sc)) + (xs == '' ? str.format('\nSector: not checked (no index for this sector or market; the override setting can name one).\nStock vs {0}, last 6 months: {1} vs {2} (information only).', mk, f_pa(f_wk(s, 0) / f_wk(s, 26) - 1), f_pa(mr)) : str.format('\nSector ({0}), last 6 months: {1} vs {2} {3}{4}.\nStock, last 6 months: {5} (information only).', xs, f_pa(xr), mk, f_pa(mr), na(xr) ? ': needs 6 months of weekly data (the index did not load or is too new, or the regression timeframe is over a week)' : '', f_pa(f_wk(s, 0) / f_wk(s, 26) - 1))) + '\n\nStock trend: MSCI Momentum Indexes, as published: the 6-1 and 12-1 returns (months as 4, 26 and 52 weeks) less the risk-free rate, each over the volatility of up to 3 years of weekly returns, averaged; 6-1 alone when 12 months of history are missing. Up = above 0. MSCI uses the short-term rate (only the 10-year yield is loaded) and ranks against a universe (not available here). Sector: Moskowitz and Grinblatt (1999) found industry momentum strongest in the latest month, so the sector keeps it: its last 6 months against the market. Lagging its sector is not a warning: industry momentum explains much of stock momentum. Wait needs both the stock and its sector behind.\n\nDisplay only. Evidence is from the US; in Vietnam it is thin: a HOSE study (2017-2026, not peer-reviewed) found no 12-month momentum and that last month\'s losers kept losing, and value works best among recent losers (Asness 1997), so waiting can miss part of a rebound.'
     c
 
 // @function Growth for the information rows, from the quarter store (hm, hq). crev, croa, cas: the TTM revenue, ROA and assets columns (net income = ROA x assets); qrev, qni: the quarterly revenue and net income columns, -1 when flows are requested as TTM (the quarter is then estimated from the change in the 12-month totals). Returns 6 strings per row for cardRows: growth, then the earnings surprise.

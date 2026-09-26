@@ -1681,10 +1681,12 @@ var array<float> TW_S = array.new_float(0)
 var array<float> TW_X = array.new_float(0)
 var array<float> TW_M = array.new_float(0)
 bool tw_new = ta.change(time('W')) != 0
-if tw_new and timeframe.in_seconds() <= 604800 and timeframe.in_seconds(beta_tf) <= 604800 and close[1] > 0
+// The sector and market legs come at the regression timeframe: weekly or shorter only.
+bool tw_wk = timeframe.in_seconds(beta_tf) <= 604800
+if tw_new and timeframe.in_seconds() <= 604800 and close[1] > 0
     TW_S.push(close[1])
-    TW_X.push(sec_idx != '' and value_c[1] > 0 ? value_c[1] : na)
-    TW_M.push(mkt_bench_p > 0 ? mkt_bench_p : na)
+    TW_X.push(tw_wk and sec_idx != '' and value_c[1] > 0 ? value_c[1] : na)
+    TW_M.push(tw_wk and mkt_bench_p > 0 ? mkt_bench_p : na)
     if TW_S.size() > 157
         TW_S.shift()
         TW_X.shift()
@@ -2702,7 +2704,7 @@ if barstate.islast
         flags_tt += str.format('\nCapital allocation: {0}.', inv_txt)
     if is_value_trap
         fl.push('Value trap')
-        flags_tt += trap_pb ? str.format(FL.tx(43), current_pb_val, jpb_roe * 100, cost_of_equity * 100) : str.format('\nValue trap: Piotroski F-score {0,number,#} under the fair value (Piotroski 2000: among cheap stocks the weak scores lagged).', F_pio)
+        flags_tt += (trap_pb ? str.format(FL.tx(43), current_pb_val, jpb_roe * 100, cost_of_equity * 100) : '') + (trap_pio ? str.format('\nValue trap: Piotroski F-score {0,number,#} under the fair value (Piotroski 2000: among cheap stocks the weak scores lagged).', F_pio) : '')
     if wacc_flag != 'Normal'
         fl.push('WACC')
         flags_tt += str.format(FL.tx(44), final_discount_rate * 100, wacc_flag)
