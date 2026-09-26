@@ -504,6 +504,9 @@ export f_beta_pair(array<float> ra, array<float> rb, bool downside_only) =>
 // @field cf The companion feed is linked (the debt service cover and the quick ratio need it).
 // @field anc Price vs fair value's 90 point: the lower of the buy line and the Bear value.
 // @field bear The 90 point is the Bear value (under the buy line).
+// @field tm Timing row: stock cell, sector cell, status ('' when not built).
+// @field tt Timing tooltip.
+// @field tc Timing status colour: 1 green, -1 amber, 0 plain.
 export type Card
     array<float> v
     array<float> s
@@ -530,6 +533,9 @@ export type Card
     bool kept = false
     float anc = na
     bool bear = false
+    array<string> tm = na
+    string tt = ''
+    int tc = 0
 
 // @function Score of x on a curve: breakpoints xs (rising or falling) to scores ys, linear between them and held at the ends. na x gives na.
 export f_curve(float x, array<float> xs, array<float> ys) =>
@@ -853,7 +859,7 @@ f_line(Card c, int i) =>
     string ag = (i == 23 and c.bear ? ', 90 at the Bear value ' + str.tostring(c.anc, '#.##') + ', under the buy line' : '') + (i == 23 and not na(c.agree) and c.agree < 1 ? ', models disagree: kept ' + str.tostring(c.agree * 100, '#') + '% of its distance from 50' : '') + (i == 12 and c.kept ? ', the profits kept earn ' + f_fmt(14, c.v.get(14)) + ' over the cost of capital: scored as paid out' : '')
     f_name(i, c.sec) + ': ' + (c.w.get(i) == 0 ? (i == 24 or i == 25 or i == 29 or (i == 31 and c.sec != 1) ? 'not used: the fair value already holds that model' : not c.cf and (i == 32 or i == 35) and c.sec != 1 and not (c.sec == 2 and i == 35) ? 'not used: needs the companion feed' : i == 36 and c.sec != 1 ? 'not used: net liquid assets ' + (na(c.v.get(36)) ? 'N/A' : f_fmt(36, c.v.get(36)) + ', under half the price') : 'not used for this sector') : (i == 27 and not na(c.eg) and not na(c.v.get(i)) ? 'assets ' + f_fmt(i, c.v.get(i)) + ' / EBITDA ' + f_fmt(i, c.eg) + ' a year' + (c.v.get(i) > 0 and c.v.get(i) > c.eg ? ' (empire builder)' : c.v.get(i) < 0 and c.eg < c.v.get(i) ? ' (deteriorating)' : ' (efficient)') : f_fmt(i, c.v.get(i)) + (i == 27 and not na(c.v.get(i)) and c.sec != 1 ? ' assets a year, EBITDA growth N/A' : i == 27 and not na(c.v.get(i)) ? ' a year' : '')) + ' -> ' + (bi >= 0 ? 'N/A, weight passed to ' + f_name(bi, c.sec) : not c.ok.get(i) ? 'not scored (placeholder, stale or suspect data)' : f_sc(c.s.get(i))) + ' (weight ' + str.tostring((bi >= 0 ? 0.0 : c.w.get(i)) / c.pt.get(f_pil(i)) * 100, '#') + '%, ' + (ex ? 'extra' : 'paper') + ag + ')') + '\n'
 
-// @function Summary-card row: the total as a bar, the three pillars, the verdict. cl = text, background, header, green, red, amber colours; ts = text size. Returns the next free row.
+// @function Summary-card rows: the total as a bar, the three pillars, the verdict; then the Timing row when f_timing built it. cl = text, background, header, green, red, amber colours; ts = text size. Returns the next free row.
 export cardSum(table t, int row, Card c, array<color> cl, string ts) =>
     string tt = "Quality, low risk and value: the traits Frazzini, Kabiller and Pedersen (Buffett's Alpha, 2018) found explain Berkshire's returns; its 1.6x leverage is left out. Each metric scores 0-100 on fixed breakpoints (not a ranking against other stocks, as the paper does). A pillar is the weighted mean of its metrics (N/A under 60% coverage); the total is their weighted geometric mean (quality 0.4, low risk and value 0.3: a wonderful company at a fair price), so one weak pillar pulls it down; that formula is this indicator's choice (the paper adds the traits in a regression). A red flag puts a soft ceiling on its pillar -- Beneish on quality, distress (O-score failure odds 10%+, interest cover under 1.5x -- B- or worse on the synthetic rating; EBITDA for REITs and utilities, whose EBIT is after heavy depreciation -- unless the company holds net cash, or a debt service cover under 1.0x with net debt and interest cover under 3x) on low risk, the value trap on value: over 50 (low risk: 40) the pillar keeps a quarter of its excess, so flagged stocks keep their order. Altman Z is scored but raises no flag (here, in the red flags or in the confidence): fitted on manufacturers, it reads most utilities, REITs and telecoms as distressed (the O-score carries more information: Hillegeist et al. 2004). Low risk weighs market risk (beta, idiosyncratic volatility, downside beta, drawdown: about 40%) against the balance sheet and earnings, which add the bank-credit checks: debt service cover = (EBITDA - tax) / (interest + the current portion of long-term debt; the companion feed, N/A where the filing does not split it out), stressed cover = the worst 12-month EBITDA of 5 years / (interest x 1.3), liabilities / tangible equity (net of all intangibles, goodwill included; not for bank-like balance sheets, liabilities over 80% of assets) and the quick ratio (companion feed); Altman's Z''-EM replaces Z for REITs, utilities, telecoms and Vietnamese stocks. Verdict: Strong needs a total of 70+, every pillar at 50+ and no red flag; any pillar under 30 makes it Weak. A missing Altman Z passes its weight to the O-score (and back), else to net debt / EBITDA; a missing interest cover to net debt / EBITDA (and back); a missing debt service cover to interest cover, stressed cover to net debt / EBITDA, liabilities / tangible equity to debt / assets, the quick ratio to ROE volatility; growth priced in, book-to-market, the owner-earnings yield and EBIT / EV count only for the fair value's share their model does not carry; the yields are measured against the cost of equity (EBIT / EV: WACC), which holds the country's risk, so 0 means growth is priced at nothing (Penman); price vs fair value scores 90 at the lower of the buy line and the Bear value (a less certain value needs a deeper discount: Graham's margin of safety) and moves toward 50 when the models disagree; net-net cover (Graham: cash and short-term investments + 75% of receivables + 50% of inventory from the companion feed, less all liabilities and minority interest, over the market cap) counts only from half the price and not for banks, as a good business needs no asset backing; net payout counts profits kept as paid out when they earn over the cost of capital; a theme keeps its share when some of its metrics do not apply to the sector (banks). Display only: fair values and the backtest do not use it. Table detail = Scorecard lists every metric.\n\nCoverage: Q " + str.tostring(nz(c.cov.get(0)) * 100, '#') + '% | R ' + str.tostring(nz(c.cov.get(1)) * 100, '#') + '% | V ' + str.tostring(nz(c.cov.get(2)) * 100, '#') + '%' + (c.qcap ? '\nQuality excess over 50 cut to a quarter: Beneish flag.' : '') + (c.rcap ? '\nDistress flag (' + c.dz + ')' + (c.p.get(1) > 40 ? ': low risk excess over 40 cut to a quarter.' : '.') : '') + (c.vcap ? '\nValue excess over 50 cut to a quarter: value trap (P/B under 1 and no higher than its returns justify, or a Piotroski F-score of 0-2 under the fair value).' : '') + (c.gate != '' ? '\nVerdict ' + c.vw + ', not ' + f_word(c.total) + ': ' + c.gate + '.' : '') + (c.why != '' ? '\nN/A: ' + c.why + ' has too little data.' : '')
     float s = c.total
@@ -861,13 +867,85 @@ export cardSum(table t, int row, Card c, array<color> cl, string ts) =>
     t.cell(1, row, f_bar(s) + ' ' + f_sc(s), text_color = na(s) ? cl.get(0) : f_scol(s, cl), bgcolor = cl.get(1), text_size = ts, text_font_family = font.family_monospace, tooltip = tt)
     t.cell(2, row, 'Q ' + f_sc(c.p.get(0)) + ' · R ' + f_sc(c.p.get(1)) + ' · V ' + f_sc(c.p.get(2)), text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts)
     t.cell(3, row, na(s) ? 'N/A' : c.vw + ' fit', text_color = na(s) ? cl.get(0) : color.white, bgcolor = f_scol(c.vw == 'Strong' ? 70 : c.vw == 'Fair' ? 50 : na(s) ? na : 0, cl), text_size = ts, tooltip = tt)
-    row + 1
+    int r = row + 1
+    if not na(c.tm)
+        t.cell(0, r, 'Timing', text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts, tooltip = c.tt)
+        t.cell(1, r, c.tm.get(0), text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts, tooltip = c.tt)
+        t.cell(2, r, c.tm.get(1), text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts, tooltip = c.tt)
+        t.cell(3, r, c.tm.get(2), text_color = c.tc == 0 ? cl.get(0) : color.white, bgcolor = c.tc > 0 ? cl.get(3) : c.tc < 0 ? cl.get(5) : cl.get(1), text_size = ts, tooltip = c.tt)
+        r += 1
+    r
 
 // Growth against a positive base (na: no base, or a loss a year ago).
 f_gr(float a, float b) =>
     b > 0 and not na(a) ? a / b - 1 : na
 f_pct(float x) =>
     na(x) ? 'n/m' : (x > 0 ? '+' : '') + str.tostring(x * 100, '#.#') + '%'
+
+f_sg(float x) =>
+    (x > 0 ? '+' : '') + str.tostring(x, '0.00')
+
+// @function VNAllShare sector index (HOSE ticker, no prefix) for TradingView's sector and industry fields, following GICS; '' where HOSE has none (telecom, miscellaneous).
+export f_secidx(simple string sec, simple string ind) =>
+    switch sec
+        'Finance' => str.contains(ind, 'Real Estate') ? 'VNREAL' : 'VNFIN'
+        'Energy Minerals' => 'VNENE'
+        'Industrial Services' => str.contains(ind, 'Oilfield') or str.contains(ind, 'Drilling') or str.contains(ind, 'Pipelines') ? 'VNENE' : 'VNIND'
+        'Non-Energy Minerals' => 'VNMAT'
+        'Process Industries' => str.contains(ind, 'Agricultural Commodities') ? 'VNCONS' : str.contains(ind, 'Textiles') ? 'VNCOND' : 'VNMAT'
+        'Producer Manufacturing' => 'VNIND'
+        'Transportation' => 'VNIND'
+        'Commercial Services' => 'VNIND'
+        'Distribution Services' => str.contains(ind, 'Food') ? 'VNCONS' : str.contains(ind, 'Medical') ? 'VNHEAL' : str.contains(ind, 'Electronics') ? 'VNIT' : 'VNIND'
+        'Consumer Durables' => 'VNCOND'
+        'Consumer Services' => 'VNCOND'
+        'Retail Trade' => str.contains(ind, 'Food Retail') or str.contains(ind, 'Drugstore') ? 'VNCONS' : 'VNCOND'
+        'Consumer Non-Durables' => str.contains(ind, 'Apparel') ? 'VNCOND' : 'VNCONS'
+        'Health Technology' => 'VNHEAL'
+        'Health Services' => 'VNHEAL'
+        'Electronic Technology' => 'VNIT'
+        'Technology Services' => 'VNIT'
+        'Utilities' => 'VNUTI'
+        => ''
+
+// Close k weeks before the newest (na when the history is shorter).
+f_wk(array<float> p, int k) =>
+    int n = p.size()
+    n > k ? p.get(n - 1 - k) : na
+
+// @function MSCI risk-adjusted momentum from weekly closes p (newest last): the 6-1 and 12-1 returns (26 and 52 weeks ending 4 weeks ago) less the risk-free rate for the period (rf: annual, fraction), each over the annualised volatility of the last 156 weekly returns (at least 52). Returns [score: the average, the 6-1 value alone when 12-1 is missing; 6-1 return; 12-1 return; volatility; weekly returns used].
+export f_msci(array<float> p, float rf) =>
+    int n = p.size()
+    float sx = 0.0
+    float sq = 0.0
+    int m = 0
+    if n >= 2
+        for i = math.max(n - 156, 1) to n - 1
+            float r = p.get(i) / p.get(i - 1) - 1
+            if not na(r)
+                sx += r
+                sq += r * r
+                m += 1
+    float sd = m >= 52 ? math.sqrt(math.max(sq - sx * sx / m, 0) / (m - 1) * 52) : na
+    float r6 = f_wk(p, 4) / f_wk(p, 30) - 1
+    float r12 = f_wk(p, 4) / f_wk(p, 56) - 1
+    float a6 = (r6 - rf / 2) / sd
+    float a12 = (r12 - rf) / sd
+    [na(a12) ? a6 : (a6 + a12) / 2, r6, r12, sd, m]
+
+// @function Timing row (display only): the stock's trend by MSCI's momentum measure, its sector index against the market by Moskowitz and Grinblatt's (1999) industry momentum. s, x, m: weekly closes of the stock, the sector index and the market (newest last); rf: the local 10-year yield (fraction); xs: the sector index's name ('' when none is checked); mk: the market's name. Shown for Strong and Fair verdicts with value 50+.
+export f_timing(Card c, array<float> s, array<float> x, array<float> m, float rf, string xs, string mk) =>
+    [sc, r6, r12, sd, n] = f_msci(s, rf)
+    float xr = f_wk(x, 0) / f_wk(x, 26) - 1
+    float mr = f_wk(m, 0) / f_wk(m, 26) - 1
+    float d = xs == '' ? na : xr - mr
+    bool up = sc > 0
+    bool pass = (c.vw == 'Strong' or c.vw == 'Fair') and c.p.get(2) >= 50
+    string ln = na(sc) ? 'N/A: needs a daily or weekly chart and a year of weekly prices' : not pass ? "n/a: doesn't pass the screen (a Strong or Fair verdict and value 50+)" : up ? 'Trend up' + (na(d) ? ' (sector not checked)' : d > 0 ? ', sector leading' : ', sector lagging') : na(d) ? 'Trend down (sector not checked)' : d > 0 ? 'Neutral: trend down, sector leading' : 'Wait: trend down, sector lagging'
+    c.tc := na(sc) or not pass ? 0 : up ? 1 : na(d) or d <= 0 ? -1 : 0
+    c.tm := array.from(na(sc) ? 'N/A' : (up ? 'Up ' : 'Down ') + f_sg(sc), xs == '' ? 'Sector not checked' : na(d) ? xs + ' N/A' : xs + ' ' + (d > 0 ? '+' : '') + str.tostring(d * 100, '0.0') + ' pts', na(sc) or not pass ? 'n/a' : up ? 'Trend up' : na(d) ? 'Trend down' : d > 0 ? 'Neutral' : 'Wait')
+    c.tt := ln + str.format('\n\nStock (MSCI momentum): 6-1 return {0}, 12-1 return {1}, volatility {2} a year from {3,number,#} weekly returns, local 10-year yield {4,number,#.##}% -> score {5} (0 = the bond yield).', f_pct(r6), f_pct(r12), na(sd) ? 'N/A' : str.tostring(sd * 100, '#') + '%', n, rf * 100, na(sc) ? 'N/A' : f_sg(sc)) + (xs == '' ? '\nSector: not checked (no index for this sector or market; the override setting can name one).' : str.format('\nSector ({0}), last 6 months: {1} vs {2} {3}{4}.\nStock, last 6 months: {5} (information only).', xs, f_pct(xr), mk, f_pct(mr), na(xr) ? ': the index did not load or has under 6 months of history' : '', f_pct(f_wk(s, 0) / f_wk(s, 26) - 1))) + '\n\nStock trend: MSCI Momentum Indexes, as published: the 6-1 and 12-1 returns (months as 4, 26 and 52 weeks) less the risk-free rate, each over the volatility of up to 3 years of weekly returns, averaged; 6-1 alone when 12 months of history are missing. Up = above 0. MSCI uses the short-term rate (only the 10-year yield is loaded) and ranks against a universe (not available here). Sector: Moskowitz and Grinblatt (1999) found industry momentum strongest in the latest month, so the sector keeps it: its last 6 months against the market. Lagging its sector is not a warning: industry momentum explains much of stock momentum. Wait needs both the stock and its sector behind.\n\nDisplay only. Evidence is from the US; in Vietnam it is thin: a HOSE study (2017-2026, not peer-reviewed) found no 12-month momentum and that last month\'s losers kept losing, and value works best among recent losers (Asness 1997), so waiting can miss part of a rebound.'
+    c
 
 // @function Growth for the information rows, from the quarter store (hm, hq). crev, croa, cas: the TTM revenue, ROA and assets columns (net income = ROA x assets); qrev, qni: the quarterly revenue and net income columns, -1 when flows are requested as TTM (the quarter is then estimated from the change in the 12-month totals). Returns 6 strings per row for cardRows: growth, then the earnings surprise.
 export f_grow(matrix<float> hm, int hq, int crev, int croa, int cas, int qrev, int qni) =>

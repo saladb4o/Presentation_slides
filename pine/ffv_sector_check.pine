@@ -1,0 +1,58 @@
+//@version=6
+// FFV Sector Check: do the VNAllShare sector indices load, how much history do they have, and
+// which index does the Timing row in FFV Pro pick for this chart's stock? Run it on a daily
+// chart of a Vietnamese stock and send back a screenshot of the table. Uses 12 requests.
+// Import the same FFVLib version as FFV Pro (the sector mapping lives there).
+indicator('FFV Sector Check', overlay = true)
+import YOUR_TV_USERNAME/FFVLib/3 as FL
+
+// Weekly close, the close 26 weeks earlier, and the weekly bars loaded so far.
+f(string s) =>
+    request.security('HOSE:' + s, 'W', [close, close[26], bar_index + 1], ignore_invalid_symbol = true)
+
+var array<string> N = array.from('VNENE', 'VNMAT', 'VNIND', 'VNCOND', 'VNCONS', 'VNHEAL', 'VNFIN', 'VNREAL', 'VNIT', 'VNUTI', 'VNINDEX', 'VNALLSHARE')
+[c0, o0, n0] = f('VNENE')
+[c1, o1, n1] = f('VNMAT')
+[c2, o2, n2] = f('VNIND')
+[c3, o3, n3] = f('VNCOND')
+[c4, o4, n4] = f('VNCONS')
+[c5, o5, n5] = f('VNHEAL')
+[c6, o6, n6] = f('VNFIN')
+[c7, o7, n7] = f('VNREAL')
+[c8, o8, n8] = f('VNIT')
+[c9, o9, n9] = f('VNUTI')
+[c10, o10, n10] = f('VNINDEX')
+[c11, o11, n11] = f('VNALLSHARE')
+array<float> C = array.from(c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11)
+array<float> O = array.from(o0, o1, o2, o3, o4, o5, o6, o7, o8, o9, o10, o11)
+array<int> W = array.from(n0, n1, n2, n3, n4, n5, n6, n7, n8, n9, n10, n11)
+
+// First chart bar with data, per index.
+var array<int> first_t = array.new_int(12, 0)
+for i = 0 to 11
+    if not na(C.get(i)) and first_t.get(i) == 0
+        first_t.set(i, time)
+
+var table tb = table.new(position.top_right, 5, 16, bgcolor = color.new(color.black, 10), border_width = 1)
+f_c(int c, int r, string s, color col = color.white) =>
+    table.cell(tb, c, r, s, text_color = col, text_size = size.small, text_halign = c == 0 ? text.align_left : text.align_center)
+if barstate.islast
+    string auto = FL.f_secidx(syminfo.sector, syminfo.industry)
+    f_c(0, 0, syminfo.ticker + ': ' + syminfo.sector + ' / ' + syminfo.industry, color.yellow)
+    f_c(1, 0, 'Timing uses', color.yellow)
+    f_c(2, 0, auto == '' ? 'none (sector not checked)' : auto, color.yellow)
+    f_c(0, 1, 'Index')
+    f_c(1, 1, 'First')
+    f_c(2, 1, 'Weeks')
+    f_c(3, 1, 'Last')
+    f_c(4, 1, '6 months')
+    for i = 0 to 11
+        float c = C.get(i)
+        float o = O.get(i)
+        string nm = N.get(i)
+        f_c(0, i + 2, 'HOSE:' + nm, nm == auto ? color.yellow : color.white)
+        f_c(1, i + 2, first_t.get(i) == 0 ? 'no data' : str.format_time(first_t.get(i), 'yyyy-MM-dd', syminfo.timezone), first_t.get(i) == 0 ? color.red : color.white)
+        f_c(2, i + 2, na(c) ? '-' : str.tostring(W.get(i)), na(c) ? color.gray : W.get(i) >= 27 ? color.green : color.orange)
+        f_c(3, i + 2, na(c) ? 'N/A' : str.tostring(c, '#.##'))
+        f_c(4, i + 2, na(c) or na(o) or o <= 0 ? 'N/A' : str.tostring((c / o - 1) * 100, '#.#') + '%')
+    f_c(0, 14, 'Weeks: weekly bars loaded on this chart (the Timing row needs 27). Yellow: the index the Timing row picks.', color.gray)

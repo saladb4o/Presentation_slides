@@ -651,6 +651,7 @@ group_proxies = 'Market Proxy (Used for Beta & Auto-ERP)'
 i_mkt_bench = input.symbol('SPY', 'Market Proxy', group = group_proxies, tooltip = 'Beta is regressed on this proxy. Auto-ERP reads it as a USD index and pairs it with the US 10Y. VND charts use VNINDEX and the VN 10Y instead.')
 i_beta_lookback = input.int(104, 'Regression Lookback (periods of the timeframe below)', minval = 30, group = group_proxies)
 i_beta_tf = input.timeframe('W', 'Regression Timeframe', group = group_proxies)
+i_sector_idx = input.symbol('', 'Sector index for Timing (VND, blank = auto)', group = group_proxies, tooltip = 'The Timing row (display only) compares the sector index with VNINDEX. Blank: the VNAllShare index for TradingView\'s sector and industry fields (GICS; none for telecom). Set it when HOSE classifies the stock differently.')
 group_calc = 'Calculation Parameters'
 i_weighting_algo = input.string('IVW (Error Variance)', 'Weighting Algorithm', options = ['IVW (Error Variance)', 'SMAPE (Symmetric Error)', 'MALE (Log Error)', 'WMAPE (Weighted Error)', 'RMSLE (Root Mean Sq Log)'], group = group_calc, tooltip = 'Every model is scored on how well its stored fair value predicted the price N quarters later (see horizon below).\nIVW: inverse mean squared log error.\nSMAPE/MALE/WMAPE/RMSLE: inverse of that error metric.')
 i_w_horizon = input.int(4, 'Weighting: forecast horizon (quarters)', minval = 0, maxval = 8, group = group_calc, tooltip = 'Each model is scored on how well its fair value at quarter t predicted the price at t + N. 0 = same-quarter fit.')
@@ -1654,9 +1655,12 @@ live_smb_spread := math.max(math.min(live_smb_spread, 0.05), -0.02)
 // spread). Value-vs-market is roughly half the value-vs-growth spread.
 // No VN value/growth proxy exists, so VND uses the 1.5% long-run default.
 // >>> SECURITY SLOTS 5-6/6 : value and growth ETFs
-float value_c = curr == 'VND' ? na : request.security(i_value_etf, i_beta_tf, close, ignore_invalid_symbol = true)
+// On VND charts the value slot loads the sector index for the Timing row instead (display only).
+string sec_auto = FL.f_secidx(syminfo.sector, syminfo.industry)
+string sec_idx = curr != 'VND' ? '' : i_sector_idx != '' ? i_sector_idx : sec_auto != '' ? 'HOSE:' + sec_auto : ''
+float value_c = request.security(curr != 'VND' ? i_value_etf : sec_idx != '' ? sec_idx : final_mkt_bench, i_beta_tf, close, ignore_invalid_symbol = true)
 float growth_c = curr == 'VND' ? na : request.security(i_growth_etf, i_beta_tf, close, ignore_invalid_symbol = true)
-float value_p = f_locf(value_c)
+float value_p = f_locf(curr == 'VND' ? na : value_c)
 float growth_p = f_locf(growth_c)
 max_bars_back(value_p, 5000)
 max_bars_back(growth_p, 5000)
@@ -1664,6 +1668,20 @@ float cagr_value = f_get_cagr_optimized(value_p, bars_in_5y)
 float cagr_growth = f_get_cagr_optimized(growth_p, bars_in_5y)
 float live_hml_spread = na(value_p) or na(growth_p) ? 0.015 : (cagr_value - cagr_growth) * 0.5
 live_hml_spread := math.max(math.min(live_hml_spread, 0.05), -0.02)
+// Timing (display only): weekly closes of the stock, the sector index and the market, taken on
+// the first bar of each week like the beta legs (the bar before holds last week's close), 3 years.
+var array<float> TW_S = array.new_float(0)
+var array<float> TW_X = array.new_float(0)
+var array<float> TW_M = array.new_float(0)
+bool tw_new = ta.change(time('W')) != 0
+if tw_new and timeframe.in_seconds() <= 604800 and timeframe.in_seconds(beta_tf) <= 604800 and close[1] > 0
+    TW_S.push(close[1])
+    TW_X.push(sec_idx != '' and value_c[1] > 0 ? value_c[1] : na)
+    TW_M.push(mkt_bench_p > 0 ? mkt_bench_p : na)
+    if TW_S.size() > 157
+        TW_S.shift()
+        TW_X.shift()
+        TW_M.shift()
 // Trailing returns run high after bull markets, the opposite of forward returns: half the
 // 5-year excess return plus half a 5% long-run anchor, held to 4.5-8%. The excess is over
 // the proxy's OWN currency's 10Y (VNINDEX: VN 10Y; the default SPY: US 10Y): a USD return
@@ -2746,6 +2764,7 @@ if barstate.islast
          i_useBeneishCheck and F_manip and math.min(eng_t.get(19), eng_t.get(5), eng_t.get(6), eng_t.get(0)) >= 2, is_value_trap, HV_dz,
          ST.v, ST.q, array.from(Q_X, Q_X + 1, Q_ROE, Q_ROA, Q_GM), beta_ra, beta_rb, bsec >= 604800 ? 31557600 / bsec : trading_days * (bsec >= 86400 ? 86400 : session_sec) / bsec,
          pbh, pb, close, sell_zone_line, finalFairValue, buy_zone_line, compositeLo, ov, n_mem >= 2 and finalFairValue > 0 ? fv_stddev / finalFairValue : float(na), F_ebitda_g)
+    CARD := FL.f_timing(CARD, TW_S, TW_X, TW_M, rf_local_avg / 100, sec_idx == '' ? '' : i_sector_idx != '' ? i_sector_idx : sec_auto, curr == 'VND' ? 'VN-Index' : final_mkt_bench)
     CARD_INFO := FL.f_grow(ST.v, ST.q, Q_REV, Q_ROA, Q_AS, i_flow_ttm ? -1 : Q_FLOW, i_flow_ttm ? -1 : Q_FLOW + 13)
     CARD_INFO.concat(array.from('1', 'Z+M matrix', 'Z ' + (na(altman_z) ? '-' : str.tostring(altman_z, '#.#')), 'information', HV_zm_txt, HV_zm_tt,
          '2', 'Justified P/B', not i_use_rkv ? 'off' : na(jpb) ? 'N/A' : jpb < 0 ? 'below 0' : str.tostring(jpb, '#.##') + 'x', 'P/B ' + (na(current_pb_val) ? 'N/A' : str.tostring(current_pb_val, '#.##') + 'x'),
