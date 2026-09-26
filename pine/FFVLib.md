@@ -655,12 +655,12 @@ export f_card(array<float> v, array<int> tier, bool bad, float eq, int sec, floa
     array<int> G = array.from(0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 3, 5, 5, 6, 6, 6, 5, 6, 5, 7, 7, 7, 4, 2, 6, 7)
     // A theme keeps its share when some of its metrics do not apply to the sector: the ones that
     // apply split its weight (banks: 12 metrics do not apply).
-    array<float> ta = array.new_float(8, 0.0)
-    array<float> tb = array.new_float(8, 0.0)
+    array<float> gA = array.new_float(8, 0.0)
+    array<float> gB = array.new_float(8, 0.0)
     for i = 0 to 29
         int gi = G.get(i)
-        ta.set(gi, ta.get(gi) + W.get(i))
-        tb.set(gi, tb.get(gi) + (sec == 1 and BK.includes(i) ? 0.0 : W.get(i)))
+        gA.set(gi, gA.get(gi) + W.get(i))
+        gB.set(gi, gB.get(gi) + (sec == 1 and BK.includes(i) ? 0.0 : W.get(i)))
     for i = 0 to 29
         string d = sec == 1 and i == 14 ? '2 17' : sec == 1 and i == 17 ? '0 2' : DP.get(i)
         bool ok = not (bad and d != '')
@@ -674,7 +674,7 @@ export f_card(array<float> v, array<int> tier, bool bad, float eq, int sec, floa
         bool app = not (sec == 1 and BK.includes(i))
         // A value metric that re-reads a model counts only for the fair value's share that model does not carry.
         float cut = i == 29 ? ov.get(0) : i == 24 ? ov.get(1) : i == 25 ? ov.get(2) : 0.0
-        float wi = app ? W.get(i) * ta.get(G.get(i)) / tb.get(G.get(i)) : 0.0
+        float wi = app ? W.get(i) * gA.get(G.get(i)) / gB.get(G.get(i)) : 0.0
         c.w.set(i, wi * (1 - nz(cut)))
         c.cut += cut > 0 ? wi * cut : 0.0
         if not ok or not app
