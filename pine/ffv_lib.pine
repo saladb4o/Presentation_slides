@@ -884,6 +884,10 @@ export cardSum(table t, int row, Card c, array<color> cl, string ts) =>
         t.cell(2, r, c.tm.get(1), text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts, tooltip = c.tt)
         t.cell(3, r, c.tm.get(2), text_color = c.tc == 0 ? cl.get(0) : color.white, bgcolor = c.tc > 0 ? cl.get(3) : c.tc < 0 ? cl.get(5) : cl.get(1), text_size = ts, tooltip = c.tt)
         r += 1
+        t.cell(0, r, 'Relative (RS)', text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts, tooltip = c.tt)
+        for k = 3 to 5
+            t.cell(k - 2, r, c.tm.get(k), text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts, tooltip = c.tt)
+        r += 1
     r
 
 // Growth against a positive base (na: no base, or a loss a year ago).
@@ -946,21 +950,52 @@ export f_msci(array<float> p, float rf) =>
     float a12 = (r12 - rf) / sd
     [na(a12) ? a6 : (a6 + a12) / 2, r6, r12, sd, m]
 
+// Rank of x among the readings h (1-99: the share of them below x), N/A under 52 readings.
+f_prk(array<float> h, float x) =>
+    int b = 0
+    for v in h
+        b += v < x ? 1 : 0
+    h.size() >= 52 and not na(x) ? math.max(1, math.min(99, math.round(99.0 * b / h.size()))) : na
+
+// IBD's weighted 12-month performance, j weeks back: 40% the 3-month return, 20% each the 6, 9 and 12-month returns.
+f_ibd(array<float> p, int j) =>
+    float c0 = f_wk(p, j)
+    0.4 * (c0 / f_wk(p, 13 + j) - 1) + 0.2 * (c0 / f_wk(p, 26 + j) - 1) + 0.2 * (c0 / f_wk(p, 39 + j) - 1) + 0.2 * (c0 / f_wk(p, 52 + j) - 1)
+
 // @function Timing row (display only): the stock's trend by MSCI's momentum measure, its sector index against the market by Moskowitz and Grinblatt's (1999) industry momentum. s, x, m: weekly closes of the stock, the sector index and the market (newest last); rf: the local 10-year yield (fraction); xs: the sector index's name ('' when none is checked); mk: the market's name. Shown for every stock.
 export f_timing(Card c, array<float> s, array<float> x, array<float> m, float rf, string xs, string mk) =>
     [sc, r6, r12, sd, n] = f_msci(s, rf)
     float xr = f_wk(x, 0) / f_wk(x, 26) - 1
     float mr = f_wk(m, 0) / f_wk(m, 26) - 1
-    // Relative strength: the sector index over the market, rebased 6 months ago (same sign as the return gap).
-    float d = xs == '' ? na : (1 + xr) / (1 + mr) - 1
+    float d = xs == '' ? na : xr - mr
+    // Each reading ranked against the same reading on every earlier week held (up to 3 years; volatility and the yield at today's values).
+    array<float> hs = array.new_float()
+    array<float> hx = array.new_float()
+    array<float> hr = array.new_float()
+    for j = 1 to 156
+        float q6 = (f_wk(s, 4 + j) / f_wk(s, 30 + j) - 1 - rf / 2) / sd
+        float q12 = (f_wk(s, 4 + j) / f_wk(s, 56 + j) - 1 - rf) / sd
+        float q = na(r12) ? q6 : (q6 + q12) / 2
+        float dx = f_wk(x, j) / f_wk(x, 26 + j) - f_wk(m, j) / f_wk(m, 26 + j)
+        float rr = f_ibd(s, j) - f_ibd(m, j)
+        if not na(q)
+            hs.push(q)
+        if not na(dx)
+            hx.push(dx)
+        if not na(rr)
+            hr.push(rr)
+    float ps = f_prk(hs, sc)
+    float px = f_prk(hx, d)
+    float rs = f_ibd(s, 0) - f_ibd(m, 0)
+    float pr = f_prk(hr, rs)
     bool up = sc > 0
     // The score over volatility is MSCI's; times volatility it is the average excess return (same sign), shown as a percentage.
     float ex = sc * sd
     string nc = xs == '' ? ' (sector not checked)' : ' (sector N/A)'
     string ln = na(sc) ? 'N/A: needs a daily or weekly chart and a year of weekly prices' : up ? 'Trend up' + (na(d) ? nc : d > 0 ? ', sector leading' : ', sector lagging') : na(d) ? 'Trend down' + nc : d > 0 ? 'Neutral: trend down, sector leading' : 'Wait: trend down, sector lagging'
     c.tc := na(sc) ? 0 : up ? 1 : na(d) or d <= 0 ? -1 : 0
-    c.tm := array.from(na(sc) ? 'N/A' : (up ? 'Up ' : 'Down ') + f_pa(ex), xs == '' ? 'Sector not checked' : na(d) ? xs + ' N/A' : xs + ' RS ' + f_pa(d), na(sc) ? 'N/A' : up ? 'Trend up' : na(d) ? 'Trend down' : d > 0 ? 'Neutral' : 'Wait')
-    c.tt := ln + str.format('\n\nStock (MSCI momentum): 6-1 return {0}, 12-1 return {1}, volatility {2} ({3,number,#} weekly returns), local 10-year yield {4,number,#.##}% -> score {5} (0 = the bond yield). Shown: {6}, the average of the two returns less the yield, before dividing by the volatility (the same sign as the score).', f_pa(r6), f_pa(r12), na(sd) ? 'N/A, needs 52' : str.tostring(sd * 100, '#') + '% a year', n, rf * 100, na(sc) ? 'N/A' : f_sg(sc), f_pa(ex)) + (xs == '' ? str.format('\nSector: not checked (no index for this sector or market; the override setting can name one).\nStock vs {0}, last 6 months: {1} vs {2} (information only).', mk, f_pa(f_wk(s, 0) / f_wk(s, 26) - 1), f_pa(mr)) : str.format('\nSector ({0}), last 6 months: {1} vs {2} {3}{4}; relative strength {6} (the index over the market, rebased 6 months ago).\nStock, last 6 months: {5} (information only).', xs, f_pa(xr), mk, f_pa(mr), na(xr) ? ': needs 6 months of weekly data (the index did not load or is too new, or the regression timeframe is over a week)' : '', f_pa(f_wk(s, 0) / f_wk(s, 26) - 1), f_pa(d))) + '\n\nStock trend: MSCI Momentum Indexes, as published: the 6-1 and 12-1 returns (months as 4, 26 and 52 weeks) less the risk-free rate, each over the volatility of up to 3 years of weekly returns, averaged; 6-1 alone when 12 months of history are missing. Up = above 0. MSCI uses the short-term rate (only the 10-year yield is loaded) and ranks against a universe (not available here). Sector: Moskowitz and Grinblatt (1999) found industry momentum strongest in the latest month, so the sector keeps it: its relative strength against the market over the last 6 months (the index divided by the market, rebased; leading = above 0). Lagging its sector is not a warning: industry momentum explains much of stock momentum. Wait needs both the stock and its sector behind.\n\nDisplay only. Evidence is from the US; in Vietnam it is thin: a HOSE study (2017-2026, not peer-reviewed) found no 12-month momentum and that last month\'s losers kept losing, and value works best among recent losers (Asness 1997), so waiting can miss part of a rebound.'
+    c.tm := array.from(na(sc) ? 'N/A' : (up ? 'Up ' : 'Down ') + (na(ps) ? f_pa(ex) : str.tostring(ps)), xs == '' ? 'Sector not checked' : na(d) ? xs + ' N/A' : xs + ' ' + (na(px) ? (d > 0 ? '+' : '') + str.tostring(d * 100, '0.0') + ' pts' : str.tostring(px)), na(sc) ? 'N/A' : up ? 'Trend up' : na(d) ? 'Trend down' : d > 0 ? 'Neutral' : 'Wait', na(pr) ? 'N/A' : 'RS ' + str.tostring(pr), 'IBD ' + f_pa(rs) + ' vs ' + mk, na(pr) ? 'information' : pr >= 80 ? 'Strong' : pr >= 50 ? 'Average' : 'Weak')
+    c.tt := ln + str.format('\n\nStock (MSCI momentum): 6-1 return {0}, 12-1 return {1}, volatility {2} ({3,number,#} weekly returns), local 10-year yield {4,number,#.##}% -> score {5} (0 = the bond yield). Shown: {6}, the average of the two returns less the yield, before dividing by the volatility (the same sign as the score).', f_pa(r6), f_pa(r12), na(sd) ? 'N/A, needs 52' : str.tostring(sd * 100, '#') + '% a year', n, rf * 100, na(sc) ? 'N/A' : f_sg(sc), f_pa(ex)) + (xs == '' ? str.format('\nSector: not checked (no index for this sector or market; the override setting can name one).\nStock vs {0}, last 6 months: {1} vs {2} (information only).', mk, f_pa(f_wk(s, 0) / f_wk(s, 26) - 1), f_pa(mr)) : str.format('\nSector ({0}), last 6 months: {1} vs {2} {3}{4}: {6} pts.\nStock, last 6 months: {5} (information only).', xs, f_pa(xr), mk, f_pa(mr), na(xr) ? ': needs 6 months of weekly data (the index did not load or is too new, or the regression timeframe is over a week)' : '', f_pa(f_wk(s, 0) / f_wk(s, 26) - 1), na(d) ? 'N/A' : (d > 0 ? '+' : '') + str.tostring(d * 100, '0.0'))) + '\n\nStock trend: MSCI Momentum Indexes, as published: the 6-1 and 12-1 returns (months as 4, 26 and 52 weeks) less the risk-free rate, each over the volatility of up to 3 years of weekly returns, averaged; 6-1 alone when 12 months of history are missing. Up = above 0. MSCI uses the short-term rate (only the 10-year yield is loaded) and ranks against a universe (not available here). Sector: Moskowitz and Grinblatt (1999) found industry momentum strongest in the latest month, so the sector keeps it: its last 6 months against the market (leading = above 0). Lagging its sector is not a warning: industry momentum explains much of stock momentum. Wait needs both the stock and its sector behind.\n\nNumbers 1-99 rank each reading against the same reading on every earlier week the script holds (up to 3 years, 52 at least; volatility and the yield at today\'s values): 80 = stronger than 80% of its own past readings. IBD and MSCI rank against other stocks, which one indicator cannot load, so this is the stock against its own history, not a market-wide rating. Up/Down, leading/lagging and the status still come from the values (above or below 0), not the ranks.\n\n' + str.format('RS (relative strength): IBD\'\'s weighted 12-month performance -- 40% the 3-month return, 20% each the 6, 9 and 12-month returns -- of the stock less that of {0}: {1}, rank {2}. IBD looks for 80+ against all stocks; here Strong = 80+, Average = 50-79, Weak = under 50 against its own history. Includes the latest month.', mk, f_pa(rs), na(pr) ? 'N/A' : str.tostring(pr)) + '\n\nDisplay only. Evidence is from the US; in Vietnam it is thin: a HOSE study (2017-2026, not peer-reviewed) found no 12-month momentum and that last month\'s losers kept losing, and value works best among recent losers (Asness 1997), so waiting can miss part of a rebound.'
     c
 
 // @function Growth for the information rows, from the quarter store (hm, hq). crev, croa, cas: the TTM revenue, ROA and assets columns (net income = ROA x assets); qrev, qni: the quarterly revenue and net income columns, -1 when flows are requested as TTM (the quarter is then estimated from the change in the 12-month totals). Returns 6 strings for cardRows: one row for growth and the earnings surprise.
