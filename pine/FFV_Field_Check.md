@@ -4,53 +4,48 @@ One-off check: add it to a daily chart with maximum history and send back the ta
 
 ```pine
 //@version=6
-// FFV Field Check: how often each candidate field for the FFV companion has data on this
-// symbol. Run it on your usual tickers (daily chart, as much history as loads) and send
-// back the table. It also plots one test value to the Data Window only, to check whether
-// another script can pick a Data-Window-only plot as its source.
+// FFV Field Check (risk fields): does each field the Low risk upgrade needs have data on this
+// symbol, and how is it defined? Run it on a daily chart with as much history as loads and
+// send back a screenshot of the table. Suggested tickers: HPG (HOSE), a US industrial, a US
+// acquirer with large goodwill (e.g. DHR) and a Vietnamese bank.
 indicator('FFV Field Check', overlay = true)
 
 f(string id, string per) =>
     request.financial(syminfo.tickerid, id, per, ignore_invalid_symbol = true, currency = syminfo.currency)
 
 var array<string> NAMES = array.from(
-     'TOTAL_EQUITY FQ', 'SHRHLDRS_EQUITY FQ', 'BOOK_VALUE_PER_SHARE FQ', 'TOTAL_LIABILITIES FQ',
-     'GROSS_PROFIT TTM', 'GROSS_MARGIN TTM', 'COGS_TO_REVENUE FQ',
-     'EBITDA TTM', 'OPER_INCOME TTM', 'DEPRECIATION_DEPLETION FQ', 'EBITDA_MARGIN TTM',
-     'CAPITAL_EXPENDITURES FQ', 'CAPEX_FIXED_ASSETS FQ', 'CAPEX_OTHER_ASSETS FQ',
-     'CF_DEPRECIATION_N_AMORT FQ', 'AMORTIZATION FQ',
-     'BASIC_SHARES_OUTSTANDING FQ', 'CASH_N_EQUIVALENTS FQ', 'LONG_TERM_DEBT FQ', 'ST_DEBT_EXCL_CURR_PORT FQ',
-     'DEBT_TO_EQUITY FQ', 'CURRENT_RATIO FQ', 'TOTAL_CURRENT_ASSETS FQ', 'TOTAL_CURRENT_LIABILITIES FQ',
-     'NET_INCOME TTM', 'IMPAIRMENTS FY', 'TOTAL_REVENUE TTM', 'PPE_TOTAL_NET FQ', 'DILUTED_SHARES FQ',
-     'PURCHASE_OF_BUSINESS FQ', 'CHANGES_IN_WORKING_CAPITAL FQ', 'CHANGE_IN_INVENTORIES FQ',
-     'CHANGE_IN_ACCOUNTS_RECEIVABLE FQ', 'CHANGE_IN_ACCOUNTS_PAYABLE FQ', 'NON_CASH_ITEMS FQ',
-     'TOTAL_REVENUE FQ', 'TOTAL_REVENUE FY', 'NET_INCOME FY', 'FREE_CASH_FLOW FY')
+     'GOODWILL FQ', 'INTANGIBLES_NET FQ', 'OTHER_INTANGIBLES_NET FQ', 'BOOK_TANGIBLE_PER_SHARE FQ',
+     'SHRHLDRS_EQUITY FQ', 'TOTAL_EQUITY FQ', 'BASIC_SHARES_OUTSTANDING FQ', 'TOTAL_LIABILITIES FQ',
+     'TOTAL_INVENTORY FQ', 'TOTAL_CURRENT_ASSETS FQ', 'TOTAL_CURRENT_LIABILITIES FQ',
+     'CURRENT_PORT_DEBT_CAPITAL_LEASES FQ', 'SHORT_TERM_DEBT FQ', 'SHORT_TERM_DEBT_EXCL_CURRENT_PORT FQ',
+     'UNUSUAL_EXPENSE_INC FQ', 'PRETAX_INCOME FQ', 'EBITDA TTM', 'INTEREST_EXPENSE_ON_DEBT FQ')
 
 array<float> v = array.from(
-     f('TOTAL_EQUITY', 'FQ'), f('SHRHLDRS_EQUITY', 'FQ'), f('BOOK_VALUE_PER_SHARE', 'FQ'), f('TOTAL_LIABILITIES', 'FQ'),
-     f('GROSS_PROFIT', 'TTM'), f('GROSS_MARGIN', 'TTM'), f('COGS_TO_REVENUE', 'FQ'),
-     f('EBITDA', 'TTM'), f('OPER_INCOME', 'TTM'), f('DEPRECIATION_DEPLETION', 'FQ'), f('EBITDA_MARGIN', 'TTM'),
-     f('CAPITAL_EXPENDITURES', 'FQ'), f('CAPITAL_EXPENDITURES_FIXED_ASSETS', 'FQ'), f('CAPITAL_EXPENDITURES_OTHER_ASSETS', 'FQ'),
-     f('CASH_FLOW_DEPRECATION_N_AMORTIZATION', 'FQ'), f('AMORTIZATION', 'FQ'),
-     f('BASIC_SHARES_OUTSTANDING', 'FQ'), f('CASH_N_EQUIVALENTS', 'FQ'), f('LONG_TERM_DEBT', 'FQ'), f('SHORT_TERM_DEBT_EXCL_CURRENT_PORT', 'FQ'),
-     f('DEBT_TO_EQUITY', 'FQ'), f('CURRENT_RATIO', 'FQ'), f('TOTAL_CURRENT_ASSETS', 'FQ'), f('TOTAL_CURRENT_LIABILITIES', 'FQ'),
-     f('NET_INCOME', 'TTM'), f('IMPAIRMENTS', 'FY'), f('TOTAL_REVENUE', 'TTM'), f('PPE_TOTAL_NET', 'FQ'), f('DILUTED_SHARES_OUTSTANDING', 'FQ'),
-     f('PURCHASE_OF_BUSINESS', 'FQ'), f('CHANGES_IN_WORKING_CAPITAL', 'FQ'), f('CHANGE_IN_INVENTORIES', 'FQ'),
-     f('CHANGE_IN_ACCOUNTS_RECEIVABLE', 'FQ'), f('CHANGE_IN_ACCOUNTS_PAYABLE', 'FQ'), f('NON_CASH_ITEMS', 'FQ'),
-     f('TOTAL_REVENUE', 'FQ'), f('TOTAL_REVENUE', 'FY'), f('NET_INCOME', 'FY'), f('FREE_CASH_FLOW', 'FY'))
-int N = 39
+     f('GOODWILL', 'FQ'), f('INTANGIBLES_NET', 'FQ'), f('OTHER_INTANGIBLES_NET', 'FQ'), f('BOOK_TANGIBLE_PER_SHARE', 'FQ'),
+     f('SHRHLDRS_EQUITY', 'FQ'), f('TOTAL_EQUITY', 'FQ'), f('BASIC_SHARES_OUTSTANDING', 'FQ'), f('TOTAL_LIABILITIES', 'FQ'),
+     f('TOTAL_INVENTORY', 'FQ'), f('TOTAL_CURRENT_ASSETS', 'FQ'), f('TOTAL_CURRENT_LIABILITIES', 'FQ'),
+     f('CURRENT_PORT_DEBT_CAPITAL_LEASES', 'FQ'), f('SHORT_TERM_DEBT', 'FQ'), f('SHORT_TERM_DEBT_EXCL_CURRENT_PORT', 'FQ'),
+     f('UNUSUAL_EXPENSE_INC', 'FQ'), f('PRETAX_INCOME', 'FQ'), f('EBITDA', 'TTM'), f('INTEREST_EXPENSE_ON_DEBT', 'FQ'))
+int N = 18
 
-// Per field: bars with data, first bar with data. Coverage = bars with data / bars since
-// the FIRST field of any kind had data (so a field that starts later scores lower).
+// Per field: bars with data, bars with exactly 0 (0 can mean "none" or "not reported"),
+// negative bars, first bar with data. Coverage = bars with data / bars since any field had data.
 var array<int> hits = array.new_int(N, 0)
+var array<int> zeros = array.new_int(N, 0)
+var array<int> negs = array.new_int(N, 0)
 var array<int> first_t = array.new_int(N, 0)
 var int any_first = 0
 var int bars = 0
 bool any_now = false
 for i = 0 to N - 1
-    if not na(v.get(i))
+    float x = v.get(i)
+    if not na(x)
         any_now := true
         hits.set(i, hits.get(i) + 1)
+        if x == 0
+            zeros.set(i, zeros.get(i) + 1)
+        if x < 0
+            negs.set(i, negs.get(i) + 1)
         if first_t.get(i) == 0
             first_t.set(i, time)
 if any_now and any_first == 0
@@ -58,46 +53,65 @@ if any_now and any_first == 0
 if any_first > 0
     bars += 1
 
-// Does a backup survive when its primary is missing? Bars where primary is na but backup
-// has data, over bars where the primary is na.
-// Pairs (primary index, backup index).
-var array<int> PA = array.from(0, 0, 4, 7, 7, 11, 23, 3)
-var array<int> PB = array.from(1, 2, 5, 8, 10, 12, 21, 0)
-var array<int> p_miss = array.new_int(8, 0)
-var array<int> p_fill = array.new_int(8, 0)
-if any_first > 0
-    for k = 0 to 7
-        if na(v.get(PA.get(k)))
-            p_miss.set(k, p_miss.get(k) + 1)
-            if not na(v.get(PB.get(k)))
-                p_fill.set(k, p_fill.get(k) + 1)
+// Definition tests, counted over bars where every input is present: [bars tested, bars passed].
+// Near: within 1% of the larger side (or both under 1e-9).
+near(float a, float b) =>
+    math.abs(a - b) <= 0.01 * math.max(math.abs(a), math.abs(b)) + 1e-9
+float G = v.get(0), float I = v.get(1), float O = v.get(2), float BT = v.get(3)
+float EQ = v.get(4), float SH = v.get(6), float INV = v.get(8), float CA = v.get(9)
+float CP = v.get(11), float ST = v.get(12), float SX = v.get(13)
+var array<string> TN = array.from(
+     'T1 INTANGIBLES_NET = GOODWILL + OTHER_INTANG (includes goodwill)',
+     'T2 INTANGIBLES_NET = OTHER_INTANG (excludes goodwill)',
+     'T3 Tangible BVPS = (equity - INTANGIBLES_NET) / shares',
+     'T4 Tangible BVPS = (equity - INTANGIBLES_NET - GOODWILL) / shares',
+     'T5 CURRENT_PORT <= SHORT_TERM_DEBT',
+     'T6 SHORT_TERM_DEBT = EXCL_CURRENT_PORT + CURRENT_PORT',
+     'T7 0 <= TOTAL_INVENTORY <= TOTAL_CURRENT_ASSETS')
+var array<int> tn = array.new_int(7, 0)
+var array<int> tp = array.new_int(7, 0)
+f_t(int k, bool have, bool ok) =>
+    if have
+        tn.set(k, tn.get(k) + 1)
+        if ok
+            tp.set(k, tp.get(k) + 1)
+f_t(0, not na(I) and not na(G) and not na(O), near(I, G + O))
+f_t(1, not na(I) and not na(G) and not na(O) and G != 0, near(I, O))
+f_t(2, not na(BT) and not na(EQ) and not na(I) and SH > 0, near(BT, (EQ - I) / SH))
+f_t(3, not na(BT) and not na(EQ) and not na(I) and not na(G) and SH > 0 and G != 0, near(BT, (EQ - I - G) / SH))
+f_t(4, not na(CP) and not na(ST), CP <= ST * 1.01 + 1e-9)
+f_t(5, not na(CP) and not na(ST) and not na(SX), near(ST, SX + CP))
+f_t(6, not na(INV) and not na(CA), INV >= 0 and INV <= CA * 1.01 + 1e-9)
 
-// Link test: pick this in another script's Source input. If it is not in the list, a
-// Data-Window-only plot cannot be linked.
-plot(v.get(26), 'FFV link test (TTM revenue)', display = display.data_window)
-
-var table tb = table.new(position.top_right, 4, N + 11, bgcolor = color.new(color.black, 10), border_width = 1)
+var table tb = table.new(position.top_right, 6, N + 10, bgcolor = color.new(color.black, 10), border_width = 1)
 f_dt(int t) =>
     t == 0 ? '-' : str.format_time(t, 'yyyy-MM', syminfo.timezone)
+f_c(int c, int r, string s, color col = color.white, string sz = size.tiny) =>
+    table.cell(tb, c, r, s, text_color = col, text_size = sz, text_halign = c == 0 ? text.align_left : text.align_center)
 if barstate.islast
-    table.cell(tb, 0, 0, syminfo.ticker + ' (' + str.tostring(bars) + ' bars)', text_color = color.white, text_size = size.small)
-    table.cell(tb, 1, 0, 'Coverage', text_color = color.white, text_size = size.small)
-    table.cell(tb, 2, 0, 'First', text_color = color.white, text_size = size.small)
-    table.cell(tb, 3, 0, 'Latest', text_color = color.white, text_size = size.small)
+    f_c(0, 0, syminfo.ticker + ' ' + syminfo.currency + ' (' + str.tostring(bars) + ' bars)', color.white, size.small)
+    f_c(1, 0, 'Coverage', color.white, size.small)
+    f_c(2, 0, 'Zero', color.white, size.small)
+    f_c(3, 0, 'Negative', color.white, size.small)
+    f_c(4, 0, 'First', color.white, size.small)
+    f_c(5, 0, 'Latest', color.white, size.small)
     for i = 0 to N - 1
-        float c = bars > 0 ? hits.get(i) / float(bars) * 100 : 0.0
-        color col = c >= 90 ? color.green : c >= 50 ? color.orange : color.red
-        table.cell(tb, 0, i + 1, NAMES.get(i), text_color = color.white, text_size = size.tiny, text_halign = text.align_left)
-        table.cell(tb, 1, i + 1, str.tostring(c, '#') + '%', text_color = col, text_size = size.tiny)
-        table.cell(tb, 2, i + 1, f_dt(first_t.get(i)), text_color = color.white, text_size = size.tiny)
-        table.cell(tb, 3, i + 1, na(v.get(i)) ? 'N/A' : str.tostring(v.get(i), format.volume), text_color = color.white, text_size = size.tiny)
-    table.cell(tb, 0, N + 1, 'Backup fills primary gap', text_color = color.yellow, text_size = size.small)
-    table.cell(tb, 1, N + 1, 'Gap bars', text_color = color.yellow, text_size = size.small)
-    table.cell(tb, 2, N + 1, 'Filled', text_color = color.yellow, text_size = size.small)
-    for k = 0 to 7
-        int m = p_miss.get(k)
-        table.cell(tb, 0, N + 2 + k, NAMES.get(PA.get(k)) + ' <- ' + NAMES.get(PB.get(k)), text_color = color.white, text_size = size.tiny, text_halign = text.align_left)
-        table.cell(tb, 1, N + 2 + k, str.tostring(m), text_color = color.white, text_size = size.tiny)
-        table.cell(tb, 2, N + 2 + k, m == 0 ? '-' : str.tostring(p_fill.get(k) / float(m) * 100, '#') + '%', text_color = color.white, text_size = size.tiny)
+        int h = hits.get(i)
+        float c = bars > 0 ? h / float(bars) * 100 : 0.0
+        f_c(0, i + 1, NAMES.get(i))
+        f_c(1, i + 1, str.tostring(c, '#') + '%', c >= 90 ? color.green : c >= 50 ? color.orange : color.red)
+        f_c(2, i + 1, h == 0 ? '-' : str.tostring(zeros.get(i) / float(h) * 100, '#') + '%')
+        f_c(3, i + 1, h == 0 ? '-' : str.tostring(negs.get(i) / float(h) * 100, '#') + '%')
+        f_c(4, i + 1, f_dt(first_t.get(i)))
+        f_c(5, i + 1, na(v.get(i)) ? 'N/A' : str.tostring(v.get(i), format.volume))
+    f_c(0, N + 1, 'Definition tests', color.yellow, size.small)
+    f_c(1, N + 1, 'Bars tested', color.yellow, size.small)
+    f_c(2, N + 1, 'Passed', color.yellow, size.small)
+    for k = 0 to 6
+        int n = tn.get(k)
+        float p = n > 0 ? tp.get(k) / float(n) * 100 : na
+        f_c(0, N + 2 + k, TN.get(k))
+        f_c(1, N + 2 + k, str.tostring(n))
+        f_c(2, N + 2 + k, n == 0 ? '-' : str.tostring(p, '#') + '%', n == 0 ? color.gray : p >= 90 ? color.green : p >= 50 ? color.orange : color.red)
 
 ```
