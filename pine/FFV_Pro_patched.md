@@ -1670,7 +1670,9 @@ string sec_auto = switch i_industry
     'Telecom' => ''
     => FL.f_secidx(syminfo.sector, syminfo.industry)
 string sec_idx = curr != 'VND' ? '' : i_sector_idx != '' ? i_sector_idx : sec_auto != '' ? 'HOSE:' + sec_auto : ''
-float value_c = request.security(curr != 'VND' ? i_value_etf : sec_idx != '' ? sec_idx : final_mkt_bench, i_beta_tf, close, ignore_invalid_symbol = true)
+// VND: sampled like the market leg (last period's close, lookahead on), so both hold last week's close on every bar of this week.
+bool tw_vn = curr == 'VND'
+float value_c = request.security(tw_vn ? (sec_idx != '' ? sec_idx : final_mkt_bench) : i_value_etf, tw_vn ? beta_tf : i_beta_tf, tw_vn ? close[1] : close, lookahead = tw_vn ? barmerge.lookahead_on : barmerge.lookahead_off, ignore_invalid_symbol = true)
 float growth_c = curr == 'VND' ? na : request.security(i_growth_etf, i_beta_tf, close, ignore_invalid_symbol = true)
 float value_p = f_locf(curr == 'VND' ? na : value_c)
 float growth_p = f_locf(growth_c)
@@ -1690,7 +1692,7 @@ bool tw_new = ta.change(time('W')) != 0
 bool tw_wk = timeframe.in_seconds(beta_tf) <= 604800
 if tw_new and timeframe.in_seconds() <= 604800 and close[1] > 0
     TW_S.push(close[1])
-    TW_X.push(tw_wk and sec_idx != '' and value_c[1] > 0 ? value_c[1] : na)
+    TW_X.push(tw_wk and sec_idx != '' and value_c > 0 ? value_c : na)
     TW_M.push(tw_wk and mkt_bench_p > 0 ? mkt_bench_p : na)
     if TW_S.size() > 157
         TW_S.shift()

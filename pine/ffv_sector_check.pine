@@ -58,4 +58,4 @@ if barstate.islast
         f_c(2, i + 2, na(c) ? '-' : str.tostring(W.get(i)), na(c) ? color.gray : W.get(i) >= 27 ? color.green : color.orange)
         f_c(3, i + 2, na(c) ? 'N/A' : str.tostring(c, '#.##'))
         f_c(4, i + 2, na(c) or na(o) or o <= 0 ? 'N/A' : str.tostring((c / o - 1) * 100, '#.#') + '%')
-    f_c(0, 14, 'Weeks: weekly bars on this chart (Timing needs 27). Yellow: the auto-detected index.', color.gray)
+    f_c(0, 14, 'Weeks: weekly bars on this chart (Timing needs 27, its rank 79). Yellow: the auto-detected index.', color.gray)
