@@ -664,7 +664,7 @@ i_numQuarters = input.int(20, 'Number of Quarters to Average', minval = 4, maxva
 i_useMean = input.bool(true, 'Use Mean Instead of Median', group = group_calc)
 i_ratioCap = input.float(200.0, 'Maximum Ratio Cap', minval = 50, group = group_calc)
 i_useBeneishCheck = input.bool(true, '🕵️ Apply Beneish M-Score (Fraud Check)', group = group_calc)
-i_use_rkv = input.bool(true, '💎 Apply Rhodes-Kropf (RKV) M/B Decomposition', group = group_calc, tooltip = 'Decomposes M/B into Mispricing and Growth Options. Drops value-trap quarters from the historical P/B average and flags current value traps.')
+i_use_rkv = input.bool(true, '💎 Value-trap filter (justified P/B)', group = group_calc, tooltip = 'Justified P/B = (ROE - g) / (cost of equity - g) on the 5-year average ROE (Wilcox 1984; Ohlson 1995). A value trap is a P/B under 1 that is no higher than that: cheap on book, but the returns do not support even that price. Flags it, takes 0.2 off our confidence and holds the scorecard\'s Value pillar at 50. Also drops quarters with ROE under the 10Y + 5% from the P/B history average.')
 i_flow_ttm = input.bool(true, 'Request flows as TTM', group = group_calc, tooltip = 'Income and cash-flow items are requested as TTM directly instead of summing four FQ values. Interest and R&D have no TTM field, so they are always summed from FQ.')
 group_iv = 'Intrinsic Value Models (Automated)'
 i_growth_src = input.string('Auto (Consensus EPS -> Sales CAGR)', 'Forward growth source', options = ['Auto (Consensus EPS -> Sales CAGR)', 'Manual'], group = group_iv, tooltip = 'Auto: FY consensus EPS growth (EARNINGS_ESTIMATE, has history and passes the report-lag gate), else FY consensus revenue growth (SALES_ESTIMATES, for loss makers), else 3y sales CAGR, else the manual value.\n\nAnalyst PRICE targets are never used here: they exist only for today, so they would leak into the backtest and make the street comparison circular.')
@@ -1109,6 +1109,8 @@ var float F_shield = na
 var float F_rev_g = na
 var float F_asset_g = na
 var float F_ebitda_g = na
+var float F_da = na
+var float F_ni_1y = na
 var bool F_inv_dummy = false
 var bool F_deter = false
 var float F_fwd_g = na
@@ -1537,6 +1539,8 @@ if CK.dirty
     F_rev_g := rev_growth
     F_asset_g := asset_growth
     F_ebitda_g := ebitda_growth
+    F_da := f_g(iDA)
+    F_ni_1y := Y4.get(Q_ROA) * Y4.get(Q_AS)
     F_inv_dummy := investment_dummy
     F_deter := is_deteriorating
     F_fwd_g := fwd_eps_growth
@@ -2252,21 +2256,27 @@ if barstate.islast
             m.inv := a < 0 ? 'Bull below Base.' : 'Bear above Base on the ' + AXN.get(a) + ' axis: ' + array.get(array.from(FL.tx(13), FL.tx(14), FL.tx(15), FL.tx(16)), a)
             n_inv += (omni_active ? m.om : m.w > 0) ? 1 : 0
 // ==========================================
-// RHODES-KROPF (RKV) M/B DECOMPOSITION & VALUE TRAP DETECTION (on the value shown)
+// JUSTIFIED P/B & VALUE TRAP (Wilcox 1984; Ohlson 1995)
 // ==========================================
-float rkv_mispricing_mv = na
-float rkv_growth_vb = na
-is_rkv_value_trap = false
-is_rkv_deep_value = false
+// (ROE - g) / (CoE - g) on the 5-year average ROE (3 yearly readings at least) and the DCF's
+// terminal growth, held 2pp under the cost of equity. Trap: P/B under 1 and no higher than that.
 float current_pb_val = bvps_ttm > 0 ? close / bvps_ttm : na
-if i_use_rkv and finalFairValue > 0 and bvps_ttm > 0
-    rkv_mispricing_mv := close / finalFairValue
-    rkv_growth_vb := finalFairValue / bvps_ttm
-    if current_pb_val < 1.5
-        if rkv_growth_vb < 1.0
-            is_rkv_value_trap := true
-        else if rkv_mispricing_mv < 0.85
-            is_rkv_deep_value := true
+float jpb_roe = na
+float jpb_g = na
+float jpb = na
+is_value_trap = false
+if i_use_rkv and bvps_ttm > 0 and cost_of_equity > 0
+    float s_roe = 0.0
+    int n_roe = 0
+    for i = 0 to 4
+        float x = ST.at(Q_ROE, 4 * i)
+        if not na(x)
+            s_roe += x
+            n_roe += 1
+    jpb_roe := n_roe >= 3 ? s_roe / n_roe : na
+    jpb_g := math.min(nz(final_terminal_growth), cost_of_equity - 0.02)
+    jpb := (jpb_roe - jpb_g) / (cost_of_equity - jpb_g)
+    is_value_trap := current_pb_val < 1 and current_pb_val >= jpb
 // ==============================================================
 // === RESOLVE: BANDS + VERDICT (after the blend is final) ======
 // ==============================================================
@@ -2456,7 +2466,7 @@ if barstate.islast and i_show_street
     [our_w, our_err] = f_model_weight(ST.window(Q_FFV, 20, 1, true), ST.window(Q_PX, 20, 1, true), 4, i_w_horizon) // RMS log error
     float oc_rel = na(our_err) ? 0.3 : math.exp(-our_err / 0.3)
     float oc_tier = (f_tier_q(f_stier(D, Sx.eps_b)) + f_tier_q(f_stier(D, Sx.rev)) + f_tier_q(f_stier(D, Sx.fcff)) + f_tier_q(f_stier(D, Sx.bvps)) + f_tier_q(f_stier(D, Sx.nopat))) / 5.0
-    float oc_flags = (is_rkv_value_trap ? 0.2 : 0.0) + (i_useBeneishCheck and F_manip ? 0.2 : 0.0) + (altman_z < z_safe_cut ? 0.2 : 0.0) + (F_suspect ? 0.2 : 0.0)
+    float oc_flags = (is_value_trap ? 0.2 : 0.0) + (i_useBeneishCheck and F_manip ? 0.2 : 0.0) + (altman_z < z_safe_cut ? 0.2 : 0.0) + (F_suspect ? 0.2 : 0.0)
     float oc_qual = f_clamp01(oc_tier - oc_flags)
     float our_conf = na(oc_agree) ? na : 100 * (0.35 * oc_agree + 0.20 * oc_depth + 0.25 * oc_rel + 0.20 * oc_qual)
     // --- STREET confidence ---
@@ -2542,9 +2552,6 @@ bool HV_zm_on = false
 string HV_zm_txt = 'N/A'
 color HV_zm_col = na
 string HV_zm_tt = ''
-string HV_rkv_txt = 'Neutral'
-color HV_rkv_col = na
-string HV_rkv_tt = ''
 string HV_wacc_flag = 'Normal'
 string HV_wacc_tt = ''
 int HV_n_flags = 0
@@ -2585,10 +2592,6 @@ if barstate.islast
         zm_tt += (z_is_em ? FL.tx(31) : FL.tx(32)) + '\nM-Score cutoff: -1.78.'
     // Capital allocation
     inv_txt = F_inv_dummy ? 'Empire Builder' : F_deter ? 'Deteriorating' : 'Efficient'
-    // Rhodes-Kropf
-    rkv_txt = is_rkv_value_trap ? 'Value Trap' : is_rkv_deep_value ? 'True Deep Value' : 'Neutral'
-    rkv_col = is_rkv_value_trap ? color_over : is_rkv_deep_value ? color_under : color_bg
-    rkv_tt = str.format(FL.tx(37), rkv_growth_vb, rkv_mispricing_mv)
     // Discount rate (+ the macro assumptions behind terminal growth)
     wacc_flag = final_discount_rate < 0.05 ? 'Too Low' : final_discount_rate > 0.20 ? 'Extreme' : 'Normal'
     wacc_tt = str.format(FL.tx(38), beta_mkt, (na(downside_beta) ? 'N/A' : str.tostring(downside_beta, '#.##')), i_rf_base, base_rf_for_calc * 100, calc_erp * 100, calc_crp * 100, auto_crp_raw * 100) + str.format(FL.tx(39), D.cod * 100, F_tax * 100, lr_infl * 100, lr_rgdp * 100, final_terminal_growth * 100)
@@ -2616,9 +2619,9 @@ if barstate.islast
     if F_inv_dummy or F_deter
         fl.push('Capital alloc')
         flags_tt += str.format('\nCapital allocation: {0}.', inv_txt)
-    if i_use_rkv and is_rkv_value_trap
+    if is_value_trap
         fl.push('Value trap')
-        flags_tt += str.format(FL.tx(43), rkv_growth_vb)
+        flags_tt += str.format(FL.tx(43), current_pb_val, jpb_roe * 100, cost_of_equity * 100)
     if wacc_flag != 'Normal'
         fl.push('WACC')
         flags_tt += str.format(FL.tx(44), final_discount_rate * 100, wacc_flag)
@@ -2637,9 +2640,6 @@ if barstate.islast
     HV_zm_txt := zm_txt
     HV_zm_col := zm_col
     HV_zm_tt := zm_tt
-    HV_rkv_txt := rkv_txt
-    HV_rkv_col := rkv_col
-    HV_rkv_tt := rkv_tt
     HV_wacc_flag := wacc_flag
     HV_wacc_tt := wacc_tt
     HV_n_flags := n_flags
@@ -2666,26 +2666,30 @@ if barstate.islast
     float bsec = timeframe.in_seconds(beta_tf)
     float cash_iss = not na(F_netbb) and D.mc > 0 ? -F_netbb / D.mc : na
     float sh_chg = F_sh / F_sh_1y - 1
-    // The fair value's shares held by the DCF, P/B and Owners' Earnings rows, and its members.
-    array<float> ov = array.new_float(3, 0.0)
+    // The fair value's shares held by the DCF, P/B, Owners' Earnings and Acquirer's rows, and its members.
+    array<float> ov = array.new_float(4, 0.0)
     int n_mem = 0
     for m in MD
         float sh = omni_active ? m.om_w : m.w
         n_mem += sh > 0 ? 1 : 0
-        int j = m.code == 'DCF' ? 0 : m.code == 'PB' ? 1 : m.code == 'OE' ? 2 : -1
+        int j = m.code == 'DCF' ? 0 : m.code == 'PB' ? 1 : m.code == 'OE' ? 2 : m.code == 'ACQ' ? 3 : -1
         if j >= 0
             ov.set(j, nz(sh))
     CARD := FL.f_card(array.from(F_gp / F_assets, F_ocf / F_assets, D.roe, F_ni_c / F_assets, (F_ni_c - F_ocf) / F_assets, F_gp / F_rev, float(na), float(na), float(na), float(na), float(na),
          nz(cash_iss, math.abs(sh_chg) < 0.3 ? sh_chg : float(na)), F_ni_c > 0 and not (na(F_dps) and na(F_netbb)) ? (nz(F_dps) * F_sh + nz(F_netbb)) / F_ni_c : float(na), (F_debt - F_debt_1y) / F_assets,
          use_bank_model ? D.roe - cost_of_equity : roic_wacc_spread, na(raw_beta_s) ? na : beta_mkt, float(na), use_bank_model ? F_eq / F_assets : F_debt / F_assets, altman_z, float(na), downside_beta,
-         F_debt / F_assets < 0.02 ? 99.0 : F_interest > 0 ? F_ebit / F_interest : float(na), float(na), float(na), float(na), close > 0 and F_t_oe > 0 ? F_oe_ps / close - rf_local_avg / 100 : float(na),
-         F_pio, F_asset_g, na(F_ebitda) ? float(na) : F_ebitda > 0 ? F_nd / F_ebitda : F_nd > 0 ? 99.0 : F_nd <= 0 ? -1.0 : float(na), rdcf.get(0) - final_growth_rate),
+         F_debt / F_assets < 0.02 ? 99.0 : F_interest > 0 ? F_ebit / F_interest : float(na), float(na), float(na), float(na), close > 0 and F_t_oe > 0 ? F_oe_ps / close - cost_of_equity : float(na),
+         F_pio, F_asset_g, na(F_ebitda) ? float(na) : F_ebitda > 0 ? F_nd / F_ebitda : F_nd > 0 ? 99.0 : F_nd <= 0 ? -1.0 : float(na), rdcf.get(0) - final_growth_rate,
+         FL.f_oscore(F_assets / fx_rate, F_assets, F_tl, F_ca, F_cl, F_ni_c, F_ni_1y, F_da, year),
+         na(ev_now) or na(F_ebit) ? float(na) : ev_now > 0 ? F_ebit * (1 - math.min(math.max(F_tax, 0.0), 0.5)) / ev_now - final_discount_rate : F_ebit > 0 ? 99.0 : float(na)),
          eng_t, F_suspect or CK.cap == 0, F_eq, use_bank_model ? 1 : selected_industry == 'REITs' or selected_industry == 'Utilities' ? 2 : 0, z_safe_cut, z_gold_cut,
-         i_useBeneishCheck and F_manip and math.min(eng_t.get(19), eng_t.get(5), eng_t.get(6), eng_t.get(0)) >= 2, i_use_rkv and is_rkv_value_trap,
+         i_useBeneishCheck and F_manip and math.min(eng_t.get(19), eng_t.get(5), eng_t.get(6), eng_t.get(0)) >= 2, is_value_trap,
          ST.v, ST.q, array.from(Q_X, Q_X + 1, Q_ROE, Q_ROA, Q_GM), beta_ra, beta_rb, bsec >= 604800 ? 31557600 / bsec : trading_days * (bsec >= 86400 ? 86400 : session_sec) / bsec,
          pbh, pb, close, sell_zone_line, finalFairValue, buy_zone_line, ov, n_mem >= 2 and finalFairValue > 0 ? fv_stddev / finalFairValue : float(na), F_ebitda_g)
-    CARD_INFO := array.from('1', 'Z+M matrix', 'Z ' + (na(altman_z) ? '-' : str.tostring(altman_z, '#.#')), 'information', HV_zm_txt,
-         '2', 'Rhodes-Kropf V/B', i_use_rkv ? str.tostring(rkv_growth_vb, '#.##') + 'x' : 'off', 'information', HV_rkv_txt)
+    CARD_INFO := FL.f_grow(ST.v, ST.q, Q_REV, Q_ROA, Q_AS, i_flow_ttm ? -1 : Q_FLOW, i_flow_ttm ? -1 : Q_FLOW + 13)
+    CARD_INFO.concat(array.from('1', 'Z+M matrix', 'Z ' + (na(altman_z) ? '-' : str.tostring(altman_z, '#.#')), 'information', HV_zm_txt, HV_zm_tt,
+         '2', 'Justified P/B', not i_use_rkv ? 'off' : na(jpb) ? 'N/A' : jpb < 0 ? 'below 0' : str.tostring(jpb, '#.##') + 'x', 'P/B ' + (na(current_pb_val) ? 'N/A' : str.tostring(current_pb_val, '#.##') + 'x'),
+         is_value_trap ? 'Value trap' : na(jpb) or na(current_pb_val) ? 'information' : current_pb_val < jpb ? 'Below justified' : 'Above justified', na(jpb) or na(current_pb_val) ? 'Justified P/B needs a positive book value and 3 yearly ROE readings (the filter setting on).' : str.format(FL.tx(37), current_pb_val, jpb, jpb_roe * 100, cost_of_equity * 100, jpb_g * 100)))
 // ---------- summary card ----------
 f_tbl_head() =>
     T.set_position(i_tablePos == 'top_right' ? position.top_right : i_tablePos == 'middle_right' ? position.middle_right : position.bottom_right)
