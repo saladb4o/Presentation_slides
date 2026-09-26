@@ -496,10 +496,13 @@ export f_beta_pair(array<float> ra, array<float> rb, bool downside_only) =>
 // @field gs Group scores (7).
 // @field p Pillar scores: quality, low risk, value.
 // @field cov Pillar coverage: share of the applicable weight that was scored.
-// @field total Geometric mean of the pillars, na when a pillar is na.
+// @field total Weighted geometric mean of the pillars (quality 0.4, low risk and value 0.3), na when a pillar is na.
 // @field why The pillars that are N/A.
-// @field qcap Quality held at 50 by the Beneish flag.
-// @field vcap Value held at 50 by the value-trap flag.
+// @field qcap Quality over 50 kept a quarter of its excess: Beneish flag.
+// @field vcap Value over 50 kept a quarter of its excess: value-trap flag.
+// @field rcap Low risk over 40 kept a quarter of its excess: distress flag (Altman Z distress zone, O-score 10%+ or interest cover under 1.5x).
+// @field vw Verdict: Strong, Fair, Weak or N/A.
+// @field gate Why the verdict is not the total's own word ('' when it is).
 // @field sec 0 general, 1 bank / insurer, 2 REIT / utility.
 export type Card
     array<float> v
@@ -515,6 +518,9 @@ export type Card
     string why = ''
     bool qcap = false
     bool vcap = false
+    bool rcap = false
+    string vw = 'N/A'
+    string gate = ''
     int sec = 0
     float agree = na
     float cut = 0.0
@@ -599,6 +605,8 @@ export f_oscore(float a_usd, float a_, float tl, float ca, float cl, float ni, f
         p := 1 / (1 + math.exp(-o))
     p
 
+f_word(float s) =>
+    na(s) ? 'N/A' : s >= 70 ? 'Strong' : s >= 50 ? 'Fair' : 'Weak'
 // @function Builds the scorecard. v: the 32 metric values the indicator computes (ids 6-10, 16, 19, 22-24 are filled here). tier: the data engine's quality tiers (a metric whose inputs are tier 0 is not scored). bad: suspect or stale data. eq: book equity (<= 0 drops the ROE metrics and book-to-market). sec: 0 general, 1 bank, 2 REIT / utility. zd, zg: Altman distress and safe cuts. manip, trap: the Beneish and value-trap caps (trap: P/B under 1 and no higher than the P/B its returns justify). hm, hq, hc: the quarter store, its open row and the columns of gross profit / assets, cash flow / assets, ROE, ROA, gross margin. ra, rb: the beta return pairs, ppy their periods per year. pbh, pb: P/B history and now. px, sell, fv, buy: price and the chart's lines. ov: the fair value's shares held by the DCF, P/B, Owners' Earnings and Acquirer's multiple rows. cv: the spread of the blend's models / fair value (na with one model). Banks: v 17 is equity / assets. eg: EBITDA growth a year over 3 years (capital allocation: asset growth over the same 3 years against it).
 export f_card(array<float> v, array<int> tier, bool bad, float eq, int sec, float zd, float zg, bool manip, bool trap, matrix<float> hm, int hq, array<int> hc, array<float> ra, array<float> rb, float ppy, array<float> pbh, float pb, float px, float sell, float fv, float buy, array<float> ov, float cv, float eg) =>
     Card c = Card.new(v.copy(), array.new_float(32, na), array.new_float(32, 0.0), array.new_bool(32, true), array.new_float(8, na), array.new_float(3, na), array.new_float(3, na), array.new_float(3, 0.0), array.new_int(32, -1))
@@ -753,17 +761,39 @@ export f_card(array<float> v, array<int> tier, bool bad, float eq, int sec, floa
         c.cov.set(p, cv2)
         c.p.set(p, cv2 >= 0.6 ? sx / sw : na)
     c.w := we
-    if manip and c.p.get(0) > 50
-        c.p.set(0, 50.0)
-        c.qcap := true
-    if trap and c.p.get(2) > 50
-        c.p.set(2, 50.0)
-        c.vcap := true
+    // Red flags: a soft ceiling (over it a pillar keeps a quarter of its excess, so flagged stocks
+    // keep their order). The failure sits in a tail a weighted mean dilutes: distress (Dichev
+    // 1998; Campbell, Hilscher and Szilagyi 2008), manipulation (Beneish, Lee and Nichols 2013),
+    // a value trap (Piotroski 2000).
+    c.rcap := (not na(c.s.get(18)) and vv.get(18) < zd) or (not na(c.s.get(30)) and vv.get(30) >= 0.10) or (not na(c.s.get(21)) and vv.get(21) < 1.5)
+    array<bool> fl = array.from(manip, c.rcap, trap)
+    array<float> ce = array.from(50.0, 40.0, 50.0)
+    for p = 0 to 2
+        float x = c.p.get(p)
+        float k = ce.get(p)
+        if fl.get(p) and x > k
+            c.p.set(p, k + (x - k) * 0.25)
+        else if p != 1
+            fl.set(p, false)
+    c.qcap := fl.get(0)
+    c.vcap := fl.get(2)
     array<string> PN = array.from('Quality', 'Low risk', 'Value')
     for p = 0 to 2
         if na(c.p.get(p))
             c.why += (c.why == '' ? '' : ', ') + PN.get(p)
-    c.total := c.why == '' ? math.pow(math.max(c.p.get(0), 1) * math.max(c.p.get(1), 1) * math.max(c.p.get(2), 1), 1.0 / 3) : na
+    // Quality first (Buffett: a wonderful company at a fair price), then low risk and value.
+    c.total := c.why == '' ? math.pow(math.max(c.p.get(0), 1), 0.4) * math.pow(math.max(c.p.get(1), 1), 0.3) * math.pow(math.max(c.p.get(2), 1), 0.3) : na
+    // Verdict gates: Strong needs every pillar at 50+ and no red flag; any pillar under 30 is Weak.
+    if not na(c.total)
+        float mn = math.min(c.p.get(0), c.p.get(1), c.p.get(2))
+        bool anyf = manip or trap or c.rcap
+        c.vw := f_word(c.total)
+        if mn < 30 and c.vw != 'Weak'
+            c.vw := 'Weak'
+            c.gate := 'a pillar is under 30'
+        else if c.vw == 'Strong' and (mn < 50 or anyf)
+            c.vw := 'Fair'
+            c.gate := anyf ? 'a red flag is up' : 'a pillar is under 50'
     c
 
 // Ten-step text bar of a 0-100 score.
@@ -776,8 +806,6 @@ f_bar(float s) =>
 // Colour of a score: cl = text, background, header, green, red, amber.
 f_scol(float s, array<color> cl) =>
     na(s) ? cl.get(1) : s >= 70 ? cl.get(3) : s >= 50 ? cl.get(5) : cl.get(4)
-f_word(float s) =>
-    na(s) ? 'N/A' : s >= 70 ? 'Strong' : s >= 50 ? 'Fair' : 'Weak'
 f_sc(float s) =>
     na(s) ? 'N/A' : str.tostring(s, '#')
 // A metric's value as shown.
@@ -795,12 +823,12 @@ f_line(Card c, int i) =>
 
 // @function Summary-card row: the total as a bar, the three pillars, the verdict. cl = text, background, header, green, red, amber colours; ts = text size. Returns the next free row.
 export cardSum(table t, int row, Card c, array<color> cl, string ts) =>
-    string tt = "Quality, low risk and value: the traits Frazzini, Kabiller and Pedersen (Buffett's Alpha, 2018) found explain Berkshire's returns; its 1.6x leverage is left out. Each metric scores 0-100 on fixed breakpoints (not a ranking against other stocks, as the paper does). A pillar is the weighted mean of its metrics (N/A under 60% coverage); the total is their geometric mean, so one weak pillar pulls it down. A missing Altman Z passes its weight to the O-score (and back), else to net debt / EBITDA; a missing interest cover to net debt / EBITDA (and back); growth priced in, book-to-market, the owner-earnings yield and EBIT / EV count only for the fair value's share their model does not carry; the yields are measured against the cost of equity (EBIT / EV: WACC), which holds the country's risk, so 0 means growth is priced at nothing (Penman); price vs fair value moves toward 50 when the models disagree; net payout counts profits kept as paid out when they earn over the cost of capital; a theme keeps its share when some of its metrics do not apply to the sector (banks). Display only: fair values and the backtest do not use it. Table detail = Scorecard lists every metric.\n\nCoverage: Q " + str.tostring(nz(c.cov.get(0)) * 100, '#') + '% | R ' + str.tostring(nz(c.cov.get(1)) * 100, '#') + '% | V ' + str.tostring(nz(c.cov.get(2)) * 100, '#') + '%' + (c.qcap ? '\nQuality held at 50: Beneish flag.' : '') + (c.vcap ? '\nValue held at 50: value trap (P/B under 1, no higher than its returns justify).' : '') + (c.why != '' ? '\nN/A: ' + c.why + ' has too little data.' : '')
+    string tt = "Quality, low risk and value: the traits Frazzini, Kabiller and Pedersen (Buffett's Alpha, 2018) found explain Berkshire's returns; its 1.6x leverage is left out. Each metric scores 0-100 on fixed breakpoints (not a ranking against other stocks, as the paper does). A pillar is the weighted mean of its metrics (N/A under 60% coverage); the total is their weighted geometric mean (quality 0.4, low risk and value 0.3: a wonderful company at a fair price), so one weak pillar pulls it down; that formula is this indicator's choice (the paper adds the traits in a regression). A red flag puts a soft ceiling on its pillar -- Beneish on quality, distress (Altman Z distress zone, O-score failure odds 10%+ or interest cover under 1.5x) on low risk, the value trap on value: over 50 (low risk: 40) the pillar keeps a quarter of its excess, so flagged stocks keep their order. Verdict: Strong needs a total of 70+, every pillar at 50+ and no red flag; any pillar under 30 makes it Weak. A missing Altman Z passes its weight to the O-score (and back), else to net debt / EBITDA; a missing interest cover to net debt / EBITDA (and back); growth priced in, book-to-market, the owner-earnings yield and EBIT / EV count only for the fair value's share their model does not carry; the yields are measured against the cost of equity (EBIT / EV: WACC), which holds the country's risk, so 0 means growth is priced at nothing (Penman); price vs fair value moves toward 50 when the models disagree; net payout counts profits kept as paid out when they earn over the cost of capital; a theme keeps its share when some of its metrics do not apply to the sector (banks). Display only: fair values and the backtest do not use it. Table detail = Scorecard lists every metric.\n\nCoverage: Q " + str.tostring(nz(c.cov.get(0)) * 100, '#') + '% | R ' + str.tostring(nz(c.cov.get(1)) * 100, '#') + '% | V ' + str.tostring(nz(c.cov.get(2)) * 100, '#') + '%' + (c.qcap ? '\nQuality excess over 50 cut to a quarter: Beneish flag.' : '') + (c.rcap ? '\nDistress flag' + (c.p.get(1) > 40 ? ': low risk excess over 40 cut to a quarter.' : '.') : '') + (c.vcap ? '\nValue excess over 50 cut to a quarter: value trap (P/B under 1, no higher than its returns justify).' : '') + (c.gate != '' ? '\nVerdict ' + c.vw + ', not ' + f_word(c.total) + ': ' + c.gate + '.' : '') + (c.why != '' ? '\nN/A: ' + c.why + ' has too little data.' : '')
     float s = c.total
     t.cell(0, row, 'Buffett score', text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts, tooltip = tt)
     t.cell(1, row, f_bar(s) + ' ' + f_sc(s), text_color = na(s) ? cl.get(0) : f_scol(s, cl), bgcolor = cl.get(1), text_size = ts, text_font_family = font.family_monospace, tooltip = tt)
     t.cell(2, row, 'Q ' + f_sc(c.p.get(0)) + ' · R ' + f_sc(c.p.get(1)) + ' · V ' + f_sc(c.p.get(2)), text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts)
-    t.cell(3, row, na(s) ? 'N/A' : f_word(s) + ' fit', text_color = na(s) ? cl.get(0) : color.white, bgcolor = f_scol(s, cl), text_size = ts, tooltip = tt)
+    t.cell(3, row, na(s) ? 'N/A' : c.vw + ' fit', text_color = na(s) ? cl.get(0) : color.white, bgcolor = f_scol(c.vw == 'Strong' ? 70 : c.vw == 'Fair' ? 50 : na(s) ? na : 0, cl), text_size = ts, tooltip = tt)
     row + 1
 
 // Growth against a positive base (na: no base, or a loss a year ago).
@@ -845,7 +873,7 @@ export cardRows(table t, int row, Card c, array<color> cl, string ts, array<stri
         string ptt = ''
         for i = 0 to 31
             ptt += f_pil(i) == p ? f_line(c, i) : ''
-        ptt += (p == 0 and c.qcap ? '\nHeld at 50: Beneish flag.' : '') + (p == 2 and c.vcap ? '\nHeld at 50: value trap.' : '') + (p == 2 and c.cut > 0 ? "\nGrowth priced in, book-to-market, the owner-earnings yield and EBIT / EV re-read the DCF, P/B, Owners' Earnings and Acquirer's multiple models: each counts only for the fair value's share its model does not carry." : '')
+        ptt += (p == 0 and c.qcap ? '\nExcess over 50 cut to a quarter: Beneish flag.' : '') + (p == 1 and c.rcap ? '\nDistress flag' + (ps > 40 ? ': excess over 40 cut to a quarter.' : '.') : '') + (p == 2 and c.vcap ? '\nExcess over 50 cut to a quarter: value trap.' : '') + (p == 2 and c.cut > 0 ? "\nGrowth priced in, book-to-market, the owner-earnings yield and EBIT / EV re-read the DCF, P/B, Owners' Earnings and Acquirer's multiple models: each counts only for the fair value's share its model does not carry." : '')
         t.cell(0, r, PN.get(p), text_color = cl.get(0), bgcolor = cl.get(2), text_size = ts, tooltip = ptt)
         t.cell(1, r, f_bar(ps), text_color = na(ps) ? cl.get(0) : f_scol(ps, cl), bgcolor = cl.get(2), text_size = ts, text_font_family = font.family_monospace, tooltip = ptt)
         t.cell(2, r, f_sc(ps), text_color = cl.get(0), bgcolor = cl.get(2), text_size = ts)
@@ -922,7 +950,7 @@ export tx(int id) =>
         30 => 'Quadrant 2: Desperation Spiral\nHigh distress AND accounting manipulation. Extreme Danger.'
         31 => "\n\nScore is Z''-EM: safe > 5.85, distress < 4.35."
         32 => '\n\nScore is Altman Z: safe > 3.0, distress < 1.8.'
-        37 => 'Justified P/B (Wilcox 1984; Ohlson 1995): (ROE - g) / (cost of equity - g), the P/B the company\'\'s own returns support.\n\nP/B now: {0,number,#.##}x\nJustified: {1,number,#.##}x\n\n5-year average ROE {2,number,#.#}% | cost of equity {3,number,#.#}% | long-run growth {4,number,#.#}% (the DCF terminal rate, at most the cost of equity - 2pp).\n\nValue trap: P/B under 1 and no higher than the justified P/B -- cheap on book, but its returns do not support even that price. The Value pillar is then held at 50. Information only.'
+        37 => 'Justified P/B (Wilcox 1984; Ohlson 1995): (ROE - g) / (cost of equity - g), the P/B the company\'\'s own returns support.\n\nP/B now: {0,number,#.##}x\nJustified: {1,number,#.##}x\n\n5-year average ROE {2,number,#.#}% | cost of equity {3,number,#.#}% | long-run growth {4,number,#.#}% (the DCF terminal rate, at most the cost of equity - 2pp).\n\nValue trap: P/B under 1 and no higher than the justified P/B -- cheap on book, but its returns do not support even that price. The Value pillar then keeps a quarter of its excess over 50. Information only.'
         38 => 'CAPM Beta: {0,number,#.##}\nDownside Beta: {1}\nRisk-free base: {2} = {3,number,#.##}%\nERP: {4,number,#.#}%\nCRP: {5,number,#.#}% (local-US spread: {6,number,#.#}%)'
         39 => '\nCost of Debt (synthetic): {0,number,#.#}%\nEffective tax: {1,number,#.#}%\n\nMacro (manual): inflation {2,number,#.##}%, real GDP {3,number,#.##}% -> terminal growth {4,number,#.##}%.'
         40 => '\nLeverage: net debt {0,number,#.#}x EBITDA (> 4.5x).'
