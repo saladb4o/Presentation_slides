@@ -1,6 +1,6 @@
 # FFV Companion Feed
 
-Add this to the same chart as Fundamental Fair Value Pro, then link its 14 plots in the main script's Companion Feed settings. Copy everything inside the code block into a new Pine Editor tab.
+Add this to the same chart as Fundamental Fair Value Pro, then link its 17 plots in the main script's Companion Feed settings. Copy everything inside the code block into a new Pine Editor tab.
 
 ```pine
 //@version=6
@@ -24,9 +24,10 @@ f(string id, string per) =>
 float earn_raw = request.earnings(syminfo.tickerid, earnings.actual, ignore_invalid_symbol = true)
 bool report_bar = not na(earn_raw) and (na(earn_raw[1]) or earn_raw != earn_raw[1])
 
-// 31 requests (30 here + report dates). Index: 0-2 equity | 3-5 gross profit | 6-9 EBITDA |
+// 33 requests (32 here + report dates). Index: 0-2 equity | 3-5 gross profit | 6-9 EBITDA |
 // 10-12 capex | 13-14 cash-flow D&A (8 doubles as its backup) | 15-22 owner-earnings parts |
-// 23 shares | 24 cash | 25-27 debt | 28-29 current liabilities.
+// 23 shares | 24 cash | 25-27 debt | 28-29 current liabilities | 30 inventory | 31 current
+// portion of long-term debt (the scorecard's quick ratio and debt service cover).
 array<float> raw = array.from(
      f('TOTAL_EQUITY', 'FQ'), f('SHRHLDRS_EQUITY', 'FQ'), f('BOOK_VALUE_PER_SHARE', 'FQ'),
      f('GROSS_PROFIT', 'TTM'), f('GROSS_MARGIN', 'TTM'), f('COGS_TO_REVENUE', 'FQ'),
@@ -37,8 +38,9 @@ array<float> raw = array.from(
      f('CHANGE_IN_INVENTORIES', 'FQ'), f('CHANGE_IN_ACCOUNTS_RECEIVABLE', 'FQ'), f('CHANGE_IN_ACCOUNTS_PAYABLE', 'FQ'), f('NON_CASH_ITEMS', 'FQ'),
      f('BASIC_SHARES_OUTSTANDING', 'FQ'), f('CASH_N_EQUIVALENTS', 'FQ'),
      f('LONG_TERM_DEBT', 'FQ'), f('SHORT_TERM_DEBT_EXCL_CURRENT_PORT', 'FQ'), f('DEBT_TO_EQUITY', 'FQ'),
-     f('CURRENT_RATIO', 'FQ'), f('TOTAL_CURRENT_ASSETS', 'FQ'))
-int NR = 30
+     f('CURRENT_RATIO', 'FQ'), f('TOTAL_CURRENT_ASSETS', 'FQ'),
+     f('TOTAL_INVENTORY', 'FQ'), f('CURRENT_PORT_DEBT_CAPITAL_LEASES', 'FQ'))
+int NR = 32
 var array<float> pend = array.new_float(NR, na)
 var array<float> known = array.new_float(NR, na)
 var array<int> seen = array.new_int(NR, 0)
@@ -48,7 +50,7 @@ bool changed = FL.release(raw, pend, known, seen, i_lag, report_bar)
 var int nq = 0
 var array<float> lastv = array.new_float(NR, na)
 var array<int> lastq = array.new_int(NR, 0)
-var array<int> BAL = array.from(0, 1, 2, 15, 23, 24, 25, 26, 27, 28, 29)
+var array<int> BAL = array.from(0, 1, 2, 15, 23, 24, 25, 26, 27, 28, 29, 30, 31)
 for i in BAL
     float x = known.get(i)
     if not na(x) and x != lastv.get(i)
@@ -116,9 +118,10 @@ pick(float a, int ca, float b, int cb, float c, int cc) =>
 // 0 equity | 1 gross profit | 2 EBITDA | 3 capex (negative) | 4 cash-flow D&A |
 // 5 impairments (last FY) | 6 working-capital change, 3-year average of TTM | 7 opt-in
 // owner-earnings adjustment (non-cash items - acquisitions) | 8 shares | 9 cash |
-// 10 total debt | 11 current liabilities.
-var array<float> V = array.new_float(12, na)
-var array<int> C = array.new_int(12, 0)
+// 10 total debt | 11 current liabilities | 12 inventory | 13 current portion of long-term debt |
+// 14 long-term debt (with 13: a 0 there and long-term debt means the filing does not split it out).
+var array<float> V = array.new_float(15, na)
+var array<int> C = array.new_int(15, 0)
 put(int i, float v, int c) =>
     V.set(i, v)
     C.set(i, na(v) ? 0 : c)
@@ -172,6 +175,9 @@ if Q.rows() > 0 and (changed or last_q == bar_index)
     [db, cdb] = pick(not na(K(25)) ? K(25) + nz(K(26)) : na, 3, de >= 0 and e > 0 ? de * e : na, 3, na, 0)
     put(10, db, cdb)
     put(11, K(28) > 0 ? K(29) / K(28) : na, 3)
+    put(12, K(30), 1)
+    put(13, math.abs(K(31)), 1)
+    put(14, K(25), 1)
 
 // ---------- HAND-OVER ----------
 // Codes: report lag + 1000 x sum(code_i x 4^i), an exact integer. Check: weighted
@@ -179,11 +185,11 @@ if Q.rows() > 0 and (changed or last_q == bar_index)
 // swapped with another fails the main script's recomputation at any scale.
 float csum = 0.0
 float check = 0.0
-for i = 0 to 11
+for i = 0 to 14
     csum += C.get(i) * math.pow(4, i)
     check += (i + 2) * FL.mant(V.get(i))
 float codes = i_lag + 1000.0 * csum
-check += 14 * FL.mant(codes)
+check += FL.mant(codes)
 plot(V.get(0), 'FFV Equity', display = display.data_window)
 plot(V.get(1), 'FFV Gross profit', display = display.data_window)
 plot(V.get(2), 'FFV EBITDA', display = display.data_window)
@@ -196,23 +202,26 @@ plot(V.get(8), 'FFV Shares', display = display.data_window)
 plot(V.get(9), 'FFV Cash', display = display.data_window)
 plot(V.get(10), 'FFV Debt', display = display.data_window)
 plot(V.get(11), 'FFV Current liabilities', display = display.data_window)
+plot(V.get(12), 'FFV Inventory', display = display.data_window)
+plot(V.get(13), 'FFV Current portion of LT debt', display = display.data_window)
+plot(V.get(14), 'FFV Long-term debt', display = display.data_window)
 plot(codes, 'FFV Codes', display = display.data_window)
 plot(check, 'FFV Check', display = display.data_window)
 
 // ---------- TABLE ----------
-var table tb = table.new(position.bottom_right, 3, 14, bgcolor = color.new(color.black, 10), border_width = 1)
-var array<string> NM = array.from('Equity', 'Gross profit (TTM)', 'EBITDA (TTM)', 'Capex (TTM)', 'D&A, cash flow (TTM)', 'Impairments (last FY)', 'Working-capital change (3y avg)', 'OE adjustment (opt-in)', 'Shares (basic)', 'Cash & equivalents', 'Total debt', 'Current liabilities')
+var table tb = table.new(position.bottom_right, 3, 17, bgcolor = color.new(color.black, 10), border_width = 1)
+var array<string> NM = array.from('Equity', 'Gross profit (TTM)', 'EBITDA (TTM)', 'Capex (TTM)', 'D&A, cash flow (TTM)', 'Impairments (last FY)', 'Working-capital change (3y avg)', 'OE adjustment (opt-in)', 'Shares (basic)', 'Cash & equivalents', 'Total debt', 'Current liabilities', 'Inventory', 'Current portion of LT debt', 'Long-term debt')
 src(int c) =>
     c == 1 ? 'reported' : c == 2 ? 'parts / substitute' : c == 3 ? 'estimate / ratio' : 'missing'
 if barstate.islast and i_tbl
     table.cell(tb, 0, 0, 'FFV Companion Feed', text_color = color.white, text_size = size.small)
     table.cell(tb, 1, 0, 'Value', text_color = color.white, text_size = size.small)
     table.cell(tb, 2, 0, 'Source', text_color = color.white, text_size = size.small)
-    for i = 0 to 11
+    for i = 0 to 14
         float v = V.get(i)
         table.cell(tb, 0, i + 1, NM.get(i), text_color = color.white, text_size = size.small, text_halign = text.align_left)
         table.cell(tb, 1, i + 1, na(v) ? 'N/A' : str.tostring(v, format.volume), text_color = color.white, text_size = size.small)
         table.cell(tb, 2, i + 1, src(C.get(i)), text_color = color.gray, text_size = size.small)
-    table.cell(tb, 0, 13, 'Report lag ' + str.tostring(i_lag) + ' days (must match main)', text_color = color.gray, text_size = size.small, text_halign = text.align_left)
+    table.cell(tb, 0, 16, 'Report lag ' + str.tostring(i_lag) + ' days (must match main)', text_color = color.gray, text_size = size.small, text_halign = text.align_left)
 
 ```

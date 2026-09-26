@@ -699,7 +699,7 @@ i_bt_fees = input.float(0.5, 'Round-trip Fees & Slippage %', group = group_bt, t
 i_bt_win_threshold = input.float(0.0, 'Min Profit % to count as Win', group = group_bt, tooltip = 'Set to > 0 if you want to ignore tiny gains (e.g., 2%).') / 100
 i_report_lag = input.int(45, 'Report lag (days)', minval = 0, maxval = 120, group = group_bt, tooltip = "request.financial returns a quarter's numbers from the START of the next period -- weeks before they were published. Each new value is released on the next earnings report date, or after this many days at most. 0 restores the old (look-ahead) behaviour. The latest value is always released on the last bar.")
 group_cf = 'Companion Feed'
-i_cf_on = input.bool(false, 'Use FFV Companion Feed', group = group_cf, tooltip = "Add FFV Companion Feed to the chart first, then pick its 14 plots below, each by its own name. Its values only fill gaps the engine could not solve exactly, and turn owner earnings into Buffett's definition. A wrong or missing link, or a different report lag, disables the whole feed.")
+i_cf_on = input.bool(false, 'Use FFV Companion Feed', group = group_cf, tooltip = "Add FFV Companion Feed to the chart first, then pick its 17 plots below, each by its own name. Its values only fill gaps the engine could not solve exactly, turn owner earnings into Buffett's definition, and give the scorecard its quick ratio and debt service cover (without the feed those two are left out). A wrong or missing link, or a different report lag, disables the whole feed.")
 i_cf_eq = input.source(close, 'Feed: Equity', group = group_cf)
 i_cf_gp = input.source(close, 'Feed: Gross profit', group = group_cf)
 i_cf_ed = input.source(close, 'Feed: EBITDA', group = group_cf)
@@ -712,6 +712,9 @@ i_cf_sh = input.source(close, 'Feed: Shares', group = group_cf)
 i_cf_cs = input.source(close, 'Feed: Cash', group = group_cf)
 i_cf_db = input.source(close, 'Feed: Debt', group = group_cf)
 i_cf_cl = input.source(close, 'Feed: Current liabilities', group = group_cf)
+i_cf_iv = input.source(close, 'Feed: Inventory', group = group_cf)
+i_cf_cp = input.source(close, 'Feed: Current portion of LT debt', group = group_cf)
+i_cf_lt = input.source(close, 'Feed: Long-term debt', group = group_cf)
 i_cf_codes = input.source(close, 'Feed: Codes', group = group_cf)
 i_cf_chk = input.source(close, 'Feed: Check', group = group_cf)
 i_acquirer_mult = input.float(10.0, "Acquirer's Multiple Target (EV/EBIT)", group = group_iv, tooltip = "Tobias Carlisle's standard is 10x. Raise this to 15x or 20x for large-cap/growth stocks.")
@@ -1006,15 +1009,15 @@ fin_changed = FL.release(fin_raw, fin_pend, fin_known, fin_seen, i_report_lag, r
 // (weighted mantissas, FL.mant) recomputes: a link left on the close fails it at any scale.
 // Codes: lag + 1000 x sum(code_i x 4^i), code 1 reported, 2 reported parts (tier 2),
 // 3 from a ratio (tier 1), 0 none.
-array<float> cf_v = array.from(i_cf_eq, i_cf_gp, i_cf_ed, i_cf_cx, i_cf_da, i_cf_im, i_cf_wc, i_cf_aj, i_cf_sh, i_cf_cs, i_cf_db, i_cf_cl)
-float cf_sum = 14 * FL.mant(i_cf_codes)
+array<float> cf_v = array.from(i_cf_eq, i_cf_gp, i_cf_ed, i_cf_cx, i_cf_da, i_cf_im, i_cf_wc, i_cf_aj, i_cf_sh, i_cf_cs, i_cf_db, i_cf_cl, i_cf_iv, i_cf_cp, i_cf_lt)
+float cf_sum = FL.mant(i_cf_codes)
 for [k, x] in cf_v
     cf_sum += (k + 2) * FL.mant(x)
 bool cf_ok = i_cf_on and not na(i_cf_codes) and i_cf_codes % 1000 == i_report_lag and math.abs(i_cf_chk - cf_sum) <= 1e-6
 int cf_c = cf_ok ? int(i_cf_codes / 1000) : 0
 array<int> cf_t = array.new_int(0)
 // A new feed value is new data (it triggers a rebuild).
-var array<float> cf_last = array.new_float(12, na)
+var array<float> cf_last = array.new_float(15, na)
 bool cf_new = false
 for [k, x] in cf_v
     int c = int(cf_c / math.pow(4, k)) % 4
@@ -1962,7 +1965,7 @@ float final_terminal_growth = D.gT
 float final_growth_rate = H_g1
 float bvps_ttm = D.s.get(Sx.bvps)
 float ev_now = D.ev
-// ALTMAN Z (Z''-EM for bank-like balance sheets): the report ratios and the market value of equity.
+// ALTMAN Z (Z''-EM for bank-like balance sheets, REITs, utilities, telecoms, Vietnam): the report ratios and the market value of equity.
 float _ta = F_assets
 float _tl = F_tl
 float _x1 = _ta > 0 ? (F_ca - F_cl) / _ta : na
@@ -1974,9 +1977,11 @@ float altman_z = 1.2 * _x1 + 1.4 * _x2 + 3.3 * _x3 + 0.6 * _x4 + 1.0 * _x5
 // Z''-EM variant: drops asset turnover (banks, REITs, utilities, VN names).
 float _x4b = _tl > 0 ? F_eq / _tl : na
 float altman_z_dd = 3.25 + 6.56 * _x1 + 3.26 * _x2 + 6.72 * _x3 + 1.05 * _x4b
-_is_bank_like = _ta > 0 and (_tl / _ta) > 0.80
+// Also for REITs, utilities, telecoms and Vietnamese stocks: asset turnover reads their normal
+// balance sheets as distress (Altman 2005, the emerging-market score).
+_z_em = _ta > 0 and (_tl / _ta) > 0.80 or selected_industry == 'REITs' or selected_industry == 'Utilities' or selected_industry == 'Telecom' or syminfo.currency == 'VND'
 altman_is_em = false
-if _is_bank_like and not na(altman_z_dd)
+if _z_em and not na(altman_z_dd)
     altman_z := altman_z_dd
     altman_is_em := true
 // [FIX Z-EM] Z''-EM (with the +3.25 constant) has its own zones: safe > 5.85,
@@ -2291,13 +2296,29 @@ bool dz_ru = not use_bank_model and (selected_industry == 'REITs' or selected_in
 float F_ocs = na
 float F_icv = na
 float F_nde = na
+float F_dsc = na
+float F_stc = na
 string HV_dz = ''
 if barstate.islast
+    // Debt service cover: (EBITDA - tax) / (interest + the current portion of long-term debt, from
+    // the feed). A 0 there with long-term debt means the filing does not split it out: N/A.
+    float cpd = cf_ok ? cf_v.get(13) : na
+    float tax_x = math.max(nz(F_ebit) - nz(F_interest), 0) * math.min(math.max(F_tax, 0.0), 0.5)
+    F_dsc := F_debt / F_assets < 0.02 ? 99.0 : na(cpd) or (cpd == 0 and nz(cf_v.get(14)) > 0) or not (F_interest + cpd > 0) ? float(na) : (F_ebitda - tax_x) / (F_interest + cpd)
+    // Stressed cover: the worst 12-month EBITDA of 5 years (12 quarters at least) / (interest x 1.3).
+    float lo = na
+    int nlo = 0
+    for k = 0 to 19
+        float x = ST.at(Q_EBITDA, k)
+        if not na(x)
+            lo := na(lo) ? x : math.min(lo, x)
+            nlo += 1
+    F_stc := F_debt / F_assets < 0.02 ? 99.0 : nlo >= 12 and F_interest > 0 ? lo / (F_interest * 1.3) : float(na)
     F_ocs := FL.f_oscore(F_assets / fx_rate, F_assets, F_tl, F_ca, F_cl, F_ni_c, F_ni_1y, F_da, year)
     F_icv := F_debt / F_assets < 0.02 ? 99.0 : F_interest > 0 ? (dz_ru ? F_ebitda : F_ebit) / F_interest : float(na)
     F_nde := na(F_ebitda) ? float(na) : F_ebitda > 0 ? F_nd / F_ebitda : F_nd > 0 ? 99.0 : F_nd <= 0 ? -1.0 : float(na)
     if not (use_bank_model or F_suspect or CK.cap == 0)
-        HV_dz := FL.f_dz(not dz_ru and math.min(eng_t.get(0), eng_t.get(1), eng_t.get(3), eng_t.get(9), eng_t.get(17)) >= 1 ? F_ocs : na, math.min(eng_t.get(dz_ru ? 10 : 8), eng_t.get(20)) >= 1 ? F_icv : na, F_nde, dz_ru)
+        HV_dz := FL.f_dz(not dz_ru and math.min(eng_t.get(0), eng_t.get(1), eng_t.get(3), eng_t.get(9), eng_t.get(17)) >= 1 ? F_ocs : na, math.min(eng_t.get(dz_ru ? 10 : 8), eng_t.get(20)) >= 1 ? F_icv : na, F_nde, dz_ru, math.min(eng_t.get(10), eng_t.get(20)) >= 1 ? F_dsc : na)
 bool is_distress = HV_dz != ''
 // ==============================================================
 // === RESOLVE: BANDS + VERDICT (after the blend is final) ======
@@ -2705,8 +2726,9 @@ if barstate.islast
          use_bank_model ? D.roe - cost_of_equity : roic_wacc_spread, na(raw_beta_s) ? na : beta_mkt, float(na), use_bank_model ? F_eq / F_assets : F_debt / F_assets, altman_z, float(na), downside_beta,
          F_icv, float(na), float(na), float(na), close > 0 and F_t_oe > 0 ? F_oe_ps / close - cost_of_equity : float(na),
          F_pio, F_asset_g, F_nde, rdcf.get(0) - final_growth_rate, F_ocs,
-         na(ev_now) or na(F_ebit) ? float(na) : ev_now > 0 ? F_ebit * (1 - math.min(math.max(F_tax, 0.0), 0.5)) / ev_now - final_discount_rate : F_ebit > 0 ? 99.0 : float(na)),
-         eng_t, F_suspect or CK.cap == 0, F_eq, use_bank_model ? 1 : dz_ru ? 2 : 0, z_safe_cut, z_gold_cut,
+         na(ev_now) or na(F_ebit) ? float(na) : ev_now > 0 ? F_ebit * (1 - math.min(math.max(F_tax, 0.0), 0.5)) / ev_now - final_discount_rate : F_ebit > 0 ? 99.0 : float(na),
+         F_dsc, F_stc, F_eq - nz(F_intang) > 0 and F_tl <= 0.8 * F_assets ? F_tl / (F_eq - nz(F_intang)) : float(na), cf_ok and F_cl > 0 and not na(cf_v.get(12)) ? (F_ca - cf_v.get(12)) / F_cl : float(na)),
+         eng_t, F_suspect or CK.cap == 0, cf_ok, F_eq, use_bank_model ? 1 : dz_ru ? 2 : 0, z_safe_cut, z_gold_cut,
          i_useBeneishCheck and F_manip and math.min(eng_t.get(19), eng_t.get(5), eng_t.get(6), eng_t.get(0)) >= 2, is_value_trap, HV_dz,
          ST.v, ST.q, array.from(Q_X, Q_X + 1, Q_ROE, Q_ROA, Q_GM), beta_ra, beta_rb, bsec >= 604800 ? 31557600 / bsec : trading_days * (bsec >= 86400 ? 86400 : session_sec) / bsec,
          pbh, pb, close, sell_zone_line, finalFairValue, buy_zone_line, ov, n_mem >= 2 and finalFairValue > 0 ? fv_stddev / finalFairValue : float(na), F_ebitda_g)
