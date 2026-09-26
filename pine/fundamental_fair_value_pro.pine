@@ -974,13 +974,15 @@ int bpy = current_tf_sec < 86400 ? math.max(1, int(math.round(trading_days * ses
 // [FIX TTM] Capex and cash-flow D&A have no TTM field: capex = FCF - OCF (the
 // solver's identity), D&A from the income statement.
 // [FIX EST] Fiscal-year consensus, not a sum of four quarterly estimates.
+// [FIX SIGN] Interest expense as a magnitude: Vietnamese data reports it negative, which
+// read as no interest (AAA spread), cut FCFF and left interest cover unscored.
 f_fin(string id, string per) =>
     request.financial(syminfo.tickerid, id, per, ignore_invalid_symbol = true, currency = syminfo.currency)
 var array<int> FIN_KIND = array.from(0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 2, 2)
 flow_per = i_flow_ttm ? 'TTM' : 'FQ'
 // Requests stay outside the loop: Pine rejects loop variables in a request's field/period.
 array<float> fin_raw = array.from(f_fin('TOTAL_REVENUE', flow_per), f_fin('COST_OF_GOODS', flow_per), f_fin('EBIT', flow_per),
-     f_fin('PRETAX_INCOME', flow_per), f_fin('INCOME_TAX', flow_per), f_fin('EARNINGS_PER_SHARE_DILUTED', flow_per), f_fin('INTEREST_EXPENSE_ON_DEBT', 'FQ'),
+     f_fin('PRETAX_INCOME', flow_per), f_fin('INCOME_TAX', flow_per), f_fin('EARNINGS_PER_SHARE_DILUTED', flow_per), math.abs(f_fin('INTEREST_EXPENSE_ON_DEBT', 'FQ')),
      f_fin('RESEARCH_AND_DEV', 'FQ'), f_fin('PREFERRED_DIVIDENDS', 'FQ'), f_fin('DPS_COMMON_STOCK_PRIM_ISSUE', flow_per), f_fin('CASH_F_OPERATING_ACTIVITIES', flow_per),
      f_fin('FREE_CASH_FLOW', flow_per), f_fin('DEP_AMORT_EXP_INCOME_S', flow_per), f_fin('NET_INCOME', flow_per), f_fin('MINORITY_INTEREST', 'FQ'),
      f_fin('DILUTED_SHARES_OUTSTANDING', 'FQ'), f_fin('TOTAL_SHARES_OUTSTANDING', 'FQ'), f_fin('TOTAL_ASSETS', 'FQ'), f_fin('TOTAL_LIABILITIES', 'FQ'),

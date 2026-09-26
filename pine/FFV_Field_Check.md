@@ -7,7 +7,8 @@ One-off check: add it to a daily chart with maximum history and send back the ta
 // FFV Field Check (risk fields): does each field the Low risk upgrade needs have data on this
 // symbol, and how is it defined? Run it on a daily chart with as much history as loads and
 // send back a screenshot of the table. Suggested tickers: HPG (HOSE), a US industrial, a US
-// acquirer with large goodwill (e.g. DHR) and a Vietnamese bank.
+// acquirer with large goodwill (e.g. DHR) and a Vietnamese bank. Rows 19-33: the sign of each
+// expense and cash-outflow field the scripts use (Negative column).
 indicator('FFV Field Check', overlay = true)
 
 f(string id, string per) =>
@@ -18,15 +19,21 @@ var array<string> NAMES = array.from(
      'SHRHLDRS_EQUITY FQ', 'TOTAL_EQUITY FQ', 'BASIC_SHARES_OUTSTANDING FQ', 'TOTAL_LIABILITIES FQ',
      'TOTAL_INVENTORY FQ', 'TOTAL_CURRENT_ASSETS FQ', 'TOTAL_CURRENT_LIABILITIES FQ',
      'CURRENT_PORT_DEBT_CAPITAL_LEASES FQ', 'SHORT_TERM_DEBT FQ', 'SHORT_TERM_DEBT_EXCL_CURRENT_PORT FQ',
-     'UNUSUAL_EXPENSE_INC FQ', 'PRETAX_INCOME FQ', 'EBITDA TTM', 'INTEREST_EXPENSE_ON_DEBT FQ')
+     'UNUSUAL_EXPENSE_INC FQ', 'PRETAX_INCOME FQ', 'EBITDA TTM', 'INTEREST_EXPENSE_ON_DEBT FQ',
+     'COST_OF_GOODS FQ', 'INCOME_TAX FQ', 'RESEARCH_AND_DEV FQ', 'PREFERRED_DIVIDENDS FQ', 'DPS_COMMON_STOCK_PRIM_ISSUE FQ',
+     'DEP_AMORT_EXP_INCOME_S FQ', 'DEPRECIATION_DEPLETION FQ', 'AMORTIZATION FQ', 'CF_DEPRECIATION_N_AMORT FQ', 'CAPITAL_EXPENDITURES FQ',
+     'PURCHASE_OF_STOCK FY', 'SALE_OF_STOCK FY', 'PURCHASE_OF_BUSINESS FQ', 'IMPAIRMENTS FY', 'LONG_TERM_DEBT FQ')
 
 array<float> v = array.from(
      f('GOODWILL', 'FQ'), f('INTANGIBLES_NET', 'FQ'), f('OTHER_INTANGIBLES_NET', 'FQ'), f('BOOK_TANGIBLE_PER_SHARE', 'FQ'),
      f('SHRHLDRS_EQUITY', 'FQ'), f('TOTAL_EQUITY', 'FQ'), f('BASIC_SHARES_OUTSTANDING', 'FQ'), f('TOTAL_LIABILITIES', 'FQ'),
      f('TOTAL_INVENTORY', 'FQ'), f('TOTAL_CURRENT_ASSETS', 'FQ'), f('TOTAL_CURRENT_LIABILITIES', 'FQ'),
      f('CURRENT_PORT_DEBT_CAPITAL_LEASES', 'FQ'), f('SHORT_TERM_DEBT', 'FQ'), f('SHORT_TERM_DEBT_EXCL_CURRENT_PORT', 'FQ'),
-     f('UNUSUAL_EXPENSE_INC', 'FQ'), f('PRETAX_INCOME', 'FQ'), f('EBITDA', 'TTM'), f('INTEREST_EXPENSE_ON_DEBT', 'FQ'))
-int N = 18
+     f('UNUSUAL_EXPENSE_INC', 'FQ'), f('PRETAX_INCOME', 'FQ'), f('EBITDA', 'TTM'), f('INTEREST_EXPENSE_ON_DEBT', 'FQ'),
+     f('COST_OF_GOODS', 'FQ'), f('INCOME_TAX', 'FQ'), f('RESEARCH_AND_DEV', 'FQ'), f('PREFERRED_DIVIDENDS', 'FQ'), f('DPS_COMMON_STOCK_PRIM_ISSUE', 'FQ'),
+     f('DEP_AMORT_EXP_INCOME_S', 'FQ'), f('DEPRECIATION_DEPLETION', 'FQ'), f('AMORTIZATION', 'FQ'), f('CASH_FLOW_DEPRECATION_N_AMORTIZATION', 'FQ'), f('CAPITAL_EXPENDITURES', 'FQ'),
+     f('PURCHASE_OF_STOCK', 'FY'), f('SALE_OF_STOCK', 'FY'), f('PURCHASE_OF_BUSINESS', 'FQ'), f('IMPAIRMENTS', 'FY'), f('LONG_TERM_DEBT', 'FQ'))
+int N = 33
 
 // Per field: bars with data, bars with exactly 0 (0 can mean "none" or "not reported"),
 // negative bars, first bar with data. Coverage = bars with data / bars since any field had data.
