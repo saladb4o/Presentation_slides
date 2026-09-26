@@ -512,6 +512,7 @@ export type Card
     float agree = na
     float cut = 0.0
     float eg = na
+    bool kept = false
 
 // @function Score of x on a curve: breakpoints xs (rising or falling) to scores ys, linear between them and held at the ends. na x gives na.
 export f_curve(float x, array<float> xs, array<float> ys) =>
@@ -550,7 +551,7 @@ f_bp(int i, int sec, float zd, float zg) =>
         14 => array.from(-0.05, 0.0, 0.03, 0.08, 0.15, 0.0, 40.0, 60.0, 85.0, 100.0)
         15 => array.from(1.6, 1.2, 1.0, 0.8, 0.6, 0.0, 35.0, 55.0, 80.0, 100.0)
         16 => array.from(0.50, 0.35, 0.25, 0.15, 0.0, 40.0, 70.0, 100.0)
-        17 => sec == 2 ? array.from(0.85, 0.60, 0.40, 0.20, 0.0, 50.0, 80.0, 100.0) : array.from(0.70, 0.50, 0.30, 0.10, 0.0, 40.0, 75.0, 100.0)
+        17 => sec == 1 ? array.from(0.05, 0.07, 0.09, 0.12, 0.0, 40.0, 75.0, 100.0) : sec == 2 ? array.from(0.85, 0.60, 0.40, 0.20, 0.0, 50.0, 80.0, 100.0) : array.from(0.70, 0.50, 0.30, 0.10, 0.0, 40.0, 75.0, 100.0)
         18 => array.from(zd, (zd + zg) / 2, zg, zg * 4 / 3, 0.0, 50.0, 80.0, 100.0)
         19 => array.from(0.15, 0.08, 0.04, 0.01, 0.0, 40.0, 75.0, 100.0)
         20 => array.from(1.6, 1.2, 1.0, 0.8, 0.6, 0.0, 35.0, 55.0, 80.0, 100.0)
@@ -571,11 +572,12 @@ f_at(matrix<float> m, int q, int c, int lag) =>
 f_pil(int i) =>
     i == 26 or i == 27 ? 0 : i == 28 ? 1 : i == 29 ? 2 : i < 15 ? 0 : i < 23 ? 1 : 2
 
-// @function Builds the scorecard. v: the 30 metric values the indicator computes (ids 6-10, 16, 19, 22-24 are filled here). tier: the data engine's quality tiers (a metric whose inputs are tier 0 is not scored). bad: suspect or stale data. eq: book equity (<= 0 drops the ROE metrics and book-to-market). sec: 0 general, 1 bank, 2 REIT / utility. zd, zg: Altman distress and safe cuts. manip, trap: the Beneish and value-trap caps. hm, hq, hc: the quarter store, its open row and the columns of gross profit / assets, cash flow / assets, ROE, ROA, gross margin. ra, rb: the beta return pairs, ppy their periods per year. pbh, pb: P/B history and now. px, sell, fv, buy: price and the chart's lines. ov: the fair value's shares held by the DCF, P/B and Owners' Earnings rows. cv: the spread of the blend's models / fair value (na with one model). eg: EBITDA growth over the year (capital allocation: asset growth against it).
+// @function Builds the scorecard. v: the 30 metric values the indicator computes (ids 6-10, 16, 19, 22-24 are filled here). tier: the data engine's quality tiers (a metric whose inputs are tier 0 is not scored). bad: suspect or stale data. eq: book equity (<= 0 drops the ROE metrics and book-to-market). sec: 0 general, 1 bank, 2 REIT / utility. zd, zg: Altman distress and safe cuts. manip, trap: the Beneish and value-trap caps. hm, hq, hc: the quarter store, its open row and the columns of gross profit / assets, cash flow / assets, ROE, ROA, gross margin. ra, rb: the beta return pairs, ppy their periods per year. pbh, pb: P/B history and now. px, sell, fv, buy: price and the chart's lines. ov: the fair value's shares held by the DCF, P/B and Owners' Earnings rows. cv: the spread of the blend's models / fair value (na with one model). Banks: v 17 is equity / assets. eg: EBITDA growth over the year (capital allocation: asset growth against it).
 export f_card(array<float> v, array<int> tier, bool bad, float eq, int sec, float zd, float zg, bool manip, bool trap, matrix<float> hm, int hq, array<int> hc, array<float> ra, array<float> rb, float ppy, array<float> pbh, float pb, float px, float sell, float fv, float buy, array<float> ov, float cv, float eg) =>
     Card c = Card.new(v.copy(), array.new_float(30, na), array.new_float(30, 0.0), array.new_bool(30, true), array.new_float(8, na), array.new_float(3, na), array.new_float(3, na), array.new_float(3, 0.0), array.new_int(30, -1))
     c.sec := sec
-    c.eg := tier.get(10) >= 1 ? eg : na
+    // Banks: asset growth alone, as their EBITDA means little (net debt / EBITDA is off for them too).
+    c.eg := sec != 1 and tier.get(10) >= 1 ? eg : na
     vv = c.v
     // Growth: the last 3 yearly readings against the 3 from 5 years earlier (at least one each).
     for [k, col] in hc
@@ -642,11 +644,20 @@ export f_card(array<float> v, array<int> tier, bool bad, float eq, int sec, floa
     // Inputs by engine item (tier >= 1 needed): 0 assets, 2 equity, 5 revenue, 7 gross profit,
     // 8 EBIT, 10 EBITDA, 11 OCF, 17 net income, 20 debt; 'h' = report data without an item
     // (suspect or stale data only).
-    array<float> W = array.from(10.0, 8.0, 6.0, 6.0, 6.0, 4.0, 5.0, 5.0, 5.0, 5.0, 5.0, 10.0, 10.0, 5.0, 10.0, 30.0, 15.0, 10.0, 10.0, 10.0, 10.0, 10.0, 5.0, 60.0, 20.0, 20.0, 10.0, 8.0, 8.0, 15.0)
+    array<float> W = array.from(10.0, 8.0, 6.0, 6.0, 6.0, 4.0, 5.0, 5.0, 5.0, 5.0, 5.0, 10.0, 10.0, 5.0, 10.0, 30.0, 15.0, 10.0, 15.0, 10.0, 5.0, 10.0, 5.0, 60.0, 20.0, 20.0, 10.0, 8.0, 8.0, 15.0)
     array<string> DP = array.from('0 7', '0 11', '2 17', '0 17', '0 11 17', '5 7', 'h', 'h', 'h', 'h', 'h', 'h', '17', '0 20', '8', '', '', '0 20', '0 5 8', 'h', '', '8 20', '', '', 'h', '17', '0 17', '0', '10 20', 'h')
-    array<int> BK = array.from(0, 1, 4, 5, 6, 7, 10, 17, 18, 21, 26, 28)
+    array<int> BK = array.from(0, 1, 4, 5, 6, 7, 10, 13, 18, 21, 26, 28)
+    array<int> G = array.from(0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 3, 5, 5, 6, 6, 6, 5, 6, 5, 7, 7, 7, 4, 2, 6, 7)
+    // A theme keeps its share when some of its metrics do not apply to the sector: the ones that
+    // apply split its weight (banks: 12 metrics do not apply).
+    array<float> ta = array.new_float(8, 0.0)
+    array<float> tb = array.new_float(8, 0.0)
     for i = 0 to 29
-        string d = sec == 1 and i == 14 ? '2 17' : DP.get(i)
+        int gi = G.get(i)
+        ta.set(gi, ta.get(gi) + W.get(i))
+        tb.set(gi, tb.get(gi) + (sec == 1 and BK.includes(i) ? 0.0 : W.get(i)))
+    for i = 0 to 29
+        string d = sec == 1 and i == 14 ? '2 17' : sec == 1 and i == 17 ? '0 2' : DP.get(i)
         bool ok = not (bad and d != '')
         if d != '' and d != 'h'
             for t in str.split(d, ' ')
@@ -658,8 +669,9 @@ export f_card(array<float> v, array<int> tier, bool bad, float eq, int sec, floa
         bool app = not (sec == 1 and BK.includes(i))
         // A value metric that re-reads a model counts only for the fair value's share that model does not carry.
         float cut = i == 29 ? ov.get(0) : i == 24 ? ov.get(1) : i == 25 ? ov.get(2) : 0.0
-        c.w.set(i, app ? W.get(i) * (1 - nz(cut)) : 0.0)
-        c.cut += app and cut > 0 ? W.get(i) * cut : 0.0
+        float wi = app ? W.get(i) * ta.get(G.get(i)) / tb.get(G.get(i)) : 0.0
+        c.w.set(i, wi * (1 - nz(cut)))
+        c.cut += cut > 0 ? wi * cut : 0.0
         if not ok or not app
             c.s.set(i, na)
         else if i == 27 and not na(c.eg) and not na(vv.get(27))
@@ -671,6 +683,13 @@ export f_card(array<float> v, array<int> tier, bool bad, float eq, int sec, floa
             array<float> bp = f_bp(i, sec, zd, zg)
             int h = int(bp.size() / 2)
             c.s.set(i, f_curve(vv.get(i), bp.slice(0, h), bp.slice(h, bp.size())))
+    // Net payout: profits kept count as well as profits paid out when they earn over the cost of
+    // capital (Buffett's retained-earnings test): the credit of the spread, if higher.
+    if not na(c.s.get(12)) and not na(c.s.get(14))
+        float rc = f_curve(vv.get(14), array.from(0.0, 0.03, 0.08, 0.15), array.from(0.0, 60.0, 85.0, 100.0))
+        if rc > c.s.get(12)
+            c.s.set(12, rc)
+            c.kept := true
     // Pillar totals (the applicable weight), then the stand-ins: a missing interest cover or Altman Z
     // passes its weight to net debt / EBITDA (one of them), a missing net debt / EBITDA to interest cover.
     for i = 0 to 29
@@ -683,7 +702,6 @@ export f_card(array<float> v, array<int> tier, bool bad, float eq, int sec, floa
             we.set(b, we.get(b) + c.w.get(a))
             c.by.set(a, b)
     // Groups (for the rows) and pillars (60% of the applicable weight scored or stood in for).
-    array<int> G = array.from(0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 3, 5, 5, 6, 6, 6, 5, 6, 5, 7, 7, 7, 4, 2, 6, 7)
     for g = 0 to 7
         float sw = 0.0
         float sx = 0.0
@@ -735,17 +753,17 @@ f_fmt(int i, float x) =>
     na(x) ? 'N/A' : i == 26 ? str.tostring(x, '#') + ' / 9' : i == 28 ? (x >= 99 ? 'losses, with debt' : x < 0 ? 'net cash' : str.tostring(x, '#.#') + 'x') : i == 15 or i == 20 ? str.tostring(x, '#.##') : i == 18 ? str.tostring(x, '#.#') : i == 21 ? (x >= 99 ? 'no debt' : str.tostring(x, '#.#') + 'x') : i == 24 ? str.tostring(x * 100, '#') + '% of history dearer' : (i >= 6 and i <= 10) or i == 14 or i == 19 or i == 25 or i == 29 ? (x > 0 ? '+' : '') + str.tostring(x * 100, '#.#') + 'pp' : (x > 0 and (i == 23 or i == 27) ? '+' : '') + str.tostring(x * 100, '#.#') + '%'
 f_name(int i, int sec) =>
     array<string> NM = array.from('Gross profit / assets', 'Cash flow / assets', 'ROE', 'ROA', 'Accruals / assets', 'Gross margin', 'Change in gross profit / assets', 'Change in cash flow / assets', 'Change in ROE', 'Change in ROA', 'Change in gross margin', 'Net share issuance', 'Net payout / profits', 'Net debt issuance / assets', 'ROIC - WACC', 'Beta', 'Idiosyncratic volatility', 'Debt / assets', 'Altman Z', 'ROE volatility', 'Downside beta', 'Interest cover', 'Maximum drawdown', 'Price vs fair value', 'Book-to-market vs own history', 'Owner-earnings yield - 10Y', 'Piotroski F-score', 'Capital allocation (1y)', 'Net debt / EBITDA', 'Growth priced in - ours')
-    sec == 1 and i == 14 ? 'ROE - cost of equity' : NM.get(i)
+    sec == 1 and i == 14 ? 'ROE - cost of equity' : sec == 1 and i == 17 ? 'Equity / assets' : sec == 1 and i == 27 ? 'Asset growth (1y)' : NM.get(i)
 // One metric's line for a tooltip: value -> score (share of the pillar's weight, source).
 f_line(Card c, int i) =>
     int by = c.by.get(i)
     bool ex = i == 14 or (i >= 20 and i <= 23) or i >= 25
-    string ag = i == 23 and not na(c.agree) and c.agree < 1 ? ', models disagree: kept ' + str.tostring(c.agree * 100, '#') + '% of its distance from 50' : ''
-    f_name(i, c.sec) + ': ' + (c.w.get(i) == 0 ? (i == 24 or i == 25 or i == 29 ? 'not used: the fair value already holds that model' : 'not used for this sector') : (i == 27 and not na(c.eg) and not na(c.v.get(i)) ? 'assets ' + f_fmt(i, c.v.get(i)) + ' / EBITDA ' + f_fmt(i, c.eg) + (c.v.get(i) > 0 and c.v.get(i) > c.eg ? ' (empire builder)' : c.v.get(i) < 0 and c.eg < c.v.get(i) ? ' (deteriorating)' : ' (efficient)') : f_fmt(i, c.v.get(i)) + (i == 27 and not na(c.v.get(i)) ? ' assets, EBITDA growth N/A' : '')) + ' -> ' + (by >= 0 ? 'N/A, weight passed to ' + f_name(by, c.sec) : not c.ok.get(i) ? 'not scored (placeholder, stale or suspect data)' : f_sc(c.s.get(i))) + ' (weight ' + str.tostring((by >= 0 ? 0.0 : c.w.get(i)) / c.pt.get(f_pil(i)) * 100, '#') + '%, ' + (ex ? 'extra' : 'paper') + ag + ')') + '\n'
+    string ag = i == 23 and not na(c.agree) and c.agree < 1 ? ', models disagree: kept ' + str.tostring(c.agree * 100, '#') + '% of its distance from 50' : i == 12 and c.kept ? ', the profits kept earn ' + f_fmt(14, c.v.get(14)) + ' over the cost of capital: scored as paid out' : ''
+    f_name(i, c.sec) + ': ' + (c.w.get(i) == 0 ? (i == 24 or i == 25 or i == 29 ? 'not used: the fair value already holds that model' : 'not used for this sector') : (i == 27 and not na(c.eg) and not na(c.v.get(i)) ? 'assets ' + f_fmt(i, c.v.get(i)) + ' / EBITDA ' + f_fmt(i, c.eg) + (c.v.get(i) > 0 and c.v.get(i) > c.eg ? ' (empire builder)' : c.v.get(i) < 0 and c.eg < c.v.get(i) ? ' (deteriorating)' : ' (efficient)') : f_fmt(i, c.v.get(i)) + (i == 27 and not na(c.v.get(i)) and c.sec != 1 ? ' assets, EBITDA growth N/A' : '')) + ' -> ' + (by >= 0 ? 'N/A, weight passed to ' + f_name(by, c.sec) : not c.ok.get(i) ? 'not scored (placeholder, stale or suspect data)' : f_sc(c.s.get(i))) + ' (weight ' + str.tostring((by >= 0 ? 0.0 : c.w.get(i)) / c.pt.get(f_pil(i)) * 100, '#') + '%, ' + (ex ? 'extra' : 'paper') + ag + ')') + '\n'
 
 // @function Summary-card row: the total as a bar, the three pillars, the verdict. cl = text, background, header, green, red, amber colours; ts = text size. Returns the next free row.
 export cardSum(table t, int row, Card c, array<color> cl, string ts) =>
-    string tt = "Quality, low risk and value: the traits Frazzini, Kabiller and Pedersen (Buffett's Alpha, 2018) found explain Berkshire's returns; its 1.6x leverage is left out. Each metric scores 0-100 on fixed breakpoints (not a ranking against other stocks, as the paper does). A pillar is the weighted mean of its metrics (N/A under 60% coverage); the total is their geometric mean, so one weak pillar pulls it down. A missing interest cover or Altman Z passes its weight to net debt / EBITDA (and back); growth priced in, book-to-market and the owner-earnings yield count only for the fair value's share their model does not carry; price vs fair value moves toward 50 when the models disagree. Display only: fair values and the backtest do not use it. Table detail = Scorecard lists every metric.\n\nCoverage: Q " + str.tostring(nz(c.cov.get(0)) * 100, '#') + '% | R ' + str.tostring(nz(c.cov.get(1)) * 100, '#') + '% | V ' + str.tostring(nz(c.cov.get(2)) * 100, '#') + '%' + (c.qcap ? '\nQuality held at 50: Beneish flag.' : '') + (c.vcap ? '\nValue held at 50: value trap.' : '') + (c.why != '' ? '\nN/A: ' + c.why + ' has too little data.' : '')
+    string tt = "Quality, low risk and value: the traits Frazzini, Kabiller and Pedersen (Buffett's Alpha, 2018) found explain Berkshire's returns; its 1.6x leverage is left out. Each metric scores 0-100 on fixed breakpoints (not a ranking against other stocks, as the paper does). A pillar is the weighted mean of its metrics (N/A under 60% coverage); the total is their geometric mean, so one weak pillar pulls it down. A missing interest cover or Altman Z passes its weight to net debt / EBITDA (and back); growth priced in, book-to-market and the owner-earnings yield count only for the fair value's share their model does not carry; price vs fair value moves toward 50 when the models disagree; net payout counts profits kept as paid out when they earn over the cost of capital; a theme keeps its share when some of its metrics do not apply to the sector (banks). Display only: fair values and the backtest do not use it. Table detail = Scorecard lists every metric.\n\nCoverage: Q " + str.tostring(nz(c.cov.get(0)) * 100, '#') + '% | R ' + str.tostring(nz(c.cov.get(1)) * 100, '#') + '% | V ' + str.tostring(nz(c.cov.get(2)) * 100, '#') + '%' + (c.qcap ? '\nQuality held at 50: Beneish flag.' : '') + (c.vcap ? '\nValue held at 50: value trap.' : '') + (c.why != '' ? '\nN/A: ' + c.why + ' has too little data.' : '')
     float s = c.total
     t.cell(0, row, 'Buffett score', text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts, tooltip = tt)
     t.cell(1, row, f_bar(s) + ' ' + f_sc(s), text_color = na(s) ? cl.get(0) : f_scol(s, cl), bgcolor = cl.get(1), text_size = ts, text_font_family = font.family_monospace, tooltip = tt)

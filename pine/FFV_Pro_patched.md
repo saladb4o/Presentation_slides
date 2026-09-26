@@ -2681,7 +2681,7 @@ if barstate.islast
             ov.set(j, nz(sh))
     CARD := FL.f_card(array.from(F_gp / F_assets, F_ocf / F_assets, D.roe, F_ni_c / F_assets, (F_ni_c - F_ocf) / F_assets, F_gp / F_rev, float(na), float(na), float(na), float(na), float(na),
          nz(cash_iss, math.abs(sh_chg) < 0.3 ? sh_chg : float(na)), F_ni_c > 0 and not (na(F_dps) and na(F_netbb)) ? (nz(F_dps) * F_sh + nz(F_netbb)) / F_ni_c : float(na), (F_debt - F_debt_1y) / F_assets,
-         use_bank_model ? D.roe - cost_of_equity : roic_wacc_spread, na(raw_beta_s) ? na : beta_mkt, float(na), F_debt / F_assets, altman_z, float(na), downside_beta,
+         use_bank_model ? D.roe - cost_of_equity : roic_wacc_spread, na(raw_beta_s) ? na : beta_mkt, float(na), use_bank_model ? F_eq / F_assets : F_debt / F_assets, altman_z, float(na), downside_beta,
          F_debt / F_assets < 0.02 ? 99.0 : F_interest > 0 ? F_ebit / F_interest : float(na), float(na), float(na), float(na), close > 0 and F_t_oe > 0 ? F_oe_ps / close - rf_local_avg / 100 : float(na),
          F_pio, F_asset_g, na(F_ebitda) ? float(na) : F_ebitda > 0 ? F_nd / F_ebitda : F_nd > 0 ? 99.0 : F_nd <= 0 ? -1.0 : float(na), rdcf.get(0) - final_growth_rate),
          eng_t, F_suspect or CK.cap == 0, F_eq, use_bank_model ? 1 : selected_industry == 'REITs' or selected_industry == 'Utilities' ? 2 : 0, z_safe_cut, z_gold_cut,
