@@ -651,7 +651,7 @@ group_proxies = 'Market Proxy (Used for Beta & Auto-ERP)'
 i_mkt_bench = input.symbol('SPY', 'Market Proxy', group = group_proxies, tooltip = 'Beta is regressed on this proxy. Auto-ERP reads it as a USD index and pairs it with the US 10Y. VND charts use VNINDEX and the VN 10Y instead.')
 i_beta_lookback = input.int(104, 'Regression Lookback (periods of the timeframe below)', minval = 30, group = group_proxies)
 i_beta_tf = input.timeframe('W', 'Regression Timeframe', group = group_proxies)
-i_sector_idx = input.symbol('', 'Sector index for Timing (VND, blank = auto)', group = group_proxies, tooltip = 'The Timing row (display only) compares the sector index with VNINDEX. Blank: the VNAllShare index for TradingView\'s sector and industry fields (GICS; none for telecom). Set it when HOSE classifies the stock differently.')
+i_sector_idx = input.symbol('', 'Sector index for Timing (VND, blank = auto)', group = group_proxies, tooltip = 'The Timing row (display only) compares the sector index with VNINDEX. Blank: the index for a manually chosen Valuation Framework; with Auto-Detect, Energy/Materials or General, the VNAllShare index for TradingView\'s sector and industry fields (GICS; none for telecom). Set it when HOSE classifies the stock differently.')
 group_calc = 'Calculation Parameters'
 i_weighting_algo = input.string('IVW (Error Variance)', 'Weighting Algorithm', options = ['IVW (Error Variance)', 'SMAPE (Symmetric Error)', 'MALE (Log Error)', 'WMAPE (Weighted Error)', 'RMSLE (Root Mean Sq Log)'], group = group_calc, tooltip = 'Every model is scored on how well its stored fair value predicted the price N quarters later (see horizon below).\nIVW: inverse mean squared log error.\nSMAPE/MALE/WMAPE/RMSLE: inverse of that error metric.')
 i_w_horizon = input.int(4, 'Weighting: forecast horizon (quarters)', minval = 0, maxval = 8, group = group_calc, tooltip = 'Each model is scored on how well its fair value at quarter t predicted the price at t + N. 0 = same-quarter fit.')
@@ -1656,7 +1656,19 @@ live_smb_spread := math.max(math.min(live_smb_spread, 0.05), -0.02)
 // No VN value/growth proxy exists, so VND uses the 1.5% long-run default.
 // >>> SECURITY SLOTS 5-6/6 : value and growth ETFs
 // On VND charts the value slot loads the sector index for the Timing row instead (display only).
-string sec_auto = FL.f_secidx(syminfo.sector, syminfo.industry)
+// A manually chosen framework names the index; Auto-Detect, Energy/Materials (VNENE or VNMAT)
+// and General read TradingView's sector and industry fields.
+string sec_auto = switch i_industry
+    'Technology' => 'VNIT'
+    'Healthcare (Pharma/Biotech)' => 'VNHEAL'
+    'Financials (Bank/Insurance)' => 'VNFIN'
+    'REITs' => 'VNREAL'
+    'Capital Goods/Industrials' => 'VNIND'
+    'Consumer Discretionary' => 'VNCOND'
+    'Consumer Staples' => 'VNCONS'
+    'Utilities' => 'VNUTI'
+    'Telecom' => ''
+    => FL.f_secidx(syminfo.sector, syminfo.industry)
 string sec_idx = curr != 'VND' ? '' : i_sector_idx != '' ? i_sector_idx : sec_auto != '' ? 'HOSE:' + sec_auto : ''
 float value_c = request.security(curr != 'VND' ? i_value_etf : sec_idx != '' ? sec_idx : final_mkt_bench, i_beta_tf, close, ignore_invalid_symbol = true)
 float growth_c = curr == 'VND' ? na : request.security(i_growth_etf, i_beta_tf, close, ignore_invalid_symbol = true)
