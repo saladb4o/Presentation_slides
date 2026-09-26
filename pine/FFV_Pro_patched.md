@@ -1429,14 +1429,15 @@ if CK.dirty
     float total_revenue_ttm_prev = Y4.get(Q_REV)
     if not na(total_revenue_ttm) and not na(total_revenue_ttm_prev) and total_revenue_ttm_prev != 0
         rev_growth := (total_revenue_ttm - total_revenue_ttm_prev) / math.abs(total_revenue_ttm_prev)
-    float total_assets_prev = Y4.get(Q_AS)
+    // Capital allocation over 3 years (a year each): one year of EBITDA is too noisy.
+    float total_assets_prev = Y12.get(Q_AS)
     float asset_growth = na
     if not na(total_assets_fq) and total_assets_prev > 0
-        asset_growth := (total_assets_fq - total_assets_prev) / total_assets_prev
-    float ebitda_prev = Y4.get(Q_EBITDA)
+        asset_growth := math.pow(math.max(total_assets_fq, 0) / total_assets_prev, 1.0 / 3) - 1
+    float ebitda_prev = Y12.get(Q_EBITDA)
     float ebitda_growth = na
     if not na(calc_ebitda) and ebitda_prev > 0
-        ebitda_growth := (calc_ebitda - ebitda_prev) / ebitda_prev
+        ebitda_growth := calc_ebitda > 0 ? math.pow(calc_ebitda / ebitda_prev, 1.0 / 3) - 1 : (calc_ebitda / ebitda_prev - 1) / 3
     investment_dummy = false
     if not na(asset_growth)
         if not na(ebitda_growth)
