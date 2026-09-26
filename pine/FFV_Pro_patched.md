@@ -2780,8 +2780,7 @@ if barstate.islast
          pbh, pb, close, sell_zone_line, finalFairValue, buy_zone_line, compositeLo, ov, n_mem >= 2 and finalFairValue > 0 ? fv_stddev / finalFairValue : float(na), F_ebitda_g)
     CARD := FL.f_timing(CARD, TW_S, TW_X, TW_M, rf_local_avg / 100, sec_idx == '' ? '' : i_sector_idx != '' ? i_sector_idx : sec_auto, curr == 'VND' ? 'VN-Index' : final_mkt_bench)
     CARD_INFO := FL.f_grow(ST.v, ST.q, Q_REV, Q_ROA, Q_AS, i_flow_ttm ? -1 : Q_FLOW, i_flow_ttm ? -1 : Q_FLOW + 13)
-    CARD_INFO.concat(array.from('1', 'Z+M matrix', 'Z ' + (na(altman_z) ? '-' : str.tostring(altman_z, '#.#')), 'information', HV_zm_txt, HV_zm_tt,
-         '2', 'Justified P/B', not i_use_rkv ? 'off' : na(jpb) ? 'N/A' : jpb < 0 ? 'below 0' : str.tostring(jpb, '#.##') + 'x', 'P/B ' + (na(current_pb_val) ? 'N/A' : str.tostring(current_pb_val, '#.##') + 'x'),
+    CARD_INFO.concat(array.from('t2', 'Justified P/B', not i_use_rkv ? 'off' : na(jpb) ? 'N/A' : jpb < 0 ? 'below 0' : str.tostring(jpb, '#.##') + 'x', 'P/B ' + (na(current_pb_val) ? 'N/A' : str.tostring(current_pb_val, '#.##') + 'x'),
          trap_pb ? 'Value trap' : na(jpb) or na(current_pb_val) ? 'information' : current_pb_val < jpb ? 'Below justified' : 'Above justified', na(jpb) or na(current_pb_val) ? 'Justified P/B needs a positive book value and 3 yearly ROE readings (the filter setting on).' : str.format(FL.tx(37), current_pb_val, jpb, jpb_roe * 100, cost_of_equity * 100, jpb_g * 100)))
 // ---------- summary card ----------
 f_tbl_head() =>

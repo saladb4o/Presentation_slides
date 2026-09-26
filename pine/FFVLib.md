@@ -966,7 +966,7 @@ export f_timing(Card c, array<float> s, array<float> x, array<float> m, float rf
     c.tt := ln + str.format('\n\nStock (MSCI momentum): 6-1 return {0}, 12-1 return {1}, volatility {2} ({3,number,#} weekly returns), local 10-year yield {4,number,#.##}% -> score {5} (0 = the bond yield).', f_pa(r6), f_pa(r12), na(sd) ? 'N/A, needs 52' : str.tostring(sd * 100, '#') + '% a year', n, rf * 100, na(sc) ? 'N/A' : f_sg(sc)) + (xs == '' ? str.format('\nSector: not checked (no index for this sector or market; the override setting can name one).\nStock vs {0}, last 6 months: {1} vs {2} (information only).', mk, f_pa(f_wk(s, 0) / f_wk(s, 26) - 1), f_pa(mr)) : str.format('\nSector ({0}), last 6 months: {1} vs {2} {3}{4}.\nStock, last 6 months: {5} (information only).', xs, f_pa(xr), mk, f_pa(mr), na(xr) ? ': needs 6 months of weekly data (the index did not load or is too new, or the regression timeframe is over a week)' : '', f_pa(f_wk(s, 0) / f_wk(s, 26) - 1))) + '\n\nStock trend: MSCI Momentum Indexes, as published: the 6-1 and 12-1 returns (months as 4, 26 and 52 weeks) less the risk-free rate, each over the volatility of up to 3 years of weekly returns, averaged; 6-1 alone when 12 months of history are missing. Up = above 0. MSCI uses the short-term rate (only the 10-year yield is loaded) and ranks against a universe (not available here). Sector: Moskowitz and Grinblatt (1999) found industry momentum strongest in the latest month, so the sector keeps it: its last 6 months against the market. Lagging its sector is not a warning: industry momentum explains much of stock momentum. Wait needs both the stock and its sector behind.\n\nDisplay only. Evidence is from the US; in Vietnam it is thin: a HOSE study (2017-2026, not peer-reviewed) found no 12-month momentum and that last month\'s losers kept losing, and value works best among recent losers (Asness 1997), so waiting can miss part of a rebound.'
     c
 
-// @function Growth for the information rows, from the quarter store (hm, hq). crev, croa, cas: the TTM revenue, ROA and assets columns (net income = ROA x assets); qrev, qni: the quarterly revenue and net income columns, -1 when flows are requested as TTM (the quarter is then estimated from the change in the 12-month totals). Returns 6 strings per row for cardRows: growth, then the earnings surprise.
+// @function Growth for the information rows, from the quarter store (hm, hq). crev, croa, cas: the TTM revenue, ROA and assets columns (net income = ROA x assets); qrev, qni: the quarterly revenue and net income columns, -1 when flows are requested as TTM (the quarter is then estimated from the change in the 12-month totals). Returns 6 strings for cardRows: one row for growth and the earnings surprise.
 export f_grow(matrix<float> hm, int hq, int crev, int croa, int cas, int qrev, int qni) =>
     array<float> ni = array.new_float()
     for k = 0 to 9
@@ -986,12 +986,12 @@ export f_grow(matrix<float> hm, int hq, int crev, int croa, int cas, int qrev, i
     float sd = d.size() >= 6 ? d.stdev(false) : na
     float sue = sd > 0 ? (ni.get(0) - ni.get(1)) / sd : na
     string q = ex ? 'Q' : 'Q≈'
-    array.from('0', 'Growth 12M | ' + q, 'Rev ' + f_pct(f_gr(r0, r4)) + ' | ' + f_pct(rq), 'Profit ' + f_pct(f_gr(ni.get(0), ni.get(4))) + ' | ' + f_pct(nq), 'information',
-         'Revenue and net profit: the last 12 months against the 12 before | the latest quarter against the same quarter a year earlier' + (ex ? '.' : ' (Q≈: estimated from the change in the 12-month totals over the average quarter a year ago, as flows are requested as TTM).') + ' n/m: a loss or no data a year ago.\n\nNot scored: past growth does not predict returns (Lakonishok, Shleifer & Vishny 1994; Chan, Karceski & Lakonishok 2003). The Growth theme scores the 5-year change in profitability instead.',
-         '0', 'Earnings surprise (SUE)', na(sue) ? 'N/A' : (sue > 0 ? '+' : '') + str.tostring(sue, '#.#') + ' sd', 'latest quarter vs a year ago', na(sue) ? 'information' : sue >= 1 ? 'Beat' : sue <= -1 ? 'Miss' : 'In line',
-         "Standardised unexpected earnings: the latest quarter's net profit less the same quarter a year earlier, over how much that change varied in the 8 quarters before (Bernard & Thomas 1989). Needs 10 quarters of history.\n\nPrices tend to drift the way of a surprise for about 60 trading days after the report, but the drift has largely gone in US large caps since the 2000s (Martineau 2022). Not scored: it is momentum, not quality, risk or value.")
+    string su = na(sue) ? 'N/A' : (sue > 0 ? '+' : '') + str.tostring(sue, '#.#') + ' sd'
+    array.from('0', 'Growth 12M | ' + q, 'Rev ' + f_pct(f_gr(r0, r4)) + ' | ' + f_pct(rq), 'Profit ' + f_pct(f_gr(ni.get(0), ni.get(4))) + ' | ' + f_pct(nq) + ', SUE ' + su, na(sue) ? 'information' : sue >= 1 ? 'Beat' : sue <= -1 ? 'Miss' : 'In line',
+         'Revenue and net profit: the last 12 months against the 12 before | the latest quarter against the same quarter a year earlier' + (ex ? '.' : ' (Q≈: estimated from the change in the 12-month totals over the average quarter a year ago, as flows are requested as TTM).') + ' n/m: a loss or no data a year ago.\n\nNot scored: past growth does not predict returns (Lakonishok, Shleifer & Vishny 1994; Chan, Karceski & Lakonishok 2003). The Growth theme scores the 5-year change in profitability instead.' +
+         "\n\nSUE " + su + " (the status column: Beat at +1 sd, Miss at -1 sd). Standardised unexpected earnings: the latest quarter's net profit less the same quarter a year earlier, over how much that change varied in the 8 quarters before (Bernard & Thomas 1989). Needs 10 quarters of history.\n\nPrices tend to drift the way of a surprise for about 60 trading days after the report, but the drift has largely gone in US large caps since the 2000s (Martineau 2022). Not scored: it is momentum, not quality, risk or value.")
 
-// @function Scorecard detail: per pillar a bar header, one row per group (Value: per metric), then that pillar's info rows. info: 6 strings per row (pillar 0-2, label, value, detail, status, tooltip). Returns the next free row.
+// @function Scorecard detail: per pillar a bar header, one row per group (Value: price vs fair value, then the other metrics as one group), then that pillar's info rows. info: 6 strings per row (pillar 0-2, or 't0'-'t2' to add it to the pillar's tooltip instead of a row; label, value, detail, status, tooltip). Returns the next free row.
 export cardRows(table t, int row, Card c, array<color> cl, string ts, array<string> info) =>
     int r = row
     array<string> PN = array.from('Quality', 'Low risk (higher = safer)', 'Value')
@@ -1003,6 +1003,9 @@ export cardRows(table t, int row, Card c, array<color> cl, string ts, array<stri
         for i = 0 to 36
             ptt += f_pil(i) == p ? f_line(c, i) : ''
         ptt += (p == 0 and c.qcap ? '\nExcess over 50 cut to a quarter: Beneish flag.' : '') + (p == 1 and c.rcap ? '\nDistress flag (' + c.dz + ')' + (ps > 40 ? ': excess over 40 cut to a quarter.' : '.') : '') + (p == 2 and c.vcap ? '\nExcess over 50 cut to a quarter: value trap.' : '') + (p == 2 and c.cut > 0 ? "\nGrowth priced in, book-to-market, the owner-earnings yield and EBIT / EV re-read the DCF, P/B, Owners' Earnings and Acquirer's multiple models: each counts only for the fair value's share its model does not carry." : '')
+        for k = 0 to int(info.size() / 6) - 1
+            if info.size() >= 6 and info.get(6 * k) == 't' + str.tostring(p)
+                ptt += '\n\n' + info.get(6 * k + 1) + ': ' + info.get(6 * k + 2) + ' | ' + info.get(6 * k + 3) + ' (' + info.get(6 * k + 4) + ')\n' + info.get(6 * k + 5)
         t.cell(0, r, PN.get(p), text_color = cl.get(0), bgcolor = cl.get(2), text_size = ts, tooltip = ptt)
         t.cell(1, r, f_bar(ps), text_color = na(ps) ? cl.get(0) : f_scol(ps, cl), bgcolor = cl.get(2), text_size = ts, text_font_family = font.family_monospace, tooltip = ptt)
         t.cell(2, r, f_sc(ps), text_color = cl.get(0), bgcolor = cl.get(2), text_size = ts)
@@ -1026,14 +1029,32 @@ export cardRows(table t, int row, Card c, array<color> cl, string ts, array<stri
                     t.cell(3, r, f_word(gs), text_color = na(gs) ? cl.get(0) : color.white, bgcolor = f_scol(gs, cl), text_size = ts, tooltip = gtt)
                     r += 1
         else
-            for i in array.from(23, 31, 25, 24, 29, 36)
-                if f_off(i, c.sec, c.cf) or (i == 36 and c.w.get(i) == 0)
-                    continue
-                float s = c.s.get(i)
-                t.cell(0, r, f_name(i, c.sec), text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts, tooltip = f_line(c, i))
-                t.cell(1, r, f_fmt(i, c.v.get(i)), text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts)
-                t.cell(2, r, c.w.get(i) == 0 and i != 23 ? 'Held by the FV' : 'Score ' + f_sc(s), text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts)
-                t.cell(3, r, f_word(s), text_color = na(s) ? cl.get(0) : color.white, bgcolor = f_scol(s, cl), text_size = ts)
+            float s = c.s.get(23)
+            t.cell(0, r, f_name(23, c.sec), text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts, tooltip = f_line(c, 23))
+            t.cell(1, r, f_fmt(23, c.v.get(23)), text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts)
+            t.cell(2, r, 'Score ' + f_sc(s), text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts)
+            t.cell(3, r, f_word(s), text_color = na(s) ? cl.get(0) : color.white, bgcolor = f_scol(s, cl), text_size = ts)
+            r += 1
+            string gtt = ''
+            float sx = 0.0
+            float wx = 0.0
+            int nn = 0
+            int ns = 0
+            for i in array.from(31, 25, 24, 29, 36)
+                if not f_off(i, c.sec, c.cf)
+                    gtt += f_line(c, i)
+                    if c.w.get(i) > 0
+                        nn += 1
+                        if not na(c.s.get(i))
+                            ns += 1
+                            sx += c.w.get(i) * c.s.get(i)
+                            wx += c.w.get(i)
+            if gtt != ''
+                float gs = wx > 0 ? sx / wx : na
+                t.cell(0, r, 'Yields & multiples', text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts, tooltip = gtt)
+                t.cell(1, r, f_sc(gs), text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts)
+                t.cell(2, r, nn == 0 ? 'Held by the FV' : str.tostring(ns) + ' / ' + str.tostring(nn) + ' metrics', text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts)
+                t.cell(3, r, f_word(gs), text_color = na(gs) ? cl.get(0) : color.white, bgcolor = f_scol(gs, cl), text_size = ts, tooltip = gtt)
                 r += 1
         for k = 0 to int(info.size() / 6) - 1
             if info.size() >= 6 and info.get(6 * k) == str.tostring(p)
@@ -1079,7 +1100,7 @@ export tx(int id) =>
         30 => 'Quadrant 2: Desperation Spiral\nHigh distress AND accounting manipulation. Extreme Danger.'
         31 => "\n\nScore is Z''-EM: safe > 5.85, distress < 4.35."
         32 => '\n\nScore is Altman Z: safe > 3.0, distress < 1.8.'
-        37 => 'Justified P/B (Wilcox 1984; Ohlson 1995): (ROE - g) / (cost of equity - g), the P/B the company\'\'s own returns support.\n\nP/B now: {0,number,#.##}x\nJustified: {1,number,#.##}x\n\n5-year average ROE {2,number,#.#}% | cost of equity {3,number,#.#}% | long-run growth {4,number,#.#}% (the DCF terminal rate, at most the cost of equity - 2pp).\n\nValue trap: P/B under 1 and not below the justified P/B -- cheap on book, but its returns do not support even that price -- or a Piotroski F-score of 0-2 while the price is under the fair value (Piotroski 2000: among cheap stocks the weak scores lagged). The Value pillar then keeps a quarter of its excess over 50. This row itself is not scored.'
+        37 => 'Justified P/B (Wilcox 1984; Ohlson 1995): (ROE - g) / (cost of equity - g), the P/B the company\'\'s own returns support.\n\nP/B now: {0,number,#.##}x\nJustified: {1,number,#.##}x\n\n5-year average ROE {2,number,#.#}% | cost of equity {3,number,#.#}% | long-run growth {4,number,#.#}% (the DCF terminal rate, at most the cost of equity - 2pp).\n\nValue trap: P/B under 1 and not below the justified P/B -- cheap on book, but its returns do not support even that price -- or a Piotroski F-score of 0-2 while the price is under the fair value (Piotroski 2000: among cheap stocks the weak scores lagged). The Value pillar then keeps a quarter of its excess over 50. Justified P/B itself is not scored.'
         38 => 'CAPM Beta: {0,number,#.##}\nDownside Beta: {1}\nRisk-free base: {2} = {3,number,#.##}%\nERP: {4,number,#.#}%\nCRP: {5,number,#.#}% (local-US spread: {6,number,#.#}%)'
         39 => '\nCost of Debt (synthetic): {0,number,#.#}%\nEffective tax: {1,number,#.#}%\n\nMacro (manual): inflation {2,number,#.##}%, real GDP {3,number,#.##}% -> terminal growth {4,number,#.##}%.'
         40 => '\nLeverage: net debt {0,number,#.#}x EBITDA (> 4.5x).'
@@ -1158,7 +1179,7 @@ export tx(int id) =>
         113 => 'Owner Earnings yield: {0,number,#.##}%\n10Y hurdle: {1,number,#.##}%\nSpread: {2}{3,number,#.##}%'
         114 => 'Terminal value / final-year NOPAT inside the DCF: a firm-value multiple, not a P/E. Above 30x the value leans on a rich exit.'
         115 => 'Nine binary tests of profitability, leverage / liquidity and operating efficiency.'
-        116 => '(Net Income - Operating Cash Flow) / Total Assets.\n\nSloan (1996) is a RETURNS anomaly, not a fraud test. Beneish M-Score in the Z+M row is the manipulation model.'
+        116 => '(Net Income - Operating Cash Flow) / Total Assets.\n\nSloan (1996) is a RETURNS anomaly, not a fraud test. Beneish M-Score (the Z+M matrix, in the balance sheet and red-flag tooltips) is the manipulation model.'
         117 => 'COMP DCF GRA EPV RIM R40 PE PS FCF PB TBV EV CF AFFO ACQ OE RNPV ECF ADCF UNB APV EVA DDM'
         => ''
 
