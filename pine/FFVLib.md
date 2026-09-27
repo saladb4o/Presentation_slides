@@ -1072,6 +1072,28 @@ export f_grow(matrix<float> hm, int hq, int crev, int croa, int cas, int qrev, i
          'Revenue and net profit: the last 12 months against the 12 before | the latest quarter against the same quarter a year earlier' + (ex ? '.' : ' (Q≈: estimated from the change in the 12-month totals over the average quarter a year ago, as flows are requested as TTM).') + ' n/m: a loss or no data a year ago.\n\nNot scored: past growth does not predict returns (Lakonishok, Shleifer & Vishny 1994; Chan, Karceski & Lakonishok 2003). The Growth theme scores the 5-year change in profitability instead.' +
          "\n\nSUE " + su + " (the status column: Beat at +1 sd, Miss at -1 sd). Standardised unexpected earnings: the latest quarter's net profit less the same quarter a year earlier, over how much that change varied in the 8 quarters before (Bernard & Thomas 1989). Needs 10 quarters of history.\n\nPrices tend to drift the way of a surprise for about 60 trading days after the report, but the drift has largely gone in US large caps since the 2000s (Martineau 2022). Not scored: it is momentum, not quality, risk or value.")
 
+// @function Cash inputs for f_card from the quarter store (cols qx+2 cash cycle, +3 net income, +4 operating cash flow, +5 days inventory, +6 days payable). Returns [business type (1 working-capital-heavy, 2 capital-heavy, 0 light and banks), cash cycle 3y change, profit not backed by cash, distress text with a cash runway under a year, the cash cycle info row].
+export f_cash(matrix<float> hm, int hq, int qx, bool bank, bool reit, string sec, string ind, bool ok, float ni, float ocf, float fcf, float cash, string dz) =>
+    int wg = bank ? 0 : sec == 'Finance' ? (reit ? 2 : str.contains(ind, 'Real Estate') ? 1 : 0) : str.contains(' Retail Trade Distribution Services Producer Manufacturing Non-Energy Minerals Process Industries Consumer Durables Consumer Non-Durables Electronic Technology Industrial Services ', ' ' + sec + ' ') ? 1 : str.contains(' Utilities Communications Energy Minerals Transportation ', ' ' + sec + ' ') ? 2 : 0
+    // Cash conversion cycle: its 3-year change over the cycle then (at least 60 days); a cycle
+    // below 0 both times counts as at least 10% shorter. Needs 15+ days of inventory, now or then.
+    float c0 = f_at(hm, hq, qx + 2, 0)
+    float c3 = f_at(hm, hq, qx + 2, 12)
+    float cd = na(c0) or na(c3) or not (math.max(f_at(hm, hq, qx + 5, 0), nz(f_at(hm, hq, qx + 5, 12))) >= 15) ? float(na) : (c0 - c3) / math.max(math.abs(c3), 60)
+    if c0 <= 0 and c3 <= 0
+        cd := math.min(cd, -0.1)
+    // Red flags from cash: profit up 15%+ a year over 3 years from a positive base while operating
+    // cash flow is flat, falling or below 0 (quality); a cash runway under a year (distress).
+    float ni3 = f_at(hm, hq, qx + 3, 12)
+    bool pnc = ok and ni3 > 0 and ni > 0 and math.pow(ni / ni3, 1.0 / 3) - 1 >= 0.15 and (ocf <= 0 or ocf <= f_at(hm, hq, qx + 4, 12))
+    float rw = ok and fcf < 0 ? nz(cash) / -fcf : na
+    array<string> row = array.new_string()
+    if not na(c0) and not bank
+        float dio = f_at(hm, hq, qx + 5, 0)
+        float dpo = f_at(hm, hq, qx + 6, 0)
+        row := array.from('0', 'Cash conversion cycle', str.tostring(c0, '#') + ' days', 'Operating cycle ' + str.tostring(c0 + dpo, '#') + ' d, payables ' + str.tostring(dpo, '#') + ' d', na(c3) ? 'no 3y history' : c0 < c3 - 5 ? 'shortening' : c0 > c3 + 5 ? 'lengthening' : 'steady', str.format('Days inventory {0,number,#} + days receivable {1,number,#} = operating cycle {2,number,#}, less days payable {3,number,#} = cash cycle {4,number,#} (3 years ago: {5}). TTM COGS and revenue; inventory and payables from the companion feed.', dio, c0 + dpo - dio, c0 + dpo, dpo, c0, na(c3) ? 'N/A' : str.tostring(c3, '#')))
+    [wg, wg > 0 ? cd : na, pnc, dz + (rw < 1 ? (dz == '' ? '' : ', ') + 'cash runway ' + str.tostring(rw, '#.#') + ' years' : ''), row]
+
 // @function Scorecard detail: per pillar a bar header, one row per group (Value: price vs fair value, then the other metrics as one group), then that pillar's info rows. info: 6 strings per row (pillar 0-2, or 't0'-'t2' to add it to the pillar's tooltip instead of a row; label, value, detail, status, tooltip). Returns the next free row.
 export cardRows(table t, int row, Card c, array<color> cl, string ts, array<string> info) =>
     int r = row
@@ -1263,5 +1285,33 @@ export tx(int id) =>
         116 => '(Net Income - Operating Cash Flow) / Total Assets.\n\nSloan (1996) is a RETURNS anomaly, not a fraud test. Beneish M-Score (the Z+M matrix, in the balance sheet and red-flag tooltips) is the manipulation model.'
         117 => 'COMP DCF GRA EPV RIM R40 PE PS FCF PB TBV EV CF AFFO ACQ OE RNPV ECF ADCF UNB APV EVA DDM'
         => ''
+
+// @function Altman Z + Beneish M quadrant: [label, colour index into cl (3 good, 5 amber, 4 bad, -1 red), tooltip].
+export f_zm(float z, bool manip, float zs, float zg, bool em) =>
+    bool ok = z >= zs
+    int k = ok and not manip ? (z >= zg ? 0 : 1) : not manip ? 2 : ok ? 3 : 4
+    [array.get(array.from('Golden Standard', 'Safe & Honest', 'Failing / Honest', 'Fake Safe (Enron)', 'Desperation Spiral'), k), array.get(array.from(3, 3, 5, 4, -1), k), tx(27 + math.max(k - 1, 0)) + (em ? tx(31) : tx(32)) + '\nM-Score cutoff: -1.78.']
+
+// @function Justified P/B info row (6 strings, Quality tooltip).
+export f_jpbrow(bool on, float jpb, float pb, bool trap, float roe, float coe, float g) =>
+    array.from('t2', 'Justified P/B', not on ? 'off' : na(jpb) ? 'N/A' : jpb < 0 ? 'below 0' : str.tostring(jpb, '#.##') + 'x', 'P/B ' + (na(pb) ? 'N/A' : str.tostring(pb, '#.##') + 'x'), trap ? 'Value trap' : na(jpb) or na(pb) ? 'information' : pb < jpb ? 'Below justified' : 'Above justified', na(jpb) or na(pb) ? 'Justified P/B needs a positive book value and 3 yearly ROE readings (the filter setting on).' : str.format(tx(37), pb, jpb, roe * 100, coe * 100, g * 100))
+
+// @function Street confidence from the analyst targets (lo, md, hi, count, date as ms, now) and ratings (strong buy, buy, hold, sell, strong sell): [agreement, depth, freshness, conviction, confidence 0-100, target age in days, buys, holds, sells, rating score 1 strong buy to 5 strong sell].
+export f_street(bool has, float lo, float md, float hi, float n, float dt, float now, float bs, float b, float h, float s, float ss) =>
+    float ag = has ? math.min(math.max(1 - ((hi - lo) / md) / 0.8, 0), 1) : na
+    float dp = has ? math.min(math.max(math.sqrt(math.max(n, 1)) / math.sqrt(10), 0), 1) : na
+    float age = has and not na(dt) ? (now - dt) / 86400000.0 : na
+    float fr = na(age) ? (has ? 0.5 : na) : age <= 30 ? 1.0 : math.max(1.0 - (age - 30) / 150 * 0.8, 0.2)
+    float rb = nz(b) + nz(bs)
+    float rh = nz(h)
+    float rs = nz(s) + nz(ss)
+    float tot = rb + rh + rs
+    float cv = has ? (tot > 0 ? math.max(rb, rh, rs) / tot : 0.5) : na
+    [ag, dp, fr, cv, has ? 100 * (0.35 * ag + 0.20 * dp + 0.25 * fr + 0.20 * cv) : na, age, rb, rh, rs, tot > 0 ? (nz(bs) + 2 * nz(b) + 3 * rh + 4 * nz(s) + 5 * nz(ss)) / tot : na]
+
+// @function Ours vs street verdict from the two confidences (0-100) and the gap between the values.
+export f_verdict(bool has, float oc, float sc, float gap, float cut) =>
+    bool a = math.abs(gap) <= cut
+    not has ? 'No coverage' : na(oc) ? 'No fair value' : oc >= 60 and sc >= 60 ? (a ? 'High conviction' : 'Real disagreement') : oc < 40 and sc < 40 ? 'Low information' : oc - sc >= 20 ? (a ? 'Agree (ours stronger)' : 'Trust ours') : sc - oc >= 20 ? (a ? 'Agree (street stronger)' : 'Trust street') : a ? 'Agree' : 'Mixed'
 
 ```
