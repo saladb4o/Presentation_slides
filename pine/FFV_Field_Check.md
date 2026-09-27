@@ -43,6 +43,7 @@ array<float> v = array.from(
      f('BENEISH_M_SCORE', 'FQ'), f('CASH_CONVERSION_CYCLE', 'FQ'), f('TOTAL_REVENUE', 'FY'),
      f('NET_INCOME', 'FY'))
 int N = 40
+int R0 = input.int(0, 'Start the table at field #', minval = 0, maxval = 39, tooltip = 'Set to 30 to see the last fields and the definition tests when the table runs off the screen.')
 
 // Per field: bars with data, bars with exactly 0 (0 can mean "none" or "not reported"),
 // negative bars, first bar with data. Coverage = bars with data / bars since any field had data.
@@ -145,23 +146,24 @@ if barstate.islast
     f_c(3, 0, 'Negative', color.white, size.small)
     f_c(4, 0, 'First', color.white, size.small)
     f_c(5, 0, 'Latest', color.white, size.small)
-    for i = 0 to N - 1
+    for i = R0 to N - 1
         int h = hits.get(i)
         float c = bars > 0 ? h / float(bars) * 100 : 0.0
-        f_c(0, i + 1, NAMES.get(i))
-        f_c(1, i + 1, str.tostring(c, '#') + '%', c >= 90 ? color.green : c >= 50 ? color.orange : color.red)
-        f_c(2, i + 1, h == 0 ? '-' : str.tostring(zeros.get(i) / float(h) * 100, '#') + '%')
-        f_c(3, i + 1, h == 0 ? '-' : str.tostring(negs.get(i) / float(h) * 100, '#') + '%')
-        f_c(4, i + 1, f_dt(first_t.get(i)))
-        f_c(5, i + 1, na(v.get(i)) ? 'N/A' : str.tostring(v.get(i), format.volume))
-    f_c(0, N + 1, 'Definition tests', color.yellow, size.small)
-    f_c(1, N + 1, 'Bars tested', color.yellow, size.small)
-    f_c(2, N + 1, 'Passed', color.yellow, size.small)
+        int r = i - R0 + 1
+        f_c(0, r, NAMES.get(i))
+        f_c(1, r, str.tostring(c, '#') + '%', c >= 90 ? color.green : c >= 50 ? color.orange : color.red)
+        f_c(2, r, h == 0 ? '-' : str.tostring(zeros.get(i) / float(h) * 100, '#') + '%')
+        f_c(3, r, h == 0 ? '-' : str.tostring(negs.get(i) / float(h) * 100, '#') + '%')
+        f_c(4, r, f_dt(first_t.get(i)))
+        f_c(5, r, na(v.get(i)) ? 'N/A' : str.tostring(v.get(i), format.volume))
+    f_c(0, N - R0 + 1, 'Definition tests', color.yellow, size.small)
+    f_c(1, N - R0 + 1, 'Bars tested', color.yellow, size.small)
+    f_c(2, N - R0 + 1, 'Passed', color.yellow, size.small)
     for k = 0 to NT - 1
         int n = tn.get(k)
         float p = n > 0 ? tp.get(k) / float(n) * 100 : na
-        f_c(0, N + 2 + k, TN.get(k))
-        f_c(1, N + 2 + k, str.tostring(n))
-        f_c(2, N + 2 + k, n == 0 ? '-' : str.tostring(p, '#') + '%', n == 0 ? color.gray : p >= 90 ? color.green : p >= 50 ? color.orange : color.red)
+        f_c(0, N - R0 + 2 + k, TN.get(k))
+        f_c(1, N - R0 + 2 + k, str.tostring(n))
+        f_c(2, N - R0 + 2 + k, n == 0 ? '-' : str.tostring(p, '#') + '%', n == 0 ? color.gray : p >= 90 ? color.green : p >= 50 ? color.orange : color.red)
 
 ```
