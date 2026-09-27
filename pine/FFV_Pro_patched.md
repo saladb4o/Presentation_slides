@@ -700,7 +700,7 @@ i_bt_fees = input.float(0.5, 'Round-trip Fees & Slippage %', group = group_bt, t
 i_bt_win_threshold = input.float(0.0, 'Min Profit % to count as Win', group = group_bt, tooltip = 'Set to > 0 if you want to ignore tiny gains (e.g., 2%).') / 100
 i_report_lag = input.int(45, 'Report lag (days)', minval = 0, maxval = 120, group = group_bt, tooltip = "request.financial returns a quarter's numbers from the START of the next period -- weeks before they were published. Each new value is released on the next earnings report date, or after this many days at most. 0 restores the old (look-ahead) behaviour. The latest value is always released on the last bar.")
 group_cf = 'Companion Feed'
-i_cf_on = input.bool(false, 'Use FFV Companion Feed', group = group_cf, tooltip = "Add FFV Companion Feed to the chart first, then pick its 17 plots below, each by its own name. Its values only fill gaps the engine could not solve exactly, turn owner earnings into Buffett's definition, and give the scorecard its quick ratio and debt service cover (without the feed those two are left out). A wrong or missing link, or a different report lag, disables the whole feed.")
+i_cf_on = input.bool(false, 'Use FFV Companion Feed', group = group_cf, tooltip = "Add FFV Companion Feed to the chart first, then pick its 18 plots below, each by its own name. Its values only fill gaps the engine could not solve exactly, turn owner earnings into Buffett's definition, and give the scorecard its quick ratio, debt service cover and cash conversion cycle (without the feed those three are left out). A wrong or missing link, or a different report lag, disables the whole feed.")
 i_cf_eq = input.source(close, 'Feed: Equity', group = group_cf)
 i_cf_gp = input.source(close, 'Feed: Gross profit', group = group_cf)
 i_cf_ed = input.source(close, 'Feed: EBITDA', group = group_cf)
@@ -716,6 +716,7 @@ i_cf_cl = input.source(close, 'Feed: Current liabilities', group = group_cf)
 i_cf_iv = input.source(close, 'Feed: Inventory', group = group_cf)
 i_cf_cp = input.source(close, 'Feed: Current portion of LT debt', group = group_cf)
 i_cf_lt = input.source(close, 'Feed: Long-term debt', group = group_cf)
+i_cf_ap = input.source(close, 'Feed: Payables', group = group_cf)
 i_cf_codes = input.source(close, 'Feed: Codes', group = group_cf)
 i_cf_chk = input.source(close, 'Feed: Check', group = group_cf)
 i_acquirer_mult = input.float(10.0, "Acquirer's Multiple Target (EV/EBIT)", group = group_iv, tooltip = "Tobias Carlisle's standard is 10x. Raise this to 15x or 20x for large-cap/growth stocks.")
@@ -1010,7 +1011,7 @@ fin_changed = FL.release(fin_raw, fin_pend, fin_known, fin_seen, i_report_lag, r
 // (weighted mantissas, FL.mant) recomputes: a link left on the close fails it at any scale.
 // Codes: lag + 1000 x sum(code_i x 4^i), code 1 reported, 2 reported parts (tier 2),
 // 3 from a ratio (tier 1), 0 none.
-array<float> cf_v = array.from(i_cf_eq, i_cf_gp, i_cf_ed, i_cf_cx, i_cf_da, i_cf_im, i_cf_wc, i_cf_aj, i_cf_sh, i_cf_cs, i_cf_db, i_cf_cl, i_cf_iv, i_cf_cp, i_cf_lt)
+array<float> cf_v = array.from(i_cf_eq, i_cf_gp, i_cf_ed, i_cf_cx, i_cf_da, i_cf_im, i_cf_wc, i_cf_aj, i_cf_sh, i_cf_cs, i_cf_db, i_cf_cl, i_cf_iv, i_cf_cp, i_cf_lt, i_cf_ap)
 float cf_sum = FL.mant(i_cf_codes)
 for [k, x] in cf_v
     cf_sum += (k + 2) * FL.mant(x)
@@ -1018,7 +1019,7 @@ bool cf_ok = i_cf_on and not na(i_cf_codes) and i_cf_codes % 1000 == i_report_la
 int cf_c = cf_ok ? int(i_cf_codes / 1000) : 0
 array<int> cf_t = array.new_int(0)
 // A new feed value is new data (it triggers a rebuild).
-var array<float> cf_last = array.new_float(15, na)
+var array<float> cf_last = array.new_float(16, na)
 bool cf_new = false
 for [k, x] in cf_v
     int c = int(cf_c / math.pow(4, k)) % 4
@@ -1056,9 +1057,10 @@ int Q_ROA = 40, int Q_CR = 41, int Q_LEV = 42, int Q_GM = 43, int Q_AT = 44, int
 int Q_REV = 47, int Q_AS = 48, int Q_EBITDA = 49, int Q_DEBT = 50, int Q_REC = 51, int Q_COGS = 52
 int Q_PEQ = 53, int Q_ROE = 54, int Q_OP = 55, int Q_PX = 56, int Q_FFV = 57, int Q_FREL = 58, int Q_MNT = 59, int Q_FV = 60
 int Q_MULT = Q_FV + MD.size()
-// Scorecard history: gross profit / assets, cash flow / assets.
+// Scorecard history: gross profit / assets, cash flow / assets, the cash conversion cycle (days),
+// net income and operating cash flow (TTM), days inventory and days payable.
 int Q_X = Q_MULT + MD.size()
-var QStore ST = QStore.new(matrix.new<float>(128, Q_X + 2, na))
+var QStore ST = QStore.new(matrix.new<float>(128, Q_X + 7, na))
 // FIRM (F_*): report data, rebuilt when the clock marks it dirty. Solved items (sh ... nd) with their
 // tiers before the staleness cap (Drivers caps them), the released fields read later, then the
 // derived drivers, diagnostics and scores.
@@ -1501,6 +1503,14 @@ if CK.dirty
         ST.write(Q_RV0 + k, x)
     ST.write(Q_X, calc_assets > 0 ? calc_gp / calc_assets : na)
     ST.write(Q_X + 1, calc_assets > 0 ? calc_ocf / calc_assets : na)
+    // Cash conversion cycle (days): inventory and payables from the feed over COGS, receivables over revenue.
+    float inv_fq = cf_ok ? cf_v.get(12) : na
+    bool ccc_in = cogs_ttm > 0 and calc_rev > 0 and inv_fq >= 0 and cf_v.get(15) >= 0 and accounts_receivable_ttm >= 0
+    ST.write(Q_X + 5, ccc_in ? inv_fq / cogs_ttm * 365 : na)
+    ST.write(Q_X + 6, ccc_in ? cf_v.get(15) / cogs_ttm * 365 : na)
+    ST.write(Q_X + 2, ccc_in ? ST.at(Q_X + 5, 0) + accounts_receivable_ttm / calc_rev * 365 - ST.at(Q_X + 6, 0) : na)
+    ST.write(Q_X + 3, calc_ni)
+    ST.write(Q_X + 4, calc_ocf)
     F_sh := calc_shares
     F_rev := calc_rev
     F_gp := calc_gp
@@ -2784,6 +2794,24 @@ if barstate.islast
     // receivables + 50% of inventory (companion feed; without it none) - all liabilities and
     // minority interest, over the market cap (the last value below).
     bool card_mnp = i_useBeneishCheck and F_manip and math.min(eng_t.get(19), eng_t.get(5), eng_t.get(6), eng_t.get(0)) >= 2
+    // Cash weights by business type: 1 working-capital-heavy, 2 capital-heavy, 0 light (and banks).
+    string cs_sec = syminfo.sector
+    int wg = use_bank_model ? 0 : cs_sec == 'Finance' ? (selected_industry == 'REITs' ? 2 : str.contains(syminfo.industry, 'Real Estate') ? 1 : 0) : str.contains(' Retail Trade Distribution Services Producer Manufacturing Non-Energy Minerals Process Industries Consumer Durables Consumer Non-Durables Electronic Technology Industrial Services ', ' ' + cs_sec + ' ') ? 1 : str.contains(' Utilities Communications Energy Minerals Transportation ', ' ' + cs_sec + ' ') ? 2 : 0
+    // Cash conversion cycle: its 3-year change over the cycle then (at least 60 days); a cycle
+    // below 0 both times counts as at least 10% shorter. Needs 15+ days of inventory, now or then.
+    float ccc0 = ST.at(Q_X + 2, 0)
+    float ccc3 = ST.at(Q_X + 2, 12)
+    float ccc_d = na(ccc0) or na(ccc3) or not (math.max(ST.at(Q_X + 5, 0), nz(ST.at(Q_X + 5, 12))) >= 15) ? float(na) : (ccc0 - ccc3) / math.max(math.abs(ccc3), 60)
+    if ccc0 <= 0 and ccc3 <= 0
+        ccc_d := math.min(ccc_d, -0.1)
+    // Red flags from cash: profit up 15%+ a year over 3 years from a positive base while operating
+    // cash flow is flat, falling or below 0 (quality); a cash runway under a year (distress).
+    bool cash_ok = not (use_bank_model or F_suspect or CK.cap == 0)
+    float ni3 = ST.at(Q_X + 3, 12)
+    float ocf3 = ST.at(Q_X + 4, 12)
+    bool card_pnc = cash_ok and ni3 > 0 and F_ni_c > 0 and math.pow(F_ni_c / ni3, 1.0 / 3) - 1 >= 0.15 and (F_ocf <= 0 or F_ocf <= ocf3)
+    float runway = cash_ok and F_fcf < 0 ? nz(F_cash) / -F_fcf : na
+    string card_dz = HV_dz + (runway < 1 ? (HV_dz == '' ? '' : ', ') + 'cash runway ' + str.tostring(runway, '#.#') + ' years' : '')
     CARD := FL.f_card(array.from(F_gp / F_assets, F_ocf / F_assets, D.roe, F_ni_c / F_assets, (F_ni_c - F_ocf) / F_assets, F_gp / F_rev, float(na), float(na), float(na), float(na), float(na),
          nz(cash_iss, math.abs(sh_chg) < 0.3 ? sh_chg : float(na)), F_ni_c > 0 and not (na(F_dps) and na(F_netbb)) ? (nz(F_dps) * F_sh + nz(F_netbb)) / F_ni_c : float(na), (F_debt - F_debt_1y) / F_assets,
          use_bank_model ? D.roe - cost_of_equity : roic_wacc_spread, na(raw_beta_s) ? na : beta_mkt, float(na), use_bank_model ? F_eq / F_assets : F_debt / F_assets, altman_z, float(na), downside_beta,
@@ -2792,13 +2820,16 @@ if barstate.islast
          na(ev_now) or na(F_ebit) ? float(na) : ev_now > 0 ? F_ebit * (1 - math.min(math.max(F_tax, 0.0), 0.5)) / ev_now - final_discount_rate : F_ebit > 0 ? 99.0 : float(na),
          F_dsc, F_stc, F_eq - nz(F_intang) > 0 and F_tl <= 0.8 * F_assets ? F_tl / (F_eq - nz(F_intang)) : float(na), cf_ok and F_cl > 0 and not na(cf_v.get(12)) ? (F_ca - cf_v.get(12)) / F_cl : float(na),
          use_bank_model or not (close * F_sh > 0) ? float(na) : (F_cash + 0.75 * F_rec + 0.5 * math.max(nz(cf_ok ? cf_v.get(12) : na), 0) - F_tl - nz(F_minority)) / (close * F_sh),
-         liq_ami, close > 0 ? F_eps_est / close - cost_of_equity : float(na)),
+         liq_ami, close > 0 ? F_eps_est / close - cost_of_equity : float(na), wg > 0 ? ccc_d : float(na), use_bank_model or not (F_assets > 0) ? float(na) : F_debt / F_assets < 0.02 ? 99.0 : F_fcf / F_debt),
          eng_t, F_suspect or CK.cap == 0, cf_ok, F_eq, use_bank_model ? 1 : dz_ru ? 2 : 0, z_safe_cut, z_gold_cut,
-         card_mnp, is_value_trap, HV_dz,
+         card_mnp, card_pnc, is_value_trap, card_dz, wg,
          ST.v, ST.q, array.from(Q_X, Q_X + 1, Q_ROE, Q_ROA, Q_GM), beta_ra, beta_rb, bsec >= 604800 ? 31557600 / bsec : trading_days * (bsec >= 86400 ? 86400 : session_sec) / bsec,
          pbh, pb, close, sell_zone_line, finalFairValue, buy_zone_line, compositeLo, ov, n_mem >= 2 and finalFairValue > 0 ? fv_stddev / finalFairValue : float(na), F_ebitda_g)
-    CARD := FL.f_timing(CARD, TW_S, TW_X, TW_M, TW_A, rf_local_avg / 100, sec_idx == '' ? '' : i_sector_idx != '' ? i_sector_idx : sec_auto, curr == 'VND' ? 'VN-Index' : final_mkt_bench, TW_W, tw_vn ? (syminfo.prefix == 'HNX' ? 0.10 : syminfo.prefix == 'UPCOM' ? 0.15 : 0.07) : na, card_mnp or HV_dz != '' or is_value_trap)
+    CARD := FL.f_timing(CARD, TW_S, TW_X, TW_M, TW_A, rf_local_avg / 100, sec_idx == '' ? '' : i_sector_idx != '' ? i_sector_idx : sec_auto, curr == 'VND' ? 'VN-Index' : final_mkt_bench, TW_W, tw_vn ? (syminfo.prefix == 'HNX' ? 0.10 : syminfo.prefix == 'UPCOM' ? 0.15 : 0.07) : na, card_mnp or card_pnc or card_dz != '' or is_value_trap)
     CARD_INFO := FL.f_grow(ST.v, ST.q, Q_REV, Q_ROA, Q_AS, i_flow_ttm ? -1 : Q_FLOW, i_flow_ttm ? -1 : Q_FLOW + 13)
+    if not na(ccc0) and not use_bank_model
+        float dio = ST.at(Q_X + 5, 0), float dpo = ST.at(Q_X + 6, 0)
+        CARD_INFO.concat(array.from('0', 'Cash conversion cycle', str.tostring(ccc0, '#') + ' days', 'Operating cycle ' + str.tostring(ccc0 + dpo, '#') + ' d, payables ' + str.tostring(dpo, '#') + ' d', na(ccc3) ? 'no 3y history' : ccc0 < ccc3 - 5 ? 'shortening' : ccc0 > ccc3 + 5 ? 'lengthening' : 'steady', str.format('Days inventory {0,number,#} + days receivable {1,number,#} = operating cycle {2,number,#}, less days payable {3,number,#} = cash cycle {4,number,#} (3 years ago: {5}). TTM COGS and revenue; inventory and payables from the companion feed.', dio, ccc0 + dpo - dio, ccc0 + dpo, dpo, ccc0, na(ccc3) ? 'N/A' : str.tostring(ccc3, '#'))))
     CARD_INFO.concat(array.from('t2', 'Justified P/B', not i_use_rkv ? 'off' : na(jpb) ? 'N/A' : jpb < 0 ? 'below 0' : str.tostring(jpb, '#.##') + 'x', 'P/B ' + (na(current_pb_val) ? 'N/A' : str.tostring(current_pb_val, '#.##') + 'x'),
          trap_pb ? 'Value trap' : na(jpb) or na(current_pb_val) ? 'information' : current_pb_val < jpb ? 'Below justified' : 'Above justified', na(jpb) or na(current_pb_val) ? 'Justified P/B needs a positive book value and 3 yearly ROE readings (the filter setting on).' : str.format(FL.tx(37), current_pb_val, jpb, jpb_roe * 100, cost_of_equity * 100, jpb_g * 100)))
 // ---------- summary card ----------

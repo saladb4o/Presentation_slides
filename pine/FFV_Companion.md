@@ -24,10 +24,11 @@ f(string id, string per) =>
 float earn_raw = request.earnings(syminfo.tickerid, earnings.actual, ignore_invalid_symbol = true)
 bool report_bar = not na(earn_raw) and (na(earn_raw[1]) or earn_raw != earn_raw[1])
 
-// 33 requests (32 here + report dates). Index: 0-2 equity | 3-5 gross profit | 6-9 EBITDA |
+// 34 requests (33 here + report dates). Index: 0-2 equity | 3-5 gross profit | 6-9 EBITDA |
 // 10-12 capex | 13-14 cash-flow D&A (8 doubles as its backup) | 15-22 owner-earnings parts |
 // 23 shares | 24 cash | 25-27 debt | 28-29 current liabilities | 30 inventory | 31 current
-// portion of long-term debt (the scorecard's quick ratio and debt service cover).
+// portion of long-term debt (the scorecard's quick ratio and debt service cover) | 32 accounts
+// payable (the cash conversion cycle).
 array<float> raw = array.from(
      f('TOTAL_EQUITY', 'FQ'), f('SHRHLDRS_EQUITY', 'FQ'), f('BOOK_VALUE_PER_SHARE', 'FQ'),
      f('GROSS_PROFIT', 'TTM'), f('GROSS_MARGIN', 'TTM'), f('COGS_TO_REVENUE', 'FQ'),
@@ -39,8 +40,8 @@ array<float> raw = array.from(
      f('BASIC_SHARES_OUTSTANDING', 'FQ'), f('CASH_N_EQUIVALENTS', 'FQ'),
      f('LONG_TERM_DEBT', 'FQ'), f('SHORT_TERM_DEBT_EXCL_CURRENT_PORT', 'FQ'), f('DEBT_TO_EQUITY', 'FQ'),
      f('CURRENT_RATIO', 'FQ'), f('TOTAL_CURRENT_ASSETS', 'FQ'),
-     f('TOTAL_INVENTORY', 'FQ'), f('CURRENT_PORT_DEBT_CAPITAL_LEASES', 'FQ'))
-int NR = 32
+     f('TOTAL_INVENTORY', 'FQ'), f('CURRENT_PORT_DEBT_CAPITAL_LEASES', 'FQ'), f('ACCOUNTS_PAYABLE', 'FQ'))
+int NR = 33
 var array<float> pend = array.new_float(NR, na)
 var array<float> known = array.new_float(NR, na)
 var array<int> seen = array.new_int(NR, 0)
@@ -50,7 +51,7 @@ bool changed = FL.release(raw, pend, known, seen, i_lag, report_bar)
 var int nq = 0
 var array<float> lastv = array.new_float(NR, na)
 var array<int> lastq = array.new_int(NR, 0)
-var array<int> BAL = array.from(0, 1, 2, 15, 23, 24, 25, 26, 27, 28, 29, 30, 31)
+var array<int> BAL = array.from(0, 1, 2, 15, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32)
 for i in BAL
     float x = known.get(i)
     if not na(x) and x != lastv.get(i)
@@ -119,9 +120,10 @@ pick(float a, int ca, float b, int cb, float c, int cc) =>
 // 5 impairments (last FY) | 6 working-capital change, 3-year average of TTM | 7 opt-in
 // owner-earnings adjustment (non-cash items - acquisitions) | 8 shares | 9 cash |
 // 10 total debt | 11 current liabilities | 12 inventory | 13 current portion of long-term debt |
-// 14 long-term debt (with 13: a 0 there and long-term debt means the filing does not split it out).
-var array<float> V = array.new_float(15, na)
-var array<int> C = array.new_int(15, 0)
+// 14 long-term debt (with 13: a 0 there and long-term debt means the filing does not split it out) |
+// 15 accounts payable.
+var array<float> V = array.new_float(16, na)
+var array<int> C = array.new_int(16, 0)
 put(int i, float v, int c) =>
     V.set(i, v)
     C.set(i, na(v) ? 0 : c)
@@ -178,6 +180,7 @@ if Q.rows() > 0 and (changed or last_q == bar_index)
     put(12, K(30), 1)
     put(13, math.abs(K(31)), 1)
     put(14, K(25), 1)
+    put(15, K(32), 1)
 
 // ---------- HAND-OVER ----------
 // Codes: report lag + 1000 x sum(code_i x 4^i), an exact integer. Check: weighted
@@ -185,7 +188,7 @@ if Q.rows() > 0 and (changed or last_q == bar_index)
 // swapped with another fails the main script's recomputation at any scale.
 float csum = 0.0
 float check = 0.0
-for i = 0 to 14
+for i = 0 to 15
     csum += C.get(i) * math.pow(4, i)
     check += (i + 2) * FL.mant(V.get(i))
 float codes = i_lag + 1000.0 * csum
@@ -205,23 +208,24 @@ plot(V.get(11), 'FFV Current liabilities', display = display.data_window)
 plot(V.get(12), 'FFV Inventory', display = display.data_window)
 plot(V.get(13), 'FFV Current portion of LT debt', display = display.data_window)
 plot(V.get(14), 'FFV Long-term debt', display = display.data_window)
+plot(V.get(15), 'FFV Payables', display = display.data_window)
 plot(codes, 'FFV Codes', display = display.data_window)
 plot(check, 'FFV Check', display = display.data_window)
 
 // ---------- TABLE ----------
-var table tb = table.new(position.bottom_right, 3, 17, bgcolor = color.new(color.black, 10), border_width = 1)
-var array<string> NM = array.from('Equity', 'Gross profit (TTM)', 'EBITDA (TTM)', 'Capex (TTM)', 'D&A, cash flow (TTM)', 'Impairments (last FY)', 'Working-capital change (3y avg)', 'OE adjustment (opt-in)', 'Shares (basic)', 'Cash & equivalents', 'Total debt', 'Current liabilities', 'Inventory', 'Current portion of LT debt', 'Long-term debt')
+var table tb = table.new(position.bottom_right, 3, 18, bgcolor = color.new(color.black, 10), border_width = 1)
+var array<string> NM = array.from('Equity', 'Gross profit (TTM)', 'EBITDA (TTM)', 'Capex (TTM)', 'D&A, cash flow (TTM)', 'Impairments (last FY)', 'Working-capital change (3y avg)', 'OE adjustment (opt-in)', 'Shares (basic)', 'Cash & equivalents', 'Total debt', 'Current liabilities', 'Inventory', 'Current portion of LT debt', 'Long-term debt', 'Accounts payable')
 src(int c) =>
     c == 1 ? 'reported' : c == 2 ? 'parts / substitute' : c == 3 ? 'estimate / ratio' : 'missing'
 if barstate.islast and i_tbl
     table.cell(tb, 0, 0, 'FFV Companion Feed', text_color = color.white, text_size = size.small)
     table.cell(tb, 1, 0, 'Value', text_color = color.white, text_size = size.small)
     table.cell(tb, 2, 0, 'Source', text_color = color.white, text_size = size.small)
-    for i = 0 to 14
+    for i = 0 to 15
         float v = V.get(i)
         table.cell(tb, 0, i + 1, NM.get(i), text_color = color.white, text_size = size.small, text_halign = text.align_left)
         table.cell(tb, 1, i + 1, na(v) ? 'N/A' : str.tostring(v, format.volume), text_color = color.white, text_size = size.small)
         table.cell(tb, 2, i + 1, src(C.get(i)), text_color = color.gray, text_size = size.small)
-    table.cell(tb, 0, 16, 'Report lag ' + str.tostring(i_lag) + ' days (must match main)', text_color = color.gray, text_size = size.small, text_halign = text.align_left)
+    table.cell(tb, 0, 17, 'Report lag ' + str.tostring(i_lag) + ' days (must match main)', text_color = color.gray, text_size = size.small, text_halign = text.align_left)
 
 ```
