@@ -877,13 +877,13 @@ export f_card(array<float> v, array<int> tier, bool bad, bool cf, float eq, int 
     c.mnp := manip
     // Forensics does not apply where none of its metrics do (banks): their flags are not read.
     bool fap = c.pt.get(0) > 0
-    string f = (fap and manip ? ', Beneish' : '') + (fap and pnc ? ', profit not backed by cash' : '') + (c.p.get(0) < 30 ? ', pillar ' + f_sc(c.p.get(0)) : '')
-    c.ft := f == '' ? '' : str.substring(f, 2)
+    string fw = (fap and manip ? ', Beneish' : '') + (fap and pnc ? ', profit not backed by cash' : '') + (c.p.get(0) < 30 ? ', pillar ' + f_sc(c.p.get(0)) : '')
+    c.ft := fw == '' ? '' : str.substring(fw, 2)
     c.fs := c.ft != '' ? 1 : c.pt.get(0) == 0 ? 3 : na(c.p.get(0)) ? 2 : 0
     bool bk = sec == 1
     bool bok = bk ? not na(c.s.get(17)) : bc >= 0.6 and bn >= 2
-    string x = (dz != '' ? ', ' + dz : '') + (bk and bok and vv.get(17) < 0.03 ? ', equity / assets ' + f_fmt(17, vv.get(17)) : not bk and bok and c.gs.get(2) < 30 ? ', balance sheet ' + f_sc(c.gs.get(2)) : '')
-    c.st := x == '' ? '' : str.substring(x, 2)
+    string sw2 = (dz != '' ? ', ' + dz : '') + (bk and bok and vv.get(17) < 0.03 ? ', equity / assets ' + f_fmt(17, vv.get(17)) : not bk and bok and c.gs.get(2) < 30 ? ', balance sheet ' + f_sc(c.gs.get(2)) : '')
+    c.st := sw2 == '' ? '' : str.substring(sw2, 2)
     c.ss := c.st != '' ? 1 : bok ? 0 : 2
     // Total: weights from Buffett's letters (an enduring moat first, 2007; a wonderful company at a
     // fair price, 1989), this indicator's choice; forensics and compounding (both need years of
@@ -895,12 +895,12 @@ export f_card(array<float> v, array<int> tier, bool bad, bool cf, float eq, int 
     float lw = 0.0
     float tw = 0.0
     for p = 0 to 4
-        float y = c.p.get(p)
-        if na(y)
+        float pv = c.p.get(p)
+        if na(pv)
             if p == 1 or p == 2 or p == 4
                 c.why += (c.why == '' ? '' : ', ') + PN.get(p)
         else
-            lw += PW.get(p) * math.log(math.max(y, 1))
+            lw += PW.get(p) * math.log(math.max(pv, 1))
             tw += PW.get(p)
     c.total := c.why == '' and tw > 0 ? math.exp(lw / tw) : na
     bool gf = c.fs == 1 or c.ss == 1
@@ -908,11 +908,14 @@ export f_card(array<float> v, array<int> tier, bool bad, bool cf, float eq, int 
         c.total := 30 + (c.total - 30) * 0.25
     // Verdict: a failed gate is Weak; any pillar under 30 is Weak; Strong needs every pillar at 50+,
     // both gates checked (or forensics not applying) and no value trap.
+    if gf and na(c.total)
+        c.vw := 'Weak'
+        c.gate := 'failed ' + (c.fs == 1 ? 'Forensics (' + c.ft + ')' : '') + (c.fs == 1 and c.ss == 1 ? ' and ' : '') + (c.ss == 1 ? 'Solvency (' + c.st + ')' : '')
     if not na(c.total)
         float mn = 100.0
-        for y in c.p
-            if not na(y)
-                mn := math.min(mn, math.round(y))
+        for pv in c.p
+            if not na(pv)
+                mn := math.min(mn, math.round(pv))
         c.vw := f_word(c.total)
         if gf
             c.vw := 'Weak'
@@ -952,7 +955,7 @@ export cardSum(table t, int row, Card c, array<color> cl, string ts) =>
     t.cell(0, row, 'Buffett score', text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts, tooltip = tt)
     t.cell(1, row, f_bar(s) + ' ' + f_sc(s), text_color = na(s) ? cl.get(0) : f_scol(s, cl), bgcolor = cl.get(1), text_size = ts, text_font_family = font.family_monospace, tooltip = tt)
     t.cell(2, row, 'F ' + (c.fs == 3 ? '–' : f_sc(c.p.get(0))) + ' · S ' + f_sc(c.p.get(1)) + ' · M ' + f_sc(c.p.get(2)) + ' · C ' + f_sc(c.p.get(3)) + ' · V ' + f_sc(c.p.get(4)), text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts)
-    t.cell(3, row, na(s) ? 'N/A' : c.vw + ' fit', text_color = na(s) ? cl.get(0) : color.white, bgcolor = f_scol(c.vw == 'Strong' ? 70 : c.vw == 'Fair' ? 50 : na(s) ? na : 0, cl), text_size = ts, tooltip = tt)
+    t.cell(3, row, c.vw == 'N/A' ? 'N/A' : c.vw + ' fit', text_color = c.vw == 'N/A' ? cl.get(0) : color.white, bgcolor = f_scol(c.vw == 'Strong' ? 70 : c.vw == 'Fair' ? 50 : c.vw == 'N/A' ? na : 0, cl), text_size = ts, tooltip = tt)
     int r = row + 1
     if not na(c.tm)
         t.cell(0, r, 'Timing', text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts, tooltip = c.tt)
