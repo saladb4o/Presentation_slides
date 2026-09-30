@@ -695,7 +695,7 @@ i_bt_fees = input.float(0.5, 'Round-trip Fees & Slippage %', group = group_bt, t
 i_bt_win_threshold = input.float(0.0, 'Min Profit % to count as Win', group = group_bt, tooltip = 'Set to > 0 if you want to ignore tiny gains (e.g., 2%).') / 100
 i_report_lag = input.int(45, 'Report lag (days)', minval = 0, maxval = 120, group = group_bt, tooltip = "request.financial returns a quarter's numbers from the START of the next period -- weeks before they were published. Each new value is released on the next earnings report date, or after this many days at most. 0 restores the old (look-ahead) behaviour. The latest value is always released on the last bar.")
 group_cf = 'Companion Feed'
-i_cf_on = input.bool(false, 'Use FFV Companion Feed', group = group_cf, tooltip = "Add FFV Companion Feed to the chart first, then pick its 18 plots below, each by its own name. Its values only fill gaps the engine could not solve exactly, turn owner earnings into Buffett's definition, and give the scorecard its quick ratio, debt service cover and cash conversion cycle (without the feed those three are left out). A wrong or missing link, or a different report lag, disables the whole feed.")
+i_cf_on = input.bool(false, 'Use FFV Companion Feed', group = group_cf, tooltip = "Add FFV Companion Feed to the chart first, then pick its 19 plots below, each by its own name (Net stock issuance is the last setting of the script). Its values only fill gaps the engine could not solve exactly, turn owner earnings into Buffett's definition and add share buybacks to net payout. A wrong or missing link, or a different report lag, disables the whole feed.")
 i_cf_eq = input.source(close, 'Feed: Equity', group = group_cf)
 i_cf_gp = input.source(close, 'Feed: Gross profit', group = group_cf)
 i_cf_ed = input.source(close, 'Feed: EBITDA', group = group_cf)
@@ -726,6 +726,8 @@ i_split_2 = input.float(0.30, 'Auto-Split: Period 2 share', minval = 0.1, maxval
 i_bt_view = input.string('Matrix (all periods)', 'Backtest View', options = ['Matrix (all periods)', 'Focus: Period 1', 'Focus: Period 2', 'Focus: Period 3', 'Robustness verdict'], group = group_oos, tooltip = 'Focus shows one period with every metric as its own column. Robustness grades stability across all three and against the always-in baseline.')
 i_bt_min_n = input.int(5, 'Minimum trades for a valid cell', minval = 1, maxval = 50, group = group_oos)
 i_bt_drop_straddle = input.bool(true, 'Exclude trades that straddle a period boundary', group = group_oos, tooltip = 'A trade entered late in P1 and exited deep in P2 would otherwise credit all its P2 return to P1.')
+// Added last so saved links and settings keep their places.
+i_cf_is = input.source(close, 'Feed: Net stock issuance', group = group_cf)
 // What counts as a claim ahead of common, stated once: net debt always; minority interest and
 // preferred under the strict capital structure. Every strict test in the script reads this.
 f_claim_on(Claim k) =>
@@ -990,11 +992,11 @@ array<float> fin_raw = array.from(f_fin('TOTAL_REVENUE', flow_per), f_fin('COST_
      f_fin('PRETAX_INCOME', flow_per), f_fin('INCOME_TAX', flow_per), f_fin('EARNINGS_PER_SHARE_DILUTED', flow_per), math.abs(f_fin('INTEREST_EXPENSE_ON_DEBT', 'FQ')),
      f_fin('RESEARCH_AND_DEV', 'FQ'), f_fin('PREFERRED_DIVIDENDS', 'FQ'), f_fin('DPS_COMMON_STOCK_PRIM_ISSUE', flow_per), f_fin('CASH_F_OPERATING_ACTIVITIES', flow_per),
      f_fin('FREE_CASH_FLOW', flow_per), f_fin('DEP_AMORT_EXP_INCOME_S', flow_per), f_fin('NET_INCOME', flow_per), f_fin('MINORITY_INTEREST', 'FQ'),
-     f_fin('DILUTED_SHARES_OUTSTANDING', 'FQ'), f_fin('TOTAL_SHARES_OUTSTANDING', 'FQ'), f_fin('TOTAL_ASSETS', 'FQ'), f_fin('TOTAL_LIABILITIES', 'FQ'),
+     f_fin('TOTAL_INVENTORY', 'FQ'), f_fin('TOTAL_SHARES_OUTSTANDING', 'FQ'), f_fin('TOTAL_ASSETS', 'FQ'), f_fin('TOTAL_LIABILITIES', 'FQ'),
      f_fin('TOTAL_CURRENT_ASSETS', 'FQ'), f_fin('TOTAL_CURRENT_LIABILITIES', 'FQ'), f_fin('TOTAL_DEBT', 'FQ'), f_fin('CASH_N_SHORT_TERM_INVEST', 'FQ'),
      f_fin('SHORT_TERM_DEBT', 'FQ'), f_fin('ACCOUNTS_RECEIVABLES_NET', 'FQ'), f_fin('RETAINED_EARNINGS', 'FQ'), f_fin('PPE_TOTAL_NET', 'FQ'),
      f_fin('INTANGIBLES_NET', 'FQ'), f_fin('EARNINGS_ESTIMATE', 'FY'), f_fin('SALES_ESTIMATES', 'FY'),
-     f_fin('PURCHASE_OF_STOCK', 'FY'), f_fin('SALE_OF_STOCK', 'FY'))
+     f_fin('ACCOUNTS_PAYABLE', 'FQ'), f_fin('CURRENT_PORT_DEBT_CAPITAL_LEASES', 'FQ'))
 // [FIX LOOKAHEAD] request.financial returns a quarter's numbers from the START of the
 // next period, weeks before publication. A new value is released on the next report
 // date, or i_report_lag days after it first appeared at most, and always on the last bar.
@@ -1006,7 +1008,7 @@ fin_changed = FL.release(fin_raw, fin_pend, fin_known, fin_seen, i_report_lag, r
 // (weighted mantissas, FL.mant) recomputes: a link left on the close fails it at any scale.
 // Codes: lag + 1000 x sum(code_i x 4^i), code 1 reported, 2 reported parts (tier 2),
 // 3 from a ratio (tier 1), 0 none.
-array<float> cf_v = array.from(i_cf_eq, i_cf_gp, i_cf_ed, i_cf_cx, i_cf_da, i_cf_im, i_cf_wc, i_cf_aj, i_cf_sh, i_cf_cs, i_cf_db, i_cf_cl, i_cf_iv, i_cf_cp, i_cf_lt, i_cf_ap)
+array<float> cf_v = array.from(i_cf_eq, i_cf_gp, i_cf_ed, i_cf_cx, i_cf_da, i_cf_im, i_cf_wc, i_cf_aj, i_cf_sh, i_cf_cs, i_cf_db, i_cf_cl, i_cf_iv, i_cf_cp, i_cf_lt, i_cf_ap, i_cf_is)
 float cf_sum = FL.mant(i_cf_codes)
 for [k, x] in cf_v
     cf_sum += (k + 2) * FL.mant(x)
@@ -1014,7 +1016,7 @@ bool cf_ok = i_cf_on and not na(i_cf_codes) and i_cf_codes % 1000 == i_report_la
 int cf_c = cf_ok ? int(i_cf_codes / 1000) : 0
 array<int> cf_t = array.new_int(0)
 // A new feed value is new data (it triggers a rebuild).
-var array<float> cf_last = array.new_float(16, na)
+var array<float> cf_last = array.new_float(17, na)
 bool cf_new = false
 for [k, x] in cf_v
     int c = int(cf_c / math.pow(4, k)) % 4
@@ -1055,7 +1057,7 @@ int Q_MULT = Q_FV + MD.size()
 // Scorecard history: gross profit / assets, cash flow / assets, the cash conversion cycle (days),
 // net income and operating cash flow (TTM), days inventory and days payable.
 int Q_X = Q_MULT + MD.size()
-var QStore ST = QStore.new(matrix.new<float>(128, Q_X + 7, na))
+var QStore ST = QStore.new(matrix.new<float>(128, Q_X + 15, na))
 // FIRM (F_*): report data, rebuilt when the clock marks it dirty. Solved items (sh ... nd) with their
 // tiers before the staleness cap (Drivers caps them), the released fields read later, then the
 // derived drivers, diagnostics and scores.
@@ -1096,7 +1098,9 @@ var float F_minority = na
 var float F_pref_div = na
 var float F_dps = na
 var float F_intang = na
-var float F_netbb = na // buybacks less shares sold, last fiscal year
+var float F_netbb = na // buybacks less shares sold, 4 quarters (feed)
+var float F_inv = na
+var float F_cpd = na
 var float F_cl = na
 var float F_re = na
 var float F_eps_est = na
@@ -1151,20 +1155,23 @@ if CK.adv
 int iAS = 0, int iLI = 1, int iEQ = 2, int iCA = 3, int iNCA = 4, int iRV = 5, int iCG = 6
 int iGP = 7, int iEB = 8, int iDA = 9, int iED = 10, int iOC = 11, int iFC = 12, int iCX = 13
 int iPG = 14, int iAD = 15, int iPN = 16, int iNI = 17, int iCS = 18, int iRC = 19, int iDB = 20
+// Balance and per-share items with no identity: requested, feed, own ratio, last value. A field
+// unchanged for 2+ new quarters counts as missing up to iRE; from iCP on, an unchanged value is normal.
+int iCL = 21, int iIV = 22, int iAP = 23, int iRE = 24, int iCP = 25, int iIN = 26, int iMI = 27, int iDP = 28, int NE = 29
 // Exact identities as triples: x[a] = x[b] + x[c]
 // Assets = Liab + Equity | Assets = Current + Non-current | Revenue = COGS + GP
 // EBITDA = EBIT + D&A | FCF = OCF + Capex (capex < 0) | Gross PPE = Accum. dep. + Net PPE
 var array<int> id3 = array.from(iAS, iLI, iEQ, iAS, iCA, iNCA, iRV, iCG, iGP, iED, iEB, iDA, iFC, iOC, iCX, iPG, iAD, iPN)
 // Ratio base per item: flows scale with revenue, balance items with assets, -1 = none
-var array<int> fill_base = array.from(iRV, iAS, iAS, iAS, iAS, -1, iRV, iRV, iRV, iRV, iRV, iRV, iRV, iRV, iAS, iAS, iAS, iRV, iAS, iAS, iAS)
-var array<float> eng_mem = array.new_float(21, na)
-var array<float> eng_ratio = array.new_float(21, na)
-var array<float> last_raw = array.new_float(21, na)
-var array<int> same_n = array.new_int(21, 0)
+var array<int> fill_base = array.from(iRV, iAS, iAS, iAS, iAS, -1, iRV, iRV, iRV, iRV, iRV, iRV, iRV, iRV, iAS, iAS, iAS, iRV, iAS, iAS, iAS, iAS, iCG, iCG, iAS, iDB, iAS, iAS, -1)
+var array<float> eng_mem = array.new_float(NE, na)
+var array<float> eng_ratio = array.new_float(NE, na)
+var array<float> last_raw = array.new_float(NE, na)
+var array<int> same_n = array.new_int(NE, 0)
 var float mem_shares = na
 var float int_rate = na
-var array<float> eng_v = array.new_float(21, na)
-var array<int> eng_t = array.new_int(21, 0)
+var array<float> eng_v = array.new_float(NE, na)
+var array<int> eng_t = array.new_int(NE, 0)
 f_g(int i) =>
     eng_v.get(i)
 f_tg(int i) =>
@@ -1201,7 +1208,6 @@ if CK.dirty
     float ocf_ttm = fin.get(10)
     float ni_rep_ttm = fin.get(13) // attributable to the parent
     float minority_fq = fin.get(14)
-    float curr_liab_fq = nz(fin.get(20), cf_ok ? cf_v.get(11) : na)
     float total_debt_latest = fin.get(21)
     float cash_latest = fin.get(22)
     float receiv_fq = fin.get(24)
@@ -1215,8 +1221,8 @@ if CK.dirty
     array<float> Y8 = ST.back(8)
     array<float> Y12 = ST.back(12)
     // --- PRE-ENGINE DERIVATIONS ---
-    // Larger of period-end and weighted diluted count: the weighted average lags new issues.
-    float shares_out_latest = math.max(nz(fin.get(15)), nz(fin.get(16)))
+    // Period-end count (the diluted slot fetches inventory).
+    float shares_out_latest = nz(fin.get(16))
     shares_out_latest := shares_out_latest > 0 ? shares_out_latest : na
     // Reported NI (after minority interest) first; pretax - tax includes the minority share.
     float net_income_ttm = nz(ni_rep_ttm, pretax_income_ttm - income_tax_ttm)
@@ -1250,13 +1256,15 @@ if CK.dirty
     else if na(interest_expense_ttm) and nz(total_debt_latest) > 0
         interest_expense_ttm := total_debt_latest * int_rate
     // --- 2. LOAD REQUESTED VALUES (tier 3; NI tier from its source) ---
-    array<float> eng_raw = array.from(total_assets_fq, fin.get(18), float(na), fin.get(19), float(na), total_revenue_ttm, cogs_ttm, float(na), ebit_ttm, fin.get(12), float(na), ocf_ttm, fin.get(11), float(na), float(na), float(na), ppe_net_fq, net_income_ttm, cash_latest, accounts_receivable_ttm, total_debt_latest)
-    for i = 0 to 20
+    array<float> eng_raw = array.from(total_assets_fq, fin.get(18), float(na), fin.get(19), float(na), total_revenue_ttm, cogs_ttm, float(na), ebit_ttm, fin.get(12), float(na), ocf_ttm, fin.get(11), float(na), float(na), float(na), ppe_net_fq, net_income_ttm, cash_latest, accounts_receivable_ttm, total_debt_latest,
+         fin.get(20), fin.get(15), fin.get(30), fin.get(25), fin.get(31) == 0 and total_debt_latest - nz(fin.get(23)) > 0 ? float(na) : fin.get(31), fin.get(27), minority_fq, fin.get(9))
+    // A current portion of 0 beside long-term debt means the filing does not split it out.
+    for i = 0 to NE - 1
         float x = eng_raw.get(i)
         if CK.adv and not na(x)
             same_n.set(i, x == last_raw.get(i) ? same_n.get(i) + 1 : 0)
             last_raw.set(i, x)
-        if same_n.get(i) < 2
+        if same_n.get(i) < 2 or i >= iCP
             f_put(i, x, i == iNI ? ni_src_t : 3)
     // [SANITY] A 10x quarter-on-quarter jump in revenue or assets is held at tier 1 for that
     // quarter (no latch); NI far from EPS x shares flags a unit or share-count problem.
@@ -1281,7 +1289,7 @@ if CK.dirty
     for st = 0 to 4
         if st == 1 or st == 2
             f_put(iRV, eng_mem.get(iRV), 1)
-            for i = 0 to 20
+            for i = 0 to NE - 1
                 int b = fill_base.get(i)
                 f_put(i, st == 2 ? eng_mem.get(i) : b >= 0 ? f_g(b) * eng_ratio.get(i) : na, st == 2 or b < 0 ? 1 : math.min(f_tg(b), 1))
         if st == 3 and not na(calc_shares) and has_any_real_fundamental
@@ -1294,7 +1302,7 @@ if CK.dirty
         for p = 0 to 3
             // The feed fills only what the exact identities left open, then they run again.
             if st == 0 and p == 2 and cf_ok
-                for [k, i] in array.from(iEQ, iGP, iED, iCX, iDA, -1, -1, -1, -1, iCS, iDB)
+                for [k, i] in array.from(iEQ, iGP, iED, iCX, iDA, -1, -1, -1, -1, iCS, iDB, iCL, iIV, iCP, -1, iAP)
                     if i >= 0
                         f_put(i, cf_v.get(k), cf_t.get(k))
             for k = 0 to 5
@@ -1347,27 +1355,30 @@ if CK.dirty
     cash_latest := calc_cash
     total_assets_fq := calc_assets
     ppe_gross_fq := f_g(iPG)
+    float curr_liab_fq = f_g(iCL)
     float true_fcf = calc_ocf - math.abs(calc_capex)
     float net_debt_robust = calc_debt - nz(calc_cash)
     // --- 9. STALENESS (the clock's cap: no new report for 2+ quarters -> tier 1, 4+ -> 0),
     // then MEMORY + RATIOS: only reported or exact values (tier >= 2) latch.
-    for i = 0 to 20
+    for i = 0 to NE - 1
         eng_t.set(i, math.min(f_tg(i), CK.cap))
     t_shares := math.min(t_shares, CK.cap)
     if t_shares >= 2
         mem_shares := calc_shares
     // Carry ratio = median of the last 8 quarters (one per quarter in the store, the latest
     // reported value wins within a quarter), so one odd quarter cannot set the carry.
-    for i = 0 to 20
+    for i = 0 to NE - 1
         int b = fill_base.get(i)
         if f_tg(i) >= 2
             eng_mem.set(i, f_g(i))
             float q_new = b >= 0 and f_tg(b) >= 2 and f_g(b) > 0 ? f_g(i) / f_g(b) : na
-            float q_old = ST.at(Q_RAT + i, 0)
+            // Items from iCL on keep their ratios after the scorecard columns.
+            int rc = i < iCL ? Q_RAT + i : Q_X + 7 + i - iCL
+            float q_old = ST.at(rc, 0)
             // The median only moves when this quarter's value does.
             if not na(q_new) and (na(q_old) or q_new != q_old)
-                ST.write(Q_RAT + i, q_new)
-                eng_ratio.set(i, f_median(ST.window(Q_RAT + i, 8, 0, false)))
+                ST.write(rc, q_new)
+                eng_ratio.set(i, f_median(ST.window(rc, 8, 0, false)))
     // --- PIOTROSKI F-SCORE: 9 signals, all locally computed ---
     // A missing input leaves its signal untested (no nz): banks have no gross margin.
     float _roa = calc_assets > 0 ? calc_ni / calc_assets : na
@@ -1386,7 +1397,7 @@ if CK.dirty
     array<float> _pio = array.from(_roa > 0 ? 1.0 : 0.0, calc_ocf > 0 ? 1.0 : 0.0, _roa > _roa_prev ? 1.0 : 0.0, calc_ocf > calc_ni ? 1.0 : 0.0, _lev < _lev_prev ? 1.0 : 0.0, _cr > _cr_prev ? 1.0 : 0.0, calc_shares <= _sh_prev * 1.001 ? 1.0 : 0.0, _gm > _gm_prev ? 1.0 : 0.0, _at > _at_prev ? 1.0 : 0.0)
     // A test counts only on reported (or exact) inputs: a change read off an estimate is noise.
     bool _pa = f_tg(iAS) >= 2, bool _pn = f_tg(iNI) >= 2, bool _po = f_tg(iOC) >= 2, bool _pr = f_tg(iRV) >= 2
-    array<float> _pio_in = array.from(_pa and _pn ? _roa : na, _po ? calc_ocf : na, _pa and _pn ? _roa + _roa_prev : na, _po and _pn ? calc_ocf + calc_ni : na, _pa and f_tg(iDB) >= 2 ? _lev + _lev_prev : na, f_tg(iCA) >= 2 ? _cr + _cr_prev : na, t_shares >= 2 ? calc_shares + _sh_prev : na, _pr and f_tg(iGP) >= 2 ? _gm + _gm_prev : na, _pa and _pr ? _at + _at_prev : na)
+    array<float> _pio_in = array.from(_pa and _pn ? _roa : na, _po ? calc_ocf : na, _pa and _pn ? _roa + _roa_prev : na, _po and _pn ? calc_ocf + calc_ni : na, _pa and f_tg(iDB) >= 2 ? _lev + _lev_prev : na, math.min(f_tg(iCA), f_tg(iCL)) >= 2 ? _cr + _cr_prev : na, t_shares >= 2 ? calc_shares + _sh_prev : na, _pr and f_tg(iGP) >= 2 ? _gm + _gm_prev : na, _pa and _pr ? _at + _at_prev : na)
     int _f = 0, int _n = 0
     for k = 0 to 8
         if not na(_pio_in.get(k))
@@ -1498,11 +1509,11 @@ if CK.dirty
         ST.write(Q_RV0 + k, x)
     ST.write(Q_X, calc_assets > 0 ? calc_gp / calc_assets : na)
     ST.write(Q_X + 1, calc_assets > 0 ? calc_ocf / calc_assets : na)
-    // Cash conversion cycle (days): inventory and payables from the feed over COGS, receivables over revenue.
-    float inv_fq = cf_ok ? cf_v.get(12) : na
-    bool ccc_in = cogs_ttm > 0 and calc_rev > 0 and inv_fq >= 0 and cf_v.get(15) >= 0 and accounts_receivable_ttm >= 0
+    // Cash conversion cycle (days): inventory and payables over COGS, receivables over revenue.
+    float inv_fq = f_g(iIV)
+    bool ccc_in = cogs_ttm > 0 and calc_rev > 0 and inv_fq >= 0 and f_g(iAP) >= 0 and accounts_receivable_ttm >= 0
     ST.write(Q_X + 5, ccc_in ? inv_fq / cogs_ttm * 365 : na)
-    ST.write(Q_X + 6, ccc_in ? cf_v.get(15) / cogs_ttm * 365 : na)
+    ST.write(Q_X + 6, ccc_in ? f_g(iAP) / cogs_ttm * 365 : na)
     ST.write(Q_X + 2, ccc_in ? ST.at(Q_X + 5, 0) + accounts_receivable_ttm / calc_rev * 365 - ST.at(Q_X + 6, 0) : na)
     ST.write(Q_X + 3, calc_ni)
     ST.write(Q_X + 4, calc_ocf)
@@ -1532,13 +1543,16 @@ if CK.dirty
     F_t_ocf := t_ocf
     F_t_cfo := t_cfo
     F_t_eq := t_equity
-    F_minority := minority_fq
+    F_minority := f_g(iMI)
+    F_inv := inv_fq
+    F_cpd := f_g(iCP)
     F_pref_div := pref_div_ttm
-    F_dps := fin.get(9)
-    F_intang := fin.get(27)
-    F_netbb := na(fin.get(30)) and na(fin.get(31)) ? na : math.abs(nz(fin.get(30))) - math.abs(nz(fin.get(31)))
+    F_dps := f_g(iDP)
+    F_intang := f_g(iIN)
+    // Feed: net stock issuance over 4 quarters (sold less bought back).
+    F_netbb := cf_ok ? -cf_v.get(16) : na
     F_cl := curr_liab_fq
-    F_re := fin.get(25)
+    F_re := f_g(iRE)
     F_eps_est := eps_est_ttm
     F_eps0 := raw_eps
     F_interest := interest_expense_ttm
@@ -2364,11 +2378,11 @@ float F_dsc = na
 float F_stc = na
 string HV_dz = ''
 if barstate.islast
-    // Debt service cover: (EBITDA - tax) / (interest + the current portion of long-term debt, from
-    // the feed). A 0 there with long-term debt means the filing does not split it out: N/A.
-    float cpd = cf_ok ? cf_v.get(13) : na
+    // Debt service cover: (EBITDA - tax) / (interest + the current portion of long-term debt; the
+    // engine treats a 0 beside long-term debt as not split out and carries the firm's own share).
+    float cpd = F_cpd
     float tax_x = math.max(nz(F_ebit) - nz(F_interest), 0) * math.min(math.max(F_tax, 0.0), 0.5)
-    F_dsc := F_debt / F_assets < 0.02 ? 99.0 : na(cpd) or (cpd == 0 and nz(cf_v.get(14)) > 0) or not (F_interest + cpd > 0) ? float(na) : (F_ebitda - tax_x) / (F_interest + cpd)
+    F_dsc := F_debt / F_assets < 0.02 ? 99.0 : na(cpd) or not (F_interest + cpd > 0) ? float(na) : (F_ebitda - tax_x) / (F_interest + cpd)
     // Stressed cover: the worst 12-month EBITDA of 5 years (12 quarters at least) / (interest x 1.3).
     float lo = na
     int nlo = 0
@@ -2750,7 +2764,7 @@ if barstate.islast
         if j >= 0
             ov.set(j, nz(sh))
     // Net-net cover (Graham's liquidation discounts): cash and short-term investments + 75% of
-    // receivables + 50% of inventory (companion feed; without it none) - all liabilities and
+    // receivables + 50% of inventory - all liabilities and
     // minority interest, over the market cap (the last value below).
     bool card_mnp = i_useBeneishCheck and F_manip and math.min(eng_t.get(19), eng_t.get(5), eng_t.get(6), eng_t.get(0)) >= 2
     [wg, ccc_d, card_pnc, card_dz, ccc_row] = FL.f_cash(ST.v, ST.q, Q_X, use_bank_model, selected_industry == 'REITs', syminfo.sector, syminfo.industry, not (use_bank_model or F_suspect or CK.cap == 0), F_ni_c, F_ocf, F_fcf, F_cash, HV_dz)
@@ -2760,8 +2774,8 @@ if barstate.islast
          F_icv, float(na), float(na), float(na), close > 0 and F_t_oe > 0 ? F_oe_ps / close - cost_of_equity : float(na),
          F_pio, F_asset_g, F_nde, rdcf.get(0) - final_growth_rate, F_ocs,
          na(ev_now) or na(F_ebit) ? float(na) : ev_now > 0 ? F_ebit * (1 - math.min(math.max(F_tax, 0.0), 0.5)) / ev_now - final_discount_rate : F_ebit > 0 ? 99.0 : float(na),
-         F_dsc, F_stc, F_eq - nz(F_intang) > 0 and F_tl <= 0.8 * F_assets ? F_tl / (F_eq - nz(F_intang)) : float(na), cf_ok and F_cl > 0 and not na(cf_v.get(12)) ? (F_ca - cf_v.get(12)) / F_cl : float(na),
-         use_bank_model or not (close * F_sh > 0) ? float(na) : (F_cash + 0.75 * F_rec + 0.5 * math.max(nz(cf_ok ? cf_v.get(12) : na), 0) - F_tl - nz(F_minority)) / (close * F_sh),
+         F_dsc, F_stc, F_eq - nz(F_intang) > 0 and F_tl <= 0.8 * F_assets ? F_tl / (F_eq - nz(F_intang)) : float(na), F_cl > 0 and not na(F_inv) ? (F_ca - F_inv) / F_cl : float(na),
+         use_bank_model or not (close * F_sh > 0) ? float(na) : (F_cash + 0.75 * F_rec + 0.5 * math.max(nz(F_inv), 0) - F_tl - nz(F_minority)) / (close * F_sh),
          liq_ami, close > 0 ? F_eps_est / close - cost_of_equity : float(na), ccc_d, use_bank_model or not (F_assets > 0) ? float(na) : F_debt / F_assets < 0.02 ? 99.0 : F_fcf / F_debt),
          eng_t, F_suspect or CK.cap == 0, cf_ok, F_eq, use_bank_model ? 1 : dz_ru ? 2 : 0, z_safe_cut, z_gold_cut,
          card_mnp, card_pnc, is_value_trap, card_dz, wg,
