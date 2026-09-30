@@ -473,36 +473,38 @@ export f_beta_pair(array<float> ra, array<float> rb, bool downside_only) =>
             out := vb > 0 ? cov / vb : na
     out
 // ==========================================
-// BUFFETT SCORECARD: quality, low risk, value (Frazzini, Kabiller & Pedersen, "Buffett's
-// Alpha", 2018; quality as in Asness, Frazzini & Pedersen, "Quality Minus Junk")
-// ==========================================
-// Metric ids: QUALITY 0 gross profit / assets, 1 cash flow / assets, 2 ROE, 3 ROA, 4 accruals
-// / assets, 5 gross margin, 6-10 the 5-year change of 0, 1, 2, 3, 5 (3-year averages 5 years
-// apart), 11 net share issuance, 12 net payout / profits, 13 net debt issuance, 14 ROIC - WACC
-// (banks: ROE - cost of equity) | LOW RISK 15 beta, 16 idiosyncratic volatility, 17 debt /
-// assets, 18 Altman Z, 19 ROE volatility (5 yearly readings), 20 downside beta, 21 interest
-// cover, 22 maximum drawdown | VALUE 23 price vs the chart's fair-value lines, 24 book-to-market
-// vs own history, 25 owner-earnings yield - cost of equity | QUALITY 26 Piotroski F-score, 27
-// capital allocation | LOW RISK 28 net debt / EBITDA, 30 Ohlson O-score | VALUE 29 growth priced
-// in - ours, 31 EBIT after tax / EV - WACC | LOW RISK 32 debt service cover, 33 stressed cover,
-// 34 liabilities / tangible equity, 35 quick ratio | VALUE 36 net-net cover (Graham) | LOW RISK 37
-// illiquidity (Amihud) | VALUE 38 forward earnings yield - cost of equity. Every metric scores 0-100 on fixed breakpoints
-// (not a ranking against other stocks, as the papers do); a pillar is the weighted mean of its
-// scored metrics, N/A under 60% of the weight that applies to the sector; the total is the
-// geometric mean of the three pillars (each floored at 1), so one weak pillar pulls it down.
+// BUFFETT SCORECARD: five pillars in a checklist's order -- forensics, solvency, moat,
+// compounding, valuation -- with two gates first (Klarman: avoid permanent loss). The metrics come
+// from Buffett's Alpha (Frazzini, Kabiller & Pedersen 2018) and Quality Minus Junk (Asness,
+// Frazzini & Pedersen). Metric ids and pillars: FORENSICS 1 cash flow / assets, 4 accruals /
+// assets, 26 Piotroski F-score, 39 cash conversion cycle (3y change) | SOLVENCY balance sheet 17
+// debt / assets (banks: equity / assets), 18 Altman Z, 21 interest cover, 28 net debt / EBITDA,
+// 30 Ohlson O-score, 32 debt service cover, 33 stressed cover, 34 liabilities / tangible equity,
+// 35 quick ratio, 40 FCF / total debt; market risk 15 beta, 16 idiosyncratic volatility, 20
+// downside beta, 22 maximum drawdown, 37 illiquidity (Amihud) | MOAT 0 gross profit / assets, 2
+// ROE, 3 ROA, 5 gross margin, 14 ROIC - WACC (banks: ROE - cost of equity), 19 ROE volatility |
+// COMPOUNDING 6-10 the 5-year change of 0, 1, 2, 3, 5 (3-year averages 5 years apart), 11 net
+// share issuance, 12 net payout / profits, 13 net debt issuance, 27 capital allocation |
+// VALUATION 23 price vs the chart's fair-value lines, 24 book-to-market vs own history, 25
+// owner-earnings yield - cost of equity, 29 growth priced in - ours, 31 EBIT after tax / EV -
+// WACC, 36 net-net cover (Graham), 38 forward earnings yield - cost of equity. Every metric
+// scores 0-100 on fixed breakpoints (not a ranking against other stocks, as the papers do); a
+// pillar is the weighted mean of its scored metrics, N/A under 60% of the weight that applies.
 // @type One stock's scorecard.
 // @field v Metric values (39).
 // @field s Metric scores 0-100, na when not scored.
 // @field w Metric weights, 0 when the metric does not apply to the sector.
 // @field ok Metric inputs usable (false: generic placeholder, stale or suspect data).
-// @field gs Group scores (7).
-// @field p Pillar scores: quality, low risk, value.
+// @field gs Group scores (10).
+// @field p Pillar scores: forensics, solvency, moat, compounding, valuation.
 // @field cov Pillar coverage: share of the applicable weight that was scored.
-// @field total Weighted geometric mean of the pillars (quality 0.4, low risk and value 0.3), na when a pillar is na.
+// @field total Weighted geometric mean of the pillars (moat 0.3, solvency, compounding and valuation 0.2, forensics 0.1; forensics left out when N/A), a quarter of its excess over 30 after a failed gate; na when another pillar is na.
 // @field why The pillars that are N/A.
-// @field qcap Quality over 50 kept a quarter of its excess: Beneish flag.
 // @field vcap Value over 50 kept a quarter of its excess: value-trap flag.
-// @field rcap Distress flag: O-score failure odds 10%+, EBIT under 1.5x interest unless the company holds net cash, or a debt service cover under 1.0x (with net debt, interest cover under 3x) (low risk over 40 keeps a quarter of its excess).
+// @field fs, ss Forensics and solvency gates: 0 passed, 1 failed, 2 not checked (too little data), 3 does not apply (forensics for banks).
+// @field ft, st What failed each gate ('' when it passed).
+// @field mnp The Beneish flag.
+// @field yg Metric needs more history than the stock has (left out of the coverage).
 // @field dz What raised the distress flag ('' when down).
 // @field vw Verdict: Strong, Fair, Weak or N/A.
 // @field gate Why the verdict is not the total's own word ('' when it is).
@@ -525,9 +527,13 @@ export type Card
     array<int> sb
     float total = na
     string why = ''
-    bool qcap = false
     bool vcap = false
-    bool rcap = false
+    int fs = 0
+    int ss = 0
+    string ft = ''
+    string st = ''
+    bool mnp = false
+    array<bool> yg = na
     string dz = ''
     string vw = 'N/A'
     string gate = ''
@@ -610,12 +616,14 @@ f_bp(int i, int sec, float zd, float zg) =>
 f_at(matrix<float> m, int q, int c, int lag) =>
     lag >= 0 and lag <= q and lag < 128 ? m.get((q - lag) % 128, c) : na
 
+// Pillar of each metric: 0 forensics, 1 solvency, 2 moat, 3 compounding, 4 valuation.
 f_pil(int i) =>
-    i == 39 ? 0 : i == 40 ? 1 : i == 26 or i == 27 ? 0 : i == 28 or i == 30 or (i >= 32 and i <= 35) or i == 37 ? 1 : i == 29 or i == 31 or i >= 36 ? 2 : i < 15 ? 0 : i < 23 ? 1 : 2
-// Theme of each metric: 0 profitability, 1 growth, 2 payout & investment, 3 return spread,
-// 4 Piotroski, 5 market risk, 6 balance sheet & earnings, 7 value.
+    array.from(2, 0, 2, 2, 0, 2, 3, 3, 3, 3, 3, 3, 3, 3, 2, 1, 1, 1, 1, 2, 1, 1, 1, 4, 4, 4, 0, 3, 1, 4, 1, 4, 1, 1, 1, 1, 4, 1, 4, 0, 1).get(i)
+// Group of each metric: forensics 0 cash backing, 1 Piotroski | solvency 2 balance sheet, 3 market
+// risk | moat 4 profitability, 5 return spread, 6 stability | compounding 7 growth, 8 payout &
+// investment | valuation 9.
 f_G() =>
-    array.from(0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 3, 5, 5, 6, 6, 6, 5, 6, 5, 7, 7, 7, 4, 2, 6, 7, 6, 7, 6, 6, 6, 6, 7, 5, 7, 0, 6)
+    array.from(4, 0, 4, 4, 0, 4, 7, 7, 7, 7, 7, 8, 8, 8, 5, 3, 3, 2, 2, 6, 3, 2, 3, 9, 9, 9, 1, 8, 2, 9, 2, 9, 2, 2, 2, 2, 9, 3, 9, 0, 2)
 // Metrics that do not apply to the sector: banks (their balance sheet is the business), the
 // O-score and the quick ratio for REITs and utilities too (normal leverage reads as distress; no
 // stock to turn into cash). A metric with no
@@ -643,12 +651,18 @@ export f_dz(float o, float ic, float nd, bool eb, float ds) =>
     if not na(ds) and ds < 1.0 and nd > 0 and (na(ic) or ic < 3.0)
         d += (d == '' ? '' : ', ') + 'debt service cover ' + str.tostring(ds, '#.##') + 'x'
     d
+f_sc(float s) =>
+    na(s) ? 'N/A' : str.tostring(s, '#')
+// A metric's value as shown.
+f_fmt(int i, float x) =>
+    na(x) ? 'N/A' : i == 39 ? (x > 0 ? '+' : '') + str.tostring(x * 100, '#') + '% of the cycle 3y ago' : i == 40 ? (x >= 99 ? 'no debt' : str.tostring(x * 100, '#') + '% of debt a year') : i == 37 ? str.tostring(x * 100, '#.###') + '% price move per $1M traded' : i == 26 ? str.tostring(x, '#') + ' / 9' : i == 28 ? (x >= 99 ? 'losses, with debt' : x < 0 ? 'net cash' : str.tostring(x, '#.#') + 'x') : i == 15 or i == 20 ? str.tostring(x, '#.##') : i == 18 ? str.tostring(x, '#.#') : i == 21 or i == 32 or i == 33 ? (x >= 99 ? 'no debt' : str.tostring(x, '#.#') + 'x') : i == 36 ? str.tostring(x * 100, '#') + '% of the price' : i == 34 or i == 35 ? str.tostring(x, '#.##') + 'x' : i == 31 and x >= 99 ? 'EV below 0 (net cash over market cap)' : i == 30 ? str.tostring(x * 100, '#.##') + '% a year' : i == 24 ? str.tostring(x * 100, '#') + '% of history dearer' : (i >= 6 and i <= 10) or i == 14 or i == 19 or i == 25 or i == 29 or i >= 31 ? (x > 0 and i != 19 ? '+' : '') + str.tostring(x * 100, '#.#') + 'pp' : (x > 0 and (i == 23 or i == 27) ? '+' : '') + str.tostring(x * 100, '#.#') + '%'
 // Word for a score, on the whole number shown.
 f_word(float s) =>
     na(s) ? 'N/A' : math.round(s) >= 70 ? 'Strong' : math.round(s) >= 50 ? 'Fair' : 'Weak'
-// @function Builds the scorecard. v: the 39 metric values the indicator computes (ids 6-10, 16, 19, 22-24 are filled here). tier: the data engine's quality tiers (a metric whose inputs are tier 0 is not scored). bad: suspect or stale data. cf: the companion feed is linked. eq: book equity (<= 0 drops the ROE metrics and book-to-market). sec: 0 general, 1 bank, 2 REIT / utility. zd, zg: Altman distress and safe cuts. manip, trap, dz: the Beneish, value-trap and distress flags, soft ceilings on quality, value and low risk (dz: f_dz's text; trap: P/B under 1 and not below the P/B its returns justify, or a Piotroski F-score of 0-2 under the fair value). hm, hq, hc: the quarter store, its open row and the columns of gross profit / assets, cash flow / assets, ROE, ROA, gross margin. ra, rb: the beta return pairs, ppy their periods per year. pbh, pb: P/B history and now. px, sell, fv, buy: price and the chart's lines; bear: the blend's Bear value (price vs fair value scores 90 at the lower of it and the buy line). Banks: v 36 (net-net cover) does not apply; elsewhere it counts from half the price, and only when it lifts the value pillar. ov: the fair value's shares held by the DCF, P/B, Owners' Earnings, Acquirer's multiple and P/E rows. cv: the spread of the blend's models / fair value (na with one model). Banks: v 17 is equity / assets. eg: EBITDA growth a year over 3 years (capital allocation: asset growth over the same 3 years against it).
+// @function Builds the scorecard. v: the 39 metric values the indicator computes (ids 6-10, 16, 19, 22-24 are filled here). tier: the data engine's quality tiers (a metric whose inputs are tier 0 is not scored). bad: suspect or stale data. cf: the companion feed is linked. eq: book equity (<= 0 drops the ROE metrics and book-to-market). sec: 0 general, 1 bank, 2 REIT / utility. zd, zg: Altman distress and safe cuts. manip, pnc, trap, dz: the Beneish, profit-not-backed-by-cash, value-trap and distress flags (the first two fail the forensics gate, dz the solvency gate, trap a soft ceiling on valuation; dz: f_dz's text; trap: P/B under 1 and not below the P/B its returns justify, or a Piotroski F-score of 0-2 under the fair value). hm, hq, hc: the quarter store, its open row and the columns of gross profit / assets, cash flow / assets, ROE, ROA, gross margin. ra, rb: the beta return pairs, ppy their periods per year. pbh, pb: P/B history and now. px, sell, fv, buy: price and the chart's lines; bear: the blend's Bear value (price vs fair value scores 90 at the lower of it and the buy line). Banks: v 36 (net-net cover) does not apply; elsewhere it counts from half the price, and only when it lifts the valuation pillar. ov: the fair value's shares held by the DCF, P/B, Owners' Earnings, Acquirer's multiple and P/E rows. cv: the spread of the blend's models / fair value (na with one model). Banks: v 17 is equity / assets. eg: EBITDA growth a year over 3 years (capital allocation: asset growth over the same 3 years against it).
 export f_card(array<float> v, array<int> tier, bool bad, bool cf, float eq, int sec, float zd, float zg, bool manip, bool pnc, bool trap, string dz, int wg, matrix<float> hm, int hq, array<int> hc, array<float> ra, array<float> rb, float ppy, array<float> pbh, float pb, float px, float sell, float fv, float buy, float bear, array<float> ov, float cv, float eg) =>
-    Card c = Card.new(v.copy(), array.new_float(41, na), array.new_float(41, 0.0), array.new_bool(41, true), array.new_float(8, na), array.new_float(3, na), array.new_float(3, na), array.new_float(3, 0.0), array.new_int(41, -1))
+    Card c = Card.new(v.copy(), array.new_float(41, na), array.new_float(41, 0.0), array.new_bool(41, true), array.new_float(10, na), array.new_float(5, na), array.new_float(5, na), array.new_float(5, 0.0), array.new_int(41, -1))
+    c.yg := array.new_bool(41, false)
     c.sec := sec
     c.cf := cf
     // Banks: asset growth alone, as their EBITDA means little (net debt / EBITDA is off for them too).
@@ -670,6 +684,8 @@ export f_card(array<float> v, array<int> tier, bool bad, bool cf, float eq, int 
                 b += y
                 n2 += 1
         vv.set(6 + k, n1 > 0 and n2 > 0 ? a / n1 - b / n2 : na)
+        // Recent data but none 5 years back: the stock is too young, so the metric leaves the coverage.
+        c.yg.set(6 + k, n1 > 0 and n2 == 0)
     // ROE volatility: 5 yearly TTM readings that do not overlap (3 at least).
     ev = array.new_float()
     for j = 0 to 4
@@ -741,8 +757,8 @@ export f_card(array<float> v, array<int> tier, bool bad, bool cf, float eq, int 
     array<int> G = f_G()
     // A theme keeps its share when some of its metrics do not apply to the sector: the ones that
     // apply split its weight (banks: 18 metrics do not apply).
-    array<float> gA = array.new_float(8, 0.0)
-    array<float> gB = array.new_float(8, 0.0)
+    array<float> gA = array.new_float(10, 0.0)
+    array<float> gB = array.new_float(10, 0.0)
     for i = 0 to 40
         int gi = G.get(i)
         gA.set(gi, gA.get(gi) + W.get(i))
@@ -758,7 +774,7 @@ export f_card(array<float> v, array<int> tier, bool bad, bool cf, float eq, int 
             ok := false
         c.ok.set(i, ok)
         // Net-net cover counts only from half the price: no asset backing is normal for a good business.
-        bool app = not f_off(i, sec, cf) and not (i == 36 and not (vv.get(36) >= 0.5))
+        bool app = not f_off(i, sec, cf) and not (i == 36 and not (vv.get(36) >= 0.5)) and not c.yg.get(i)
         // A value metric that re-reads a model counts only for the fair value's share that model does not carry.
         float cut = i == 29 ? ov.get(0) : i == 24 ? ov.get(1) : i == 25 ? ov.get(2) : i == 31 ? ov.get(3) : i == 38 ? ov.get(4) : 0.0
         float wi = app ? W.get(i) * gA.get(G.get(i)) / gB.get(G.get(i)) : 0.0
@@ -787,7 +803,7 @@ export f_card(array<float> v, array<int> tier, bool bad, bool cf, float eq, int 
     float vx = 0.0
     float vn = 0.0
     for i = 0 to 40
-        if i != 36 and f_pil(i) == 2 and not na(c.s.get(i))
+        if i != 36 and f_pil(i) == 4 and not na(c.s.get(i))
             vx += c.w.get(i) * c.s.get(i)
             vn += c.w.get(i)
     if not (c.s.get(36) > vx / vn)
@@ -796,7 +812,7 @@ export f_card(array<float> v, array<int> tier, bool bad, bool cf, float eq, int 
     // to the O-score (and back), else to net debt / EBITDA; a missing interest cover to net debt /
     // EBITDA, a missing net debt / EBITDA to interest cover; a missing debt service cover to interest
     // cover, stressed cover to net debt / EBITDA, liabilities / tangible equity (none, or 0 or less)
-    // to debt / assets, quick ratio to ROE volatility; a missing illiquidity to idiosyncratic volatility,
+    // to debt / assets, quick ratio to debt service cover; a missing illiquidity to idiosyncratic volatility,
     // a missing forward earnings yield to the owner-earnings yield, else EBIT / EV. Each stand-in
     // takes one weight, and only a metric that carries weight of its own (one the fair value holds
     // stays out).
@@ -804,7 +820,7 @@ export f_card(array<float> v, array<int> tier, bool bad, bool cf, float eq, int 
         c.pt.set(f_pil(i), c.pt.get(f_pil(i)) + c.w.get(i))
     array<float> we = c.w.copy()
     array<int> SA = array.from(21, 18, 30, 28, 32, 33, 34, 35, 37, 38, 40)
-    array<int> SB = array.from(28, 30, 18, 21, 21, 28, 17, 19, 16, 25, 28)
+    array<int> SB = array.from(28, 30, 18, 21, 21, 28, 17, 32, 16, 25, 28)
     for [k, a] in SA
         int b = SB.get(k)
         if (a == 18 or a == 30) and (na(c.s.get(b)) or c.sb.includes(b))
@@ -814,16 +830,27 @@ export f_card(array<float> v, array<int> tier, bool bad, bool cf, float eq, int 
         if na(c.s.get(a)) and c.w.get(a) > 0 and not na(c.s.get(b)) and c.w.get(b) > 0 and not c.sb.includes(b)
             we.set(b, we.get(b) + c.w.get(a))
             c.sb.set(a, b)
-    // Groups (for the rows) and pillars (60% of the applicable weight scored or stood in for).
-    for g = 0 to 7
+    // Groups (for the rows) and pillars (60% of the applicable weight scored or stood in for); the
+    // balance sheet's coverage and scored count feed the solvency gate.
+    float bc = na
+    int bn = 0
+    for g = 0 to 9
         float sw = 0.0
         float sx = 0.0
+        float sa = 0.0
+        int k = 0
         for i = 0 to 40
-            if G.get(i) == g and not na(c.s.get(i))
-                sw += we.get(i)
-                sx += we.get(i) * c.s.get(i)
+            if G.get(i) == g
+                sa += c.w.get(i)
+                if not na(c.s.get(i))
+                    sw += we.get(i)
+                    sx += we.get(i) * c.s.get(i)
+                    k += 1
         c.gs.set(g, sw > 0 ? sx / sw : na)
-    for p = 0 to 2
+        if g == 2
+            bc := sa > 0 ? sw / sa : na
+            bn := k
+    for p = 0 to 4
         float sw = 0.0
         float sx = 0.0
         for i = 0 to 40
@@ -834,42 +861,67 @@ export f_card(array<float> v, array<int> tier, bool bad, bool cf, float eq, int 
         c.cov.set(p, cv2)
         c.p.set(p, cv2 >= 0.6 ? sx / sw : na)
     c.w := we
-    // Red flags: a soft ceiling (over it a pillar keeps a quarter of its excess, so flagged stocks
-    // keep their order). The failure sits in a tail a weighted mean dilutes: distress (Dichev
-    // 1998; Campbell, Hilscher and Szilagyi 2008), manipulation (Beneish, Lee and Nichols 2013),
-    // a value trap (Piotroski 2000). Distress is f_dz's rule, set by the indicator (its red flags
-    // and confidence read the same one).
+    // Value trap: a soft ceiling on valuation (over 50 it keeps a quarter of its excess, so flagged
+    // stocks keep their order; Piotroski 2000).
+    c.vcap := trap and c.p.get(4) > 50
+    if c.vcap
+        c.p.set(4, 50 + (c.p.get(4) - 50) * 0.25)
+    // Gates, in the checklist's order: can the numbers be trusted, can it go to zero. Flagged stocks
+    // underperform: manipulation (Beneish, Lee and Nichols 2013), accruals (Sloan 1996), distress
+    // (Dichev 1998; Campbell, Hilscher and Szilagyi 2008). Forensics fails on the Beneish or
+    // profit-not-backed-by-cash flag or a pillar under 30; solvency on the distress flag (f_dz, set
+    // by the indicator) or a balance sheet under 30 (60% of its weight and 2 metrics scored); banks:
+    // equity / assets under 3%, the Basel III leverage minimum. Market risk never fails it.
     c.dz := dz
-    c.rcap := dz != ''
-    array<bool> fl = array.from(manip or pnc, c.rcap, trap)
     c.pnc := pnc
-    array<float> ce = array.from(50.0, 40.0, 50.0)
-    for p = 0 to 2
-        float x = c.p.get(p)
-        float k = ce.get(p)
-        if fl.get(p) and x > k
-            c.p.set(p, k + (x - k) * 0.25)
-        else if p != 1
-            fl.set(p, false)
-    c.qcap := fl.get(0)
-    c.vcap := fl.get(2)
-    array<string> PN = array.from('Quality', 'Low risk', 'Value')
-    for p = 0 to 2
-        if na(c.p.get(p))
-            c.why += (c.why == '' ? '' : ', ') + PN.get(p)
-    // Quality first (Buffett: a wonderful company at a fair price), then low risk and value.
-    c.total := c.why == '' ? math.pow(math.max(c.p.get(0), 1), 0.4) * math.pow(math.max(c.p.get(1), 1), 0.3) * math.pow(math.max(c.p.get(2), 1), 0.3) : na
-    // Verdict gates: Strong needs every pillar at 50+ and no red flag; any pillar under 30 is Weak.
+    c.mnp := manip
+    // Forensics does not apply where none of its metrics do (banks): their flags are not read.
+    bool fap = c.pt.get(0) > 0
+    string f = (fap and manip ? ', Beneish' : '') + (fap and pnc ? ', profit not backed by cash' : '') + (c.p.get(0) < 30 ? ', pillar ' + f_sc(c.p.get(0)) : '')
+    c.ft := f == '' ? '' : str.substring(f, 2)
+    c.fs := c.ft != '' ? 1 : c.pt.get(0) == 0 ? 3 : na(c.p.get(0)) ? 2 : 0
+    bool bk = sec == 1
+    bool bok = bk ? not na(c.s.get(17)) : bc >= 0.6 and bn >= 2
+    string x = (dz != '' ? ', ' + dz : '') + (bk and bok and vv.get(17) < 0.03 ? ', equity / assets ' + f_fmt(17, vv.get(17)) : not bk and bok and c.gs.get(2) < 30 ? ', balance sheet ' + f_sc(c.gs.get(2)) : '')
+    c.st := x == '' ? '' : str.substring(x, 2)
+    c.ss := c.st != '' ? 1 : bok ? 0 : 2
+    // Total: weights from Buffett's letters (an enduring moat first, 2007; a wonderful company at a
+    // fair price, 1989), this indicator's choice; forensics is left out where it is N/A. A failed
+    // gate keeps a quarter of the excess over 30 (47.5 at most), so failed stocks read Weak and keep
+    // their order.
+    array<float> PW = array.from(0.1, 0.2, 0.3, 0.2, 0.2)
+    array<string> PN = array.from('Forensics', 'Solvency', 'Moat', 'Compounding', 'Valuation')
+    float lw = 0.0
+    float tw = 0.0
+    for p = 0 to 4
+        float y = c.p.get(p)
+        if na(y)
+            if p > 0
+                c.why += (c.why == '' ? '' : ', ') + PN.get(p)
+        else
+            lw += PW.get(p) * math.log(math.max(y, 1))
+            tw += PW.get(p)
+    c.total := c.why == '' and tw > 0 ? math.exp(lw / tw) : na
+    bool gf = c.fs == 1 or c.ss == 1
+    if gf and c.total > 30
+        c.total := 30 + (c.total - 30) * 0.25
+    // Verdict: a failed gate is Weak; any pillar under 30 is Weak; Strong needs every pillar at 50+,
+    // both gates checked (or forensics not applying) and no value trap.
     if not na(c.total)
-        float mn = math.round(math.min(c.p.get(0), c.p.get(1), c.p.get(2)))
-        string rf = (manip ? ', Beneish' : '') + (pnc ? ', profit not backed by cash' : '') + (c.rcap ? ', distress' : '') + (trap ? ', value trap' : '')
+        float mn = 100.0
+        for y in c.p
+            if not na(y)
+                mn := math.min(mn, math.round(y))
         c.vw := f_word(c.total)
-        if mn < 30 and c.vw != 'Weak'
+        if gf
+            c.vw := 'Weak'
+            c.gate := 'failed ' + (c.fs == 1 ? 'Forensics (' + c.ft + ')' : '') + (c.fs == 1 and c.ss == 1 ? ' and ' : '') + (c.ss == 1 ? 'Solvency (' + c.st + ')' : '')
+        else if mn < 30 and c.vw != 'Weak'
             c.vw := 'Weak'
             c.gate := 'a pillar is under 30'
-        else if c.vw == 'Strong' and (mn < 50 or rf != '')
+        else if c.vw == 'Strong' and (mn < 50 or trap or c.fs == 2 or c.ss == 2)
             c.vw := 'Fair'
-            c.gate := rf != '' ? 'red flag (' + str.substring(rf, 2) + ')' : 'a pillar is under 50'
+            c.gate := mn < 50 ? 'a pillar is under 50' : trap ? 'value trap' : (c.fs == 2 ? 'Forensics' : 'Solvency') + ' not checked'
     c
 
 // Ten-step text bar of a 0-100 score.
@@ -882,11 +934,6 @@ f_bar(float s) =>
 // Colour of a score: cl = text, background, header, green, red, amber.
 f_scol(float s, array<color> cl) =>
     na(s) ? cl.get(1) : math.round(s) >= 70 ? cl.get(3) : math.round(s) >= 50 ? cl.get(5) : cl.get(4)
-f_sc(float s) =>
-    na(s) ? 'N/A' : str.tostring(s, '#')
-// A metric's value as shown.
-f_fmt(int i, float x) =>
-    na(x) ? 'N/A' : i == 39 ? (x > 0 ? '+' : '') + str.tostring(x * 100, '#') + '% of the cycle 3y ago' : i == 40 ? (x >= 99 ? 'no debt' : str.tostring(x * 100, '#') + '% of debt a year') : i == 37 ? str.tostring(x * 100, '#.###') + '% price move per $1M traded' : i == 26 ? str.tostring(x, '#') + ' / 9' : i == 28 ? (x >= 99 ? 'losses, with debt' : x < 0 ? 'net cash' : str.tostring(x, '#.#') + 'x') : i == 15 or i == 20 ? str.tostring(x, '#.##') : i == 18 ? str.tostring(x, '#.#') : i == 21 or i == 32 or i == 33 ? (x >= 99 ? 'no debt' : str.tostring(x, '#.#') + 'x') : i == 36 ? str.tostring(x * 100, '#') + '% of the price' : i == 34 or i == 35 ? str.tostring(x, '#.##') + 'x' : i == 31 and x >= 99 ? 'EV below 0 (net cash over market cap)' : i == 30 ? str.tostring(x * 100, '#.##') + '% a year' : i == 24 ? str.tostring(x * 100, '#') + '% of history dearer' : (i >= 6 and i <= 10) or i == 14 or i == 19 or i == 25 or i == 29 or i >= 31 ? (x > 0 and i != 19 ? '+' : '') + str.tostring(x * 100, '#.#') + 'pp' : (x > 0 and (i == 23 or i == 27) ? '+' : '') + str.tostring(x * 100, '#.#') + '%'
 f_name(int i, int sec) =>
     array<string> NM = array.from('Gross profit / assets', 'Cash flow / assets', 'ROE', 'ROA', 'Accruals / assets', 'Gross margin', 'Change in gross profit / assets', 'Change in cash flow / assets', 'Change in ROE', 'Change in ROA', 'Change in gross margin', 'Net share issuance', 'Net payout / profits', 'Net debt issuance / assets', 'ROIC - WACC', 'Beta', 'Idiosyncratic volatility', 'Debt / assets', 'Altman Z', 'ROE volatility', 'Downside beta', 'Interest cover', 'Maximum drawdown', 'Price vs fair value', 'Book-to-market vs own history', 'Owner-earnings yield - CoE', 'Piotroski F-score', 'Capital allocation (3y)', 'Net debt / EBITDA', 'Growth priced in - ours', 'Ohlson O-score (failure odds)', 'EBIT after tax / EV - WACC', 'Debt service cover', 'Stressed cover (worst 5y EBITDA)', 'Liabilities / tangible equity', 'Quick ratio', 'Net-net cover (Graham)', 'Illiquidity (Amihud, 90 days)', 'Forward earnings yield - CoE', 'Cash conversion cycle (3y change)', 'FCF / total debt')
     sec == 1 and i == 14 ? 'ROE - cost of equity' : sec == 1 and i == 17 ? 'Equity / assets' : sec == 2 and i == 21 ? 'Interest cover (EBITDA)' : sec == 1 and i == 27 ? 'Asset growth (3y)' : NM.get(i)
@@ -895,15 +942,15 @@ f_line(Card c, int i) =>
     int bi = c.sb.get(i)
     bool ex = i == 14 or (i >= 20 and i <= 23) or (i >= 25 and i != 30)
     string ag = (i == 23 and c.bear ? ', 90 at the Bear value ' + str.tostring(c.anc, '#.##') + ', under the buy line' : '') + (i == 23 and not na(c.agree) and c.agree < 1 ? ', models disagree: kept ' + str.tostring(c.agree * 100, '#') + '% of its distance from 50' : '') + (i == 12 and c.kept ? ', the profits kept earn ' + f_fmt(14, c.v.get(14)) + ' over the cost of capital: scored as paid out' : '')
-    f_name(i, c.sec) + ': ' + (c.w.get(i) == 0 ? (i == 24 or i == 25 or i == 29 or (i == 38 and c.sec != 2) or (i == 31 and c.sec != 1) ? 'not used: the fair value already holds that model' : i == 39 and c.sec != 1 ? 'not used: needs inventory and payables, 3 years of data and 15+ days of inventory (now or 3 years ago); counts for working-capital-heavy (weight 15) and capital-heavy (4) businesses' : i == 36 and c.sec != 1 ? 'not used: net liquid assets ' + (na(c.v.get(36)) ? 'N/A' : f_fmt(36, c.v.get(36)) + (c.v.get(36) >= 0.5 ? ', score ' + f_sc(c.s.get(36)) + ': it counts only when it lifts the value pillar' : ', under half the price')) : 'not used for this sector') : (i == 27 and not na(c.eg) and not na(c.v.get(i)) ? 'assets ' + f_fmt(i, c.v.get(i)) + ' / EBITDA ' + f_fmt(i, c.eg) + ' a year' + (c.v.get(i) > 0 and c.v.get(i) > c.eg ? ' (empire builder)' : c.v.get(i) < 0 and c.eg < c.v.get(i) ? ' (deteriorating)' : ' (efficient)') : f_fmt(i, c.v.get(i)) + (i == 27 and not na(c.v.get(i)) and c.sec != 1 ? ' assets a year, EBITDA growth N/A' : i == 27 and not na(c.v.get(i)) ? ' a year' : '')) + ' -> ' + (bi >= 0 ? 'N/A, weight passed to ' + f_name(bi, c.sec) : not c.ok.get(i) ? 'not scored (placeholder, stale or suspect data' + (i == 2 or i == 8 or i == 19 or i == 24 ? ', or book equity 0 or less' : '') + ')' : f_sc(c.s.get(i))) + ' (weight ' + str.tostring((bi >= 0 ? 0.0 : c.w.get(i)) / c.pt.get(f_pil(i)) * 100, '#') + '%, ' + (ex ? 'extra' : 'paper') + ag + ')') + '\n'
+    f_name(i, c.sec) + ': ' + (c.w.get(i) == 0 ? (i == 24 or i == 25 or i == 29 or (i == 38 and c.sec != 2) or (i == 31 and c.sec != 1) ? 'not used: the fair value already holds that model' : i == 39 and c.sec != 1 ? 'not used: needs inventory and payables, 3 years of data and 15+ days of inventory (now or 3 years ago); counts for working-capital-heavy (weight 15) and capital-heavy (4) businesses' : i == 36 and c.sec != 1 ? 'not used: net liquid assets ' + (na(c.v.get(36)) ? 'N/A' : f_fmt(36, c.v.get(36)) + (c.v.get(36) >= 0.5 ? ', score ' + f_sc(c.s.get(36)) + ': it counts only when it lifts the valuation pillar' : ', under half the price')) : c.yg.get(i) ? 'not used: needs 5 years of history' : 'not used for this sector') : (i == 27 and not na(c.eg) and not na(c.v.get(i)) ? 'assets ' + f_fmt(i, c.v.get(i)) + ' / EBITDA ' + f_fmt(i, c.eg) + ' a year' + (c.v.get(i) > 0 and c.v.get(i) > c.eg ? ' (empire builder)' : c.v.get(i) < 0 and c.eg < c.v.get(i) ? ' (deteriorating)' : ' (efficient)') : f_fmt(i, c.v.get(i)) + (i == 27 and not na(c.v.get(i)) and c.sec != 1 ? ' assets a year, EBITDA growth N/A' : i == 27 and not na(c.v.get(i)) ? ' a year' : '')) + ' -> ' + (bi >= 0 ? 'N/A, weight passed to ' + f_name(bi, c.sec) : not c.ok.get(i) ? 'not scored (placeholder, stale or suspect data' + (i == 2 or i == 8 or i == 19 or i == 24 ? ', or book equity 0 or less' : '') + ')' : f_sc(c.s.get(i))) + ' (weight ' + str.tostring((bi >= 0 ? 0.0 : c.w.get(i)) / c.pt.get(f_pil(i)) * 100, '#') + '%, ' + (ex ? 'extra' : 'paper') + ag + ')') + '\n'
 
-// @function Summary-card rows: the total as a bar, the three pillars, the verdict; then the Timing and RS rows when f_timing built them. cl = text, background, header, green, red, amber colours; ts = text size. Returns the next free row.
+// @function Summary-card rows: the total as a bar, the five pillars, the verdict; then the Timing and RS rows when f_timing built them. cl = text, background, header, green, red, amber colours; ts = text size. Returns the next free row.
 export cardSum(table t, int row, Card c, array<color> cl, string ts) =>
-    string tt = "Quality, low risk and value: the traits Frazzini, Kabiller and Pedersen (Buffett's Alpha, 2018) found explain Berkshire's returns; its 1.6x leverage is left out. Each metric scores 0-100 on fixed breakpoints (not a ranking against other stocks, as the paper does). A pillar is the weighted mean of its metrics (N/A under 60% coverage); the total is their weighted geometric mean (quality 0.4, low risk and value 0.3: a wonderful company at a fair price), so one weak pillar pulls it down; that formula is this indicator's choice (the paper adds the traits in a regression). A red flag puts a soft ceiling on its pillar -- Beneish or profit not backed by cash (net income up 15%+ a year over 3 years from a positive base while operating cash flow is flat, falling or below 0) on quality, distress (a cash runway under a year: cash over the yearly burn when free cash flow is negative; O-score failure odds 10%+, interest cover under 1.5x -- B- or worse on the synthetic rating; EBITDA for REITs and utilities, whose EBIT is after heavy depreciation -- unless the company holds net cash, or a debt service cover under 1.0x with net debt and interest cover under 3x) on low risk, the value trap on value: over 50 (low risk: 40) the pillar keeps a quarter of its excess, so flagged stocks keep their order. Altman Z is scored but raises no flag (here, in the red flags or in the confidence): fitted on manufacturers, it reads most utilities, REITs and telecoms as distressed (the O-score carries more information: Hillegeist et al. 2004). Low risk weighs market risk (beta, idiosyncratic volatility, downside beta, drawdown and illiquidity -- Amihud's price move per US dollar traded, 90 days, averaged over the days that traded: about 43%) against the balance sheet and earnings, which add the bank-credit checks: debt service cover = (EBITDA - tax) / (interest + the current portion of long-term debt; where the filing reports 0 beside long-term debt, the firm's own last share of debt, else N/A), stressed cover = the worst 12-month EBITDA of 5 years / (interest x 1.3), liabilities / tangible equity (net of all intangibles, goodwill included; not for bank-like balance sheets, liabilities over 80% of assets) and the quick ratio; Altman's Z''-EM replaces Z for REITs, utilities, telecoms, Vietnamese stocks and bank-like balance sheets (liabilities over 80% of assets). Verdict: Strong needs a total of 70+, every pillar at 50+ and no red flag; any pillar under 30 makes it Weak. A missing Altman Z passes its weight to the O-score (and back), else to net debt / EBITDA; a missing interest cover to net debt / EBITDA (and back); a missing debt service cover to interest cover, stressed cover to net debt / EBITDA, liabilities / tangible equity to debt / assets, the quick ratio to ROE volatility, illiquidity to idiosyncratic volatility, the forward earnings yield to the owner-earnings yield (else EBIT / EV; never to a metric the fair value holds); FCF / total debt (TTM free cash flow over all debt, 100 with debt under 2% of assets) to net debt / EBITDA; cash weights follow the business: working-capital-heavy firms (retail, distribution, manufacturing, materials, construction, property developers, consumer goods, hardware) score the 3-year change in the cash conversion cycle (days inventory + days receivable - days payable, over the cycle 3 years ago; a cycle below 0 both times counts as at least 10% shorter) at weight 15 and weigh cash flow / assets, accruals and its change by 1.5, capital-heavy ones (utilities, telecoms, energy, transport, REITs) the cycle at 4, light ones not at all; FCF / debt weighs 10 (light: 6); growth priced in, book-to-market, the owner-earnings yield, EBIT / EV and the forward earnings yield (consensus EPS for the fiscal year / price; the P/E model) count only for the fair value's share their model does not carry; the yields are measured against the cost of equity (EBIT / EV: WACC), which holds the country's risk, so 0 means growth is priced at nothing (Penman); price vs fair value scores 90 at the lower of the buy line and the Bear value (a less certain value needs a deeper discount: Graham's margin of safety) and moves toward 50 when the models disagree; net-net cover (Graham: cash and short-term investments + 75% of receivables + 50% of inventory, less all liabilities and minority interest, over the market cap) counts only from half the price, only when it lifts the pillar and not for banks, as a good business needs no asset backing; net payout counts profits kept as paid out when they earn over the cost of capital; a theme keeps its share when some of its metrics do not apply to the sector (banks). Display only: fair values and the backtest do not use it. Table detail = Scorecard lists every metric.\n\nCoverage: Q " + str.tostring(nz(c.cov.get(0)) * 100, '#') + '% | R ' + str.tostring(nz(c.cov.get(1)) * 100, '#') + '% | V ' + str.tostring(nz(c.cov.get(2)) * 100, '#') + '%' + (c.qcap ? '\nQuality excess over 50 cut to a quarter: ' + (c.pnc ? 'profit not backed by cash' : 'Beneish') + ' flag.' : '') + (c.rcap ? '\nDistress flag (' + c.dz + ')' + (c.p.get(1) > 40 ? ': low risk excess over 40 cut to a quarter.' : '.') : '') + (c.vcap ? '\nValue excess over 50 cut to a quarter: value trap (P/B under 1 and not below what its returns justify, or a Piotroski F-score of 0-2 under the fair value).' : '') + (c.gate != '' ? '\nVerdict ' + c.vw + ', not ' + f_word(c.total) + ': ' + c.gate + '.' : '') + (c.why != '' ? '\nN/A: ' + c.why + ' has too little data.' : '')
+    string tt = "Five pillars in a checklist's order: Forensics (can the numbers be trusted? Schilit, Financial Shenanigans), Solvency (can it go to zero? Klarman, Margin of Safety; Marks), Moat (will its returns hold? Mauboussin, Measuring the Moat), Compounding (is value per share growing? Buffett's retained-earnings test, 1983 letter) and Valuation (is there a margin of safety in the price? Graham). The metrics come from Buffett's Alpha (Frazzini, Kabiller and Pedersen 2018) and Quality Minus Junk (Asness, Frazzini and Pedersen). Each metric scores 0-100 on fixed breakpoints (not a ranking against other stocks, as the papers do). A pillar is the weighted mean of its metrics (N/A under 60% coverage; a metric that needs more history than the stock has leaves the count); the total is their weighted geometric mean -- moat 0.3, solvency, compounding and valuation 0.2, forensics 0.1, set from Buffett's letters (an enduring moat, 2007; a wonderful company at a fair price, 1989) and this indicator's choice -- so one weak pillar pulls it down. Two gates come first (Klarman: avoid permanent loss before seeking a return; flagged stocks underperform: Beneish, Lee and Nichols 2013; Sloan 1996; Dichev 1998; Campbell, Hilscher and Szilagyi 2008). Forensics fails on the Beneish flag, profit not backed by cash (net income up 15%+ a year over 3 years from a positive base while operating cash flow is flat, falling or below 0) or a pillar under 30; it does not apply to banks (left out of the total). Solvency fails on distress (a cash runway under a year: cash over the yearly burn when free cash flow is negative; O-score failure odds 10%+; interest cover under 1.5x -- B- or worse on the synthetic rating; EBITDA for REITs and utilities, whose EBIT is after heavy depreciation -- unless the company holds net cash; or a debt service cover under 1.0x with net debt and interest cover under 3x) or a balance sheet under 30 (60% of its weight and 2 metrics scored); banks: equity / assets under 3%, the Basel III leverage minimum. A failed gate keeps a quarter of the total's excess over 30 (47.5 at most) and makes it Weak; the pillars are shown uncapped. A gate without data is not checked and rules out Strong. Altman Z is scored but raises no flag (here, in the red flags or in the confidence): fitted on manufacturers, it reads most utilities, REITs and telecoms as distressed (the O-score carries more information: Hillegeist et al. 2004). Solvency weighs market risk (beta, idiosyncratic volatility, downside beta, drawdown and illiquidity -- Amihud's price move per US dollar traded, 90 days, averaged over the days that traded: about 44%; it never fails the gate) against the balance sheet and earnings, which add the bank-credit checks: debt service cover = (EBITDA - tax) / (interest + the current portion of long-term debt; where the filing reports 0 beside long-term debt, the firm's own last share of debt, else N/A), stressed cover = the worst 12-month EBITDA of 5 years / (interest x 1.3), liabilities / tangible equity (net of all intangibles, goodwill included; not for bank-like balance sheets, liabilities over 80% of assets) and the quick ratio; Altman's Z''-EM replaces Z for REITs, utilities, telecoms, Vietnamese stocks and bank-like balance sheets (liabilities over 80% of assets). Verdict: Strong needs a total of 70+, every pillar at 50+, both gates checked and passed and no value trap (over 50 the Valuation pillar keeps a quarter of its excess); a failed gate or any pillar under 30 makes it Weak. A missing Altman Z passes its weight to the O-score (and back), else to net debt / EBITDA; a missing interest cover to net debt / EBITDA (and back); a missing debt service cover to interest cover, stressed cover to net debt / EBITDA, liabilities / tangible equity to debt / assets, the quick ratio to debt service cover, illiquidity to idiosyncratic volatility, the forward earnings yield to the owner-earnings yield (else EBIT / EV; never to a metric the fair value holds); FCF / total debt (TTM free cash flow over all debt, 100 with debt under 2% of assets) to net debt / EBITDA; cash weights follow the business: working-capital-heavy firms (retail, distribution, manufacturing, materials, construction, property developers, consumer goods, hardware) score the 3-year change in the cash conversion cycle (days inventory + days receivable - days payable, over the cycle 3 years ago; a cycle below 0 both times counts as at least 10% shorter) at weight 15 and weigh cash flow / assets, accruals and its change by 1.5, capital-heavy ones (utilities, telecoms, energy, transport, REITs) the cycle at 4, light ones not at all; FCF / debt weighs 10 (light: 6); growth priced in, book-to-market, the owner-earnings yield, EBIT / EV and the forward earnings yield (consensus EPS for the fiscal year / price; the P/E model) count only for the fair value's share their model does not carry; the yields are measured against the cost of equity (EBIT / EV: WACC), which holds the country's risk, so 0 means growth is priced at nothing (Penman); price vs fair value scores 90 at the lower of the buy line and the Bear value (a less certain value needs a deeper discount: Graham's margin of safety) and moves toward 50 when the models disagree; net-net cover (Graham: cash and short-term investments + 75% of receivables + 50% of inventory, less all liabilities and minority interest, over the market cap) counts only from half the price, only when it lifts the pillar and not for banks, as a good business needs no asset backing; net payout counts profits kept as paid out when they earn over the cost of capital; a theme keeps its share when some of its metrics do not apply to the sector (banks). Display only: fair values and the backtest do not use it. Table detail = Scorecard lists every metric.\n\nCoverage: F " + str.tostring(nz(c.cov.get(0)) * 100, '#') + '% | S ' + str.tostring(nz(c.cov.get(1)) * 100, '#') + '% | M ' + str.tostring(nz(c.cov.get(2)) * 100, '#') + '% | C ' + str.tostring(nz(c.cov.get(3)) * 100, '#') + '% | V ' + str.tostring(nz(c.cov.get(4)) * 100, '#') + '%' + (c.fs == 1 ? '\nForensics gate failed: ' + c.ft + '.' : '') + (c.ss == 1 ? '\nSolvency gate failed: ' + c.st + '.' : '') + (c.vcap ? '\nValuation excess over 50 cut to a quarter: value trap (P/B under 1 and not below what its returns justify, or a Piotroski F-score of 0-2 under the fair value).' : '') + (c.gate != '' ? '\nVerdict ' + c.vw + ': ' + c.gate + '.' : '') + (c.why != '' ? '\nN/A: ' + c.why + ' has too little data.' : '')
     float s = c.total
     t.cell(0, row, 'Buffett score', text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts, tooltip = tt)
     t.cell(1, row, f_bar(s) + ' ' + f_sc(s), text_color = na(s) ? cl.get(0) : f_scol(s, cl), bgcolor = cl.get(1), text_size = ts, text_font_family = font.family_monospace, tooltip = tt)
-    t.cell(2, row, 'Q ' + f_sc(c.p.get(0)) + ' · R ' + f_sc(c.p.get(1)) + ' · V ' + f_sc(c.p.get(2)), text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts)
+    t.cell(2, row, 'F ' + (c.fs == 3 ? '–' : f_sc(c.p.get(0))) + ' · S ' + f_sc(c.p.get(1)) + ' · M ' + f_sc(c.p.get(2)) + ' · C ' + f_sc(c.p.get(3)) + ' · V ' + f_sc(c.p.get(4)), text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts)
     t.cell(3, row, na(s) ? 'N/A' : c.vw + ' fit', text_color = na(s) ? cl.get(0) : color.white, bgcolor = f_scol(c.vw == 'Strong' ? 70 : c.vw == 'Fair' ? 50 : na(s) ? na : 0, cl), text_size = ts, tooltip = tt)
     int r = row + 1
     if not na(c.tm)
@@ -1068,7 +1115,7 @@ export f_grow(matrix<float> hm, int hq, int crev, int croa, int cas, int qrev, i
     float sue = sd > 0 ? (ni.get(0) - ni.get(1)) / sd : na
     string q = ex ? 'Q' : 'Q≈'
     string su = na(sue) ? 'N/A' : (sue > 0 ? '+' : '') + str.tostring(sue, '#.#') + ' sd'
-    array.from('0', 'Growth 12M | ' + q, 'Rev ' + f_pct(f_gr(r0, r4)) + ' | ' + f_pct(rq), 'Profit ' + f_pct(f_gr(ni.get(0), ni.get(4))) + ' | ' + f_pct(nq) + ', SUE ' + su, na(sue) ? 'information' : sue >= 1 ? 'Beat' : sue <= -1 ? 'Miss' : 'In line',
+    array.from('3', 'Growth 12M | ' + q, 'Rev ' + f_pct(f_gr(r0, r4)) + ' | ' + f_pct(rq), 'Profit ' + f_pct(f_gr(ni.get(0), ni.get(4))) + ' | ' + f_pct(nq) + ', SUE ' + su, na(sue) ? 'information' : sue >= 1 ? 'Beat' : sue <= -1 ? 'Miss' : 'In line',
          'Revenue and net profit: the last 12 months against the 12 before | the latest quarter against the same quarter a year earlier' + (ex ? '.' : ' (Q≈: estimated from the change in the 12-month totals over the average quarter a year ago, as flows are requested as TTM).') + ' n/m: a loss or no data a year ago.\n\nNot scored: past growth does not predict returns (Lakonishok, Shleifer & Vishny 1994; Chan, Karceski & Lakonishok 2003). The Growth theme scores the 5-year change in profitability instead.' +
          "\n\nSUE " + su + " (the status column: Beat at +1 sd, Miss at -1 sd). Standardised unexpected earnings: the latest quarter's net profit less the same quarter a year earlier, over how much that change varied in the 8 quarters before (Bernard & Thomas 1989). Needs 10 quarters of history.\n\nPrices tend to drift the way of a surprise for about 60 trading days after the report, but the drift has largely gone in US large caps since the 2000s (Martineau 2022). Not scored: it is momentum, not quality, risk or value.")
 
@@ -1094,43 +1141,55 @@ export f_cash(matrix<float> hm, int hq, int qx, bool bank, bool reit, string sec
         row := array.from('0', 'Cash conversion cycle', str.tostring(c0, '#') + ' days', 'Operating cycle ' + str.tostring(c0 + dpo, '#') + ' d, payables ' + str.tostring(dpo, '#') + ' d', na(c3) ? 'no 3y history' : c0 < c3 - 5 ? 'shortening' : c0 > c3 + 5 ? 'lengthening' : 'steady', str.format('Days inventory {0,number,#} + days receivable {1,number,#} = operating cycle {2,number,#}, less days payable {3,number,#} = cash cycle {4,number,#} (3 years ago: {5}). TTM COGS and revenue; inventory and payables from the balance sheet.', dio, c0 + dpo - dio, c0 + dpo, dpo, c0, na(c3) ? 'N/A' : str.tostring(c3, '#')))
     [wg, wg > 0 ? cd : na, pnc, dz + (rw < 1 ? (dz == '' ? '' : ', ') + 'cash runway ' + str.tostring(rw, '#.#') + ' years' : ''), row]
 
-// @function Scorecard detail: per pillar a bar header, one row per group (Value: price vs fair value, then the other metrics as one group), then that pillar's info rows. info: 6 strings per row (pillar 0-2, or 't0'-'t2' to add it to the pillar's tooltip instead of a row; label, value, detail, status, tooltip). Returns the next free row.
+// @function Scorecard detail: per pillar a bar header, its gate (forensics, solvency), one row per group (Valuation: price vs fair value, then the other metrics as one group), then that pillar's info rows. info: 6 strings per row (pillar 0-4, or 't0'-'t4' to add it to the pillar's tooltip instead of a row; label, value, detail, status, tooltip). Returns the next free row.
 export cardRows(table t, int row, Card c, array<color> cl, string ts, array<string> info) =>
     int r = row
-    array<string> PN = array.from('Quality', 'Low risk (higher = safer)', 'Value')
-    array<string> GN = array.from('Profitability', 'Growth (5y)', 'Payout & investment', 'Return spread', 'Piotroski (1y changes)', 'Market risk', 'Balance sheet & earnings')
+    array<string> PN = array.from('1 Forensics', '2 Solvency (higher = safer)', '3 Moat', '4 Compounding', '5 Valuation')
+    array<string> GN = array.from('Cash backing', 'Piotroski (1y changes)', 'Balance sheet', 'Market risk', 'Profitability', 'Return spread', 'Stability (ROE)', 'Growth (5y)', 'Payout & investment')
+    array<int> GP = array.from(0, 0, 1, 1, 2, 2, 2, 3, 3)
     array<int> G = f_G()
-    for p = 0 to 2
+    for p = 0 to 4
         float ps = c.p.get(p)
         string ptt = ''
         for i = 0 to 40
             ptt += f_pil(i) == p ? f_line(c, i) : ''
-        ptt += (p == 0 and c.qcap ? '\nExcess over 50 cut to a quarter: ' + (c.pnc ? 'profit not backed by cash (net income up 15%+ a year over 3 years, operating cash flow flat, falling or negative)' : 'Beneish') + ' flag.' : '') + (p == 1 and c.rcap ? '\nDistress flag (' + c.dz + ')' + (ps > 40 ? ': excess over 40 cut to a quarter.' : '.') : '') + (p == 2 and c.vcap ? '\nExcess over 50 cut to a quarter: value trap.' : '') + (p == 2 and c.cut > 0 ? "\nGrowth priced in, book-to-market, the owner-earnings yield, EBIT / EV and the forward earnings yield re-read the DCF, P/B, Owners' Earnings, Acquirer's multiple and P/E models: each counts only for the fair value's share its model does not carry." : '')
+        ptt += (p == 4 and c.vcap ? '\nExcess over 50 cut to a quarter: value trap.' : '') + (p == 4 and c.cut > 0 ? "\nGrowth priced in, book-to-market, the owner-earnings yield, EBIT / EV and the forward earnings yield re-read the DCF, P/B, Owners' Earnings, Acquirer's multiple and P/E models: each counts only for the fair value's share its model does not carry." : '')
         for k = 0 to int(info.size() / 6) - 1
             if info.size() >= 6 and info.get(6 * k) == 't' + str.tostring(p)
                 ptt += '\n\n' + info.get(6 * k + 1) + ': ' + info.get(6 * k + 2) + ' | ' + info.get(6 * k + 3) + ' (' + info.get(6 * k + 4) + ')\n' + info.get(6 * k + 5)
         t.cell(0, r, PN.get(p), text_color = cl.get(0), bgcolor = cl.get(2), text_size = ts, tooltip = ptt)
         t.cell(1, r, f_bar(ps), text_color = na(ps) ? cl.get(0) : f_scol(ps, cl), bgcolor = cl.get(2), text_size = ts, text_font_family = font.family_monospace, tooltip = ptt)
         t.cell(2, r, f_sc(ps), text_color = cl.get(0), bgcolor = cl.get(2), text_size = ts)
-        t.cell(3, r, 'Coverage ' + str.tostring(nz(c.cov.get(p)) * 100, '#') + '%', text_color = cl.get(0), bgcolor = cl.get(2), text_size = ts)
+        t.cell(3, r, p == 0 and c.fs == 3 ? 'Not for banks' : 'Coverage ' + str.tostring(nz(c.cov.get(p)) * 100, '#') + '%', text_color = cl.get(0), bgcolor = cl.get(2), text_size = ts)
         r += 1
+        // Gate row: status, trigger, and how close the checks came.
         if p < 2
-            for g = (p == 0 ? 0 : 5) to (p == 0 ? 4 : 6)
-                string gtt = ''
-                int nn = 0
-                int ns = 0
-                for i = 0 to 40
-                    if G.get(i) == g and c.w.get(i) > 0
-                        gtt += f_line(c, i)
-                        nn += 1
-                        ns += na(c.s.get(i)) ? 0 : 1
-                if nn > 0
-                    float gs = c.gs.get(g)
-                    t.cell(0, r, GN.get(g), text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts, tooltip = gtt)
-                    t.cell(1, r, g == 4 ? f_fmt(26, c.v.get(26)) : f_sc(gs), text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts)
-                    t.cell(2, r, g == 4 ? 'Score ' + f_sc(gs) : str.tostring(ns) + ' / ' + str.tostring(nn) + ' metrics', text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts)
-                    t.cell(3, r, f_word(gs), text_color = na(gs) ? cl.get(0) : color.white, bgcolor = f_scol(gs, cl), text_size = ts, tooltip = gtt)
-                    r += 1
+            int gs = p == 0 ? c.fs : c.ss
+            string gtt = p == 0 ? 'Step 1, can the numbers be trusted? Fails on the Beneish flag (M-score over -1.78), profit not backed by cash (net income up 15%+ a year over 3 years while operating cash flow is flat, falling or below 0) or a pillar under 30 with 60% of its weight scored.\n\nBeneish: ' + (c.mnp ? 'flagged' : 'clear') + ' | cash backing: ' + (c.pnc ? 'flagged' : 'clear') + ' | pillar ' + f_sc(ps) + ' (fails under 30)' : 'Step 2, can it go to zero? Fails on the distress flag (a cash runway under a year; O-score failure odds 10%+; interest cover under 1.5x with net debt; a debt service cover under 1.0x with net debt and interest cover under 3x) or a balance sheet under 30 with 60% of its weight and 2 metrics scored; banks: equity / assets under 3% (Basel III leverage minimum). Market risk never fails it.\n\n' + (c.sec == 1 ? 'Equity / assets ' + f_fmt(17, c.v.get(17)) + ' (fails under 3%)' : 'O-score ' + f_fmt(30, c.v.get(30)) + ' (fails at 10%) | interest cover ' + f_fmt(21, c.v.get(21)) + ' (fails under 1.5x with net debt) | debt service cover ' + f_fmt(32, c.v.get(32)) + ' (fails under 1.0x) | balance sheet ' + f_sc(c.gs.get(2)) + ' (fails under 30)') + (c.dz != '' ? '\nDistress flag: ' + c.dz + '.' : '')
+            gtt += '\n\nA failed gate keeps a quarter of the total\'s excess over 30 and makes the verdict Weak; a gate that is not checked rules out Strong.'
+            t.cell(0, r, 'Gate', text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts, tooltip = gtt)
+            t.cell(1, r, gs == 1 ? (p == 0 ? c.ft : c.st) : gs == 0 ? 'clear' : gs == 2 ? 'too little data' : 'bank', text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts, tooltip = gtt)
+            t.cell(2, r, p == 0 ? 'Trust the numbers' : 'Survive', text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts)
+            t.cell(3, r, gs == 1 ? 'Failed' : gs == 0 ? 'Passed' : gs == 2 ? 'Not checked' : 'Does not apply', text_color = gs <= 1 ? color.white : cl.get(0), bgcolor = gs == 1 ? cl.get(4) : gs == 0 ? cl.get(3) : cl.get(1), text_size = ts, tooltip = gtt)
+            r += 1
+        if p < 4
+            for g = 0 to 8
+                if GP.get(g) == p
+                    string gtt = ''
+                    int nn = 0
+                    int ns = 0
+                    for i = 0 to 40
+                        if G.get(i) == g and c.w.get(i) > 0
+                            gtt += f_line(c, i)
+                            nn += 1
+                            ns += na(c.s.get(i)) ? 0 : 1
+                    if nn > 0
+                        float gs = c.gs.get(g)
+                        t.cell(0, r, GN.get(g), text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts, tooltip = gtt)
+                        t.cell(1, r, g == 1 ? f_fmt(26, c.v.get(26)) : f_sc(gs), text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts)
+                        t.cell(2, r, g == 1 ? 'Score ' + f_sc(gs) : str.tostring(ns) + ' / ' + str.tostring(nn) + ' metrics', text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts)
+                        t.cell(3, r, f_word(gs), text_color = na(gs) ? cl.get(0) : color.white, bgcolor = f_scol(gs, cl), text_size = ts, tooltip = gtt)
+                        r += 1
         else
             float s = c.s.get(23)
             t.cell(0, r, f_name(23, c.sec), text_color = cl.get(0), bgcolor = cl.get(1), text_size = ts, tooltip = f_line(c, 23))
@@ -1292,9 +1351,9 @@ export f_zm(float z, bool manip, float zs, float zg, bool em) =>
     int k = ok and not manip ? (z >= zg ? 0 : 1) : not manip ? 2 : ok ? 3 : 4
     [array.get(array.from('Golden Standard', 'Safe & Honest', 'Failing / Honest', 'Fake Safe (Enron)', 'Desperation Spiral'), k), array.get(array.from(3, 3, 5, 4, -1), k), tx(27 + math.max(k - 1, 0)) + (em ? tx(31) : tx(32)) + '\nM-Score cutoff: -1.78.']
 
-// @function Justified P/B info row (6 strings, Quality tooltip).
+// @function Justified P/B info row (6 strings, Valuation tooltip).
 export f_jpbrow(bool on, float jpb, float pb, bool trap, float roe, float coe, float g) =>
-    array.from('t2', 'Justified P/B', not on ? 'off' : na(jpb) ? 'N/A' : jpb < 0 ? 'below 0' : str.tostring(jpb, '#.##') + 'x', 'P/B ' + (na(pb) ? 'N/A' : str.tostring(pb, '#.##') + 'x'), trap ? 'Value trap' : na(jpb) or na(pb) ? 'information' : pb < jpb ? 'Below justified' : 'Above justified', na(jpb) or na(pb) ? 'Justified P/B needs a positive book value and 3 yearly ROE readings (the filter setting on).' : str.format(tx(37), pb, jpb, roe * 100, coe * 100, g * 100))
+    array.from('t4', 'Justified P/B', not on ? 'off' : na(jpb) ? 'N/A' : jpb < 0 ? 'below 0' : str.tostring(jpb, '#.##') + 'x', 'P/B ' + (na(pb) ? 'N/A' : str.tostring(pb, '#.##') + 'x'), trap ? 'Value trap' : na(jpb) or na(pb) ? 'information' : pb < jpb ? 'Below justified' : 'Above justified', na(jpb) or na(pb) ? 'Justified P/B needs a positive book value and 3 yearly ROE readings (the filter setting on).' : str.format(tx(37), pb, jpb, roe * 100, coe * 100, g * 100))
 
 // @function Street confidence from the analyst targets (lo, md, hi, count, date as ms, now) and ratings (strong buy, buy, hold, sell, strong sell): [agreement, depth, freshness, conviction, confidence 0-100, target age in days, buys, holds, sells, rating score 1 strong buy to 5 strong sell].
 export f_street(bool has, float lo, float md, float hi, float n, float dt, float now, float bs, float b, float h, float s, float ss) =>
