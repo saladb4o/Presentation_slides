@@ -2357,6 +2357,10 @@ float jpb_roe = na
 float jpb_g = na
 float jpb = na
 is_value_trap = false
+// Vietnamese brokers: scored like banks, as loans to clients run through their operating cash
+// flow and interest is their funding cost (no Piotroski trap; distress on their regulator's
+// limits, FL.f_bkdz).
+bool vn_broker = curr == 'VND' and not use_bank_model and str.contains(syminfo.industry, 'Brokers')
 bool trap_pb = false
 if i_use_rkv and bvps_ttm > 0 and cost_of_equity > 0
     float s_roe = 0.0
@@ -2370,15 +2374,12 @@ if i_use_rkv and bvps_ttm > 0 and cost_of_equity > 0
     jpb_g := math.min(nz(final_terminal_growth), cost_of_equity - 0.02)
     jpb := (jpb_roe - jpb_g) / (cost_of_equity - jpb_g)
     trap_pb := current_pb_val < 1 and current_pb_val >= jpb
-bool trap_pio = i_use_rkv and not use_bank_model and not F_suspect and F_pio <= 2 and close < finalFairValue
+bool trap_pio = i_use_rkv and not (use_bank_model or vn_broker) and not F_suspect and F_pio <= 2 and close < finalFairValue
 is_value_trap := trap_pb or trap_pio
 // Distress, one rule for the scorecard, the red flags and the confidence (FL.f_dz): O-score
 // failure odds (not banks, REITs, utilities) and interest cover (EBITDA for REITs and utilities),
 // on inputs the data engine rates usable. Altman Z raises no flag.
 bool dz_ru = not use_bank_model and (selected_industry == 'REITs' or selected_industry == 'Utilities')
-// Vietnamese brokers: their regulator's limits instead (FL.f_bkdz), as loans to clients run through
-// their operating cash flow and interest is their funding cost.
-bool vn_broker = curr == 'VND' and not use_bank_model and str.contains(syminfo.industry, 'Brokers')
 float F_ocs = na
 float F_icv = na
 float F_nde = na
