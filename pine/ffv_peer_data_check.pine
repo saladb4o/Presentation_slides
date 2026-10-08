@@ -1,0 +1,167 @@
+//@version=6
+// FFV Peer Data Check (step 0 of FFV Peer Check): can the peer regression trust TradingView's
+// per-share data for Vietnamese stocks? Run it on a daily chart, scrolled back to the start of the
+// history, of HPG, FPT and MBB (all had bonus-share issues), and send back a screenshot of the
+// whole table for each. It needs no library and uses 31 requests.
+// Top: the 12 peers in the settings (default: 12 HOSE banks), whether 12-month diluted EPS and book
+// value per share load, from when, and in how many quarterly snapshots; EPS, BVPS and ROE (EPS over
+// the average BVPS of now and a year earlier) at the latest snapshot.
+// Bottom: the chart stock, one row per quarterly snapshot (the first bar from the 15th of Feb, May,
+// Aug and Nov, the dates FFV Peer Check will use). Factor: the unadjusted close over the
+// splits-adjusted close (above 1: TradingView adjusts earlier prices for a later split or bonus
+// issue). BVPS ratio: book value per share over common equity / shares outstanding (1.00: per-share
+// figures as reported then; equal to the factor: adjusted like prices). Two ROEs: 12-month EPS over
+// the average book value per share (the planned formula) and 12-month net income over the average
+// common equity (the reference).
+indicator('FFV Peer Data Check', overlay = true)
+
+var array<string> P = array.from(
+     input.symbol('HOSE:VCB', 'Peer 1'), input.symbol('HOSE:BID', 'Peer 2'), input.symbol('HOSE:CTG', 'Peer 3'),
+     input.symbol('HOSE:TCB', 'Peer 4'), input.symbol('HOSE:MBB', 'Peer 5'), input.symbol('HOSE:VPB', 'Peer 6'),
+     input.symbol('HOSE:ACB', 'Peer 7'), input.symbol('HOSE:HDB', 'Peer 8'), input.symbol('HOSE:STB', 'Peer 9'),
+     input.symbol('HOSE:VIB', 'Peer 10'), input.symbol('HOSE:TPB', 'Peer 11'), input.symbol('HOSE:SHB', 'Peer 12'))
+
+f(string s, string id, string per) =>
+    request.financial(s, id, per, ignore_invalid_symbol = true)
+
+// Quarterly snapshot: the first bar on or after the 15th of Feb, May, Aug and Nov.
+var int last_q = -1
+int qk = year * 4 + int(math.floor((month - 2) / 3))
+bool snap = (month == 2 or month == 5 or month == 8 or month == 11) and dayofmonth >= 15 and qk != last_q
+if snap
+    last_q := qk
+
+// Chart stock: 7 requests.
+float c_none = request.security(ticker.modify(syminfo.tickerid, adjustment = adjustment.none), timeframe.period, close, ignore_invalid_symbol = true)
+float c_spl = request.security(ticker.modify(syminfo.tickerid, adjustment = adjustment.splits), timeframe.period, close, ignore_invalid_symbol = true)
+float bvps = f(syminfo.tickerid, 'BOOK_VALUE_PER_SHARE', 'FQ')
+float ceq = f(syminfo.tickerid, 'COMMON_EQUITY_TOTAL', 'FQ')
+float shs = f(syminfo.tickerid, 'TOTAL_SHARES_OUTSTANDING', 'FQ')
+float eps = f(syminfo.tickerid, 'EARNINGS_PER_SHARE_DILUTED', 'TTM')
+float ni = f(syminfo.tickerid, 'NET_INCOME', 'TTM')
+float fac = c_none / c_spl
+string me = syminfo.prefix + ':' + syminfo.ticker
+// Chart close over the splits-adjusted close on the first bar with both.
+var float adj0 = na
+if na(adj0) and not na(c_spl)
+    adj0 := close / c_spl
+
+// Price-adjustment events: the factor changes by more than 0.2% from one bar to the next.
+var array<string> EV = array.new_string()
+if not na(fac) and not na(fac[1]) and math.abs(fac / fac[1] - 1) > 0.002
+    EV.push(str.format_time(time, 'yyyy-MM-dd', syminfo.timezone) + ' x' + str.tostring(fac[1] / fac, '#.###'))
+
+var array<int> ST = array.new_int()
+var array<float> SN = array.new_float()
+var array<float> SF = array.new_float()
+var array<float> SB = array.new_float()
+var array<float> SE = array.new_float()
+var array<float> SS = array.new_float()
+var array<float> SP = array.new_float()
+var array<float> SI = array.new_float()
+if snap
+    ST.push(time)
+    SN.push(c_none)
+    SF.push(fac)
+    SB.push(bvps)
+    SE.push(ceq)
+    SS.push(shs)
+    SP.push(eps)
+    SI.push(ni)
+
+// Peers: 24 requests. Per peer: first snapshot with EPS / with BVPS, snapshots with both
+// (BVPS above 0), and the last 5 snapshots of EPS and BVPS (the ROE uses the latest and the one
+// a year earlier).
+var array<int> FE = array.new_int(12, 0)
+var array<int> FB = array.new_int(12, 0)
+var array<int> NB = array.new_int(12, 0)
+var matrix<float> E5 = matrix.new<float>(12, 5, na)
+var matrix<float> B5 = matrix.new<float>(12, 5, na)
+for i = 0 to 11
+    string s = P.get(i)
+    if s != '' and s != me
+        float e = f(s, 'EARNINGS_PER_SHARE_DILUTED', 'TTM')
+        float b = f(s, 'BOOK_VALUE_PER_SHARE', 'FQ')
+        if snap
+            if not na(e) and FE.get(i) == 0
+                FE.set(i, time)
+            if not na(b) and FB.get(i) == 0
+                FB.set(i, time)
+            if not na(e) and b > 0
+                NB.set(i, NB.get(i) + 1)
+            for j = 0 to 3
+                E5.set(i, j, E5.get(i, j + 1))
+                B5.set(i, j, B5.get(i, j + 1))
+            E5.set(i, 4, e)
+            B5.set(i, 4, b)
+
+f_d(int t) =>
+    t == 0 ? 'none' : str.format_time(t, 'yyyy-MM', syminfo.timezone)
+f_n(float x, string fmt) =>
+    na(x) ? 'N/A' : str.tostring(x, fmt)
+f_p(float x) =>
+    na(x) ? 'N/A' : str.tostring(x * 100, '#.#') + '%'
+
+var table tb = table.new(position.top_right, 9, 40, bgcolor = color.new(color.black, 10), border_width = 1)
+f_c(int c, int r, string s, color col = color.white) =>
+    table.cell(tb, c, r, s, text_color = col, text_size = size.tiny, text_halign = c == 0 ? text.align_left : text.align_center)
+
+if barstate.islast
+    f_c(0, 0, 'Peer', color.yellow)
+    f_c(1, 0, 'EPS from', color.yellow)
+    f_c(2, 0, 'BVPS from', color.yellow)
+    f_c(3, 0, 'Quarters', color.yellow)
+    f_c(4, 0, 'EPS 12m', color.yellow)
+    f_c(5, 0, 'BVPS', color.yellow)
+    f_c(6, 0, 'ROE', color.yellow)
+    int nq = ST.size()
+    for i = 0 to 11
+        string s = P.get(i)
+        bool skip = s == '' or s == me
+        f_c(0, i + 1, s == '' ? '(empty)' : s, skip ? color.gray : color.white)
+        if skip
+            f_c(1, i + 1, s == '' ? '' : 'chart stock: skipped', color.gray)
+        else
+            f_c(1, i + 1, f_d(FE.get(i)), FE.get(i) == 0 ? color.red : color.white)
+            f_c(2, i + 1, f_d(FB.get(i)), FB.get(i) == 0 ? color.red : color.white)
+            f_c(3, i + 1, str.tostring(NB.get(i)) + ' / ' + str.tostring(nq), NB.get(i) >= 12 ? color.green : NB.get(i) >= 4 ? color.orange : color.red)
+            float lb = B5.get(i, 4)
+            f_c(4, i + 1, f_n(E5.get(i, 4), '#,###'))
+            f_c(5, i + 1, f_n(lb, '#,###'))
+            f_c(6, i + 1, f_p(E5.get(i, 4) / ((lb + B5.get(i, 0)) / 2)))
+    int r0 = 14
+    f_c(0, r0, syminfo.ticker + ' snapshot', color.yellow)
+    f_c(1, r0, 'Close (raw)', color.yellow)
+    f_c(2, r0, 'Factor', color.yellow)
+    f_c(3, r0, 'BVPS', color.yellow)
+    f_c(4, r0, 'Equity / shares', color.yellow)
+    f_c(5, r0, 'BVPS ratio', color.yellow)
+    f_c(6, r0, 'Shares (m)', color.yellow)
+    f_c(7, r0, 'ROE: EPS / BVPS', color.yellow)
+    f_c(8, r0, 'ROE: NI / equity', color.yellow)
+    int k0 = math.max(0, nq - 20)
+    if nq > 0
+        for k = k0 to nq - 1
+            int r = r0 + 1 + k - k0
+            float b = SB.get(k)
+            float ps = SE.get(k) / SS.get(k)
+            float b4 = k >= 4 ? SB.get(k - 4) : na
+            float e4 = k >= 4 ? SE.get(k - 4) : na
+            f_c(0, r, f_d(ST.get(k)))
+            f_c(1, r, f_n(SN.get(k), '#,###'))
+            f_c(2, r, f_n(SF.get(k), '#.###'), math.abs(nz(SF.get(k), 1) - 1) > 0.002 ? color.orange : color.white)
+            f_c(3, r, f_n(b, '#,###'))
+            f_c(4, r, f_n(ps, '#,###'))
+            f_c(5, r, f_n(b / ps, '#.###'), math.abs(nz(b / ps, 1) - 1) > 0.02 ? color.orange : color.white)
+            f_c(6, r, f_n(SS.get(k) / 1e6, '#,###.#'))
+            f_c(7, r, f_p(SP.get(k) / (na(b4) ? na : (b + b4) / 2)))
+            f_c(8, r, f_p(SI.get(k) / (na(e4) ? na : (SE.get(k) + e4) / 2)))
+    int re = r0 + 2 + math.min(nq, 20)
+    string ev = ''
+    int ne = EV.size()
+    if ne > 0
+        for j = math.max(0, ne - 12) to ne - 1
+            ev += (ev == '' ? '' : '\n') + EV.get(j)
+    f_c(0, re, 'Price adjustments (date, factor step):\n' + (ev == '' ? 'none found' : ev), color.gray)
+    f_c(1, re, 'Chart close vs splits-adjusted, first bar: ' + f_n(adj0, '#.###') + ' (1.000: the chart is not adjusted for dividends)', color.gray)
+    table.merge_cells(tb, 1, re, 8, re)
