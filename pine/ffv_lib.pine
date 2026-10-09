@@ -1339,9 +1339,10 @@ export f_path(WH g, int n, float blen, int h) =>
             out.push(i)
     out
 // @function One driver's own pool, for when the joint pool is too short: the quarterly changes of column c over the n quarters before the open one (oldest first), where c is known at that quarter and the one before and the switch column cs (rate source or growth parts) did not change between them.
-// @returns The changes.
+// @returns [changes, their lags].
 export f_pool1(matrix<float> hm, int hq, int n, int c, int cs) =>
     ch = array.new_float()
+    lg = array.new_int()
     int top = math.min(n, math.min(hq, 127) - 1)
     if top >= 1
         for lag = top to 1
@@ -1351,11 +1352,13 @@ export f_pool1(matrix<float> hm, int hq, int n, int c, int cs) =>
             float b = hm.get(rb, c)
             if not na(a) and not na(b) and hm.get(ra, cs) == hm.get(rb, cs)
                 ch.push(a - b)
-    ch
+                lg.push(lag)
+    [ch, lg]
 // @function The quarterly changes of a year-on-year growth rate built from column c (a TTM total, such as revenue): growth at a quarter is its total against the one 4 quarters before, and each change needs the total at that quarter, the one before, and 4 quarters before each (non-zero).
-// @returns The changes, oldest first.
+// @returns [changes, their lags], oldest first.
 export f_pool_yoy(matrix<float> hm, int hq, int n, int c) =>
     ch = array.new_float()
+    lg = array.new_int()
     int top = math.min(n, math.min(hq, 127) - 5)
     if top >= 1
         for lag = top to 1
@@ -1365,7 +1368,8 @@ export f_pool_yoy(matrix<float> hm, int hq, int n, int c) =>
             float b4 = hm.get((hq - lag - 5) % 128, c)
             if not na(a0) and not na(a4) and not na(b0) and not na(b4) and a4 != 0 and b4 != 0
                 ch.push((a0 - a4) / math.abs(a4) - (b0 - b4) / math.abs(b4))
-    ch
+                lg.push(lag)
+    [ch, lg]
 // @function nd draws of one driver on its own: each the sum of its changes along an h-step stationary-bootstrap path, the block length that series' own optimal one.
 // @returns The nd sums, in draw order.
 export f_draws1(WH g, array<float> ch, int nd, int h) =>
@@ -1385,6 +1389,148 @@ export f_demean(array<float> x) =>
     float mu = x.size() > 0 ? x.avg() : na
     for v in x
         out.push(v - mu)
+    out
+// @function The conditions the bootstrap matches on, from weekly closes (oldest first): 13-week volatility of log returns, the 40-week trend (log of the price over its 40-week average), the distance below the 52-week high, and the sector's 13-week log return over its parent's (na when the sector or parent series is missing).
+// @returns [volatility, trend, distance from high, sector strength].
+export f_cond(array<float> s, array<float> x, array<float> a) =>
+    int n = s.size()
+    float v = na, float t = na, float h = na, float k = na
+    if n > 13
+        r = array.new_float()
+        for i = n - 13 to n - 1
+            r.push(math.log(s.get(i) / s.get(i - 1)))
+        v := r.stdev()
+        float x0 = x.get(n - 14), float x1 = x.last(), float a0 = a.get(n - 14), float a1 = a.last()
+        k := x0 > 0 and x1 > 0 and a0 > 0 and a1 > 0 ? math.log(x1 / x0) - math.log(a1 / a0) : na
+    if n >= 40
+        t := math.log(s.last() / s.slice(n - 40, n).avg())
+    if n >= 52
+        h := s.last() / s.slice(n - 52, n).max() - 1
+    [v, t, h, k]
+// @function Each condition (columns c0 .. c0 + nf - 1) as its percentile within the stock's stored quarters (mid-rank of ties), row = lag (0 the open quarter).
+// @returns A 128 x nf matrix, na where a quarter has no value.
+export f_pctl(matrix<float> hm, int hq, int c0, int nf) =>
+    pm = matrix.new<float>(128, nf, na)
+    int top = math.min(hq, 127)
+    for f = 0 to nf - 1
+        vals = array.new_float()
+        for lag = 0 to top
+            float y = hm.get((hq - lag) % 128, c0 + f)
+            if not na(y)
+                vals.push(y)
+        int nv = vals.size()
+        if nv > 0
+            for lag = 0 to top
+                float y = hm.get((hq - lag) % 128, c0 + f)
+                if not na(y)
+                    int lo = 0, int eq = 0
+                    for z in vals
+                        lo += z < y ? 1 : 0
+                        eq += z == y ? 1 : 0
+                    pm.set(lag, f, (lo + 0.5 * eq) / nv)
+    pm
+// @function kNN weights for where the bootstrap's blocks start (Lall and Sharma 1996). A change at lag L is matched by the conditions at the start of its 4-quarter window (lags L + 1 .. L + 3) against the conditions now (lags 0 .. 2), on the percentiles pm, with the Lorentzian distance, the sum of log(1 + |x - y|). A condition-quarter with no value now is left out; a change missing one that is kept cannot be a neighbour. The k = round(sqrt(n)) nearest of the n that can, at least 4 quarters apart, get weights 1, 1/2, 1/3 ... and the rest 0.
+// @returns The weights, one per change; empty (equal weights) when the effective number of neighbours (sum w)^2 / sum w^2 is under 3 or no condition is known now.
+export f_knn(matrix<float> pm, array<int> lg) =>
+    int nf = pm.columns()
+    int n = lg.size()
+    dist = array.new_float(n, na)
+    int act = 0
+    for t = 0 to 2
+        for f = 0 to nf - 1
+            act += na(pm.get(t, f)) ? 0 : 1
+    int ne = 0
+    if act > 0 and n > 0
+        for j = 0 to n - 1
+            int l0 = lg.get(j) + 1
+            if l0 + 2 <= 127
+                float d = 0.0
+                for t = 0 to 2
+                    for f = 0 to nf - 1
+                        float q = pm.get(t, f)
+                        if not na(q)
+                            d += math.log(1 + math.abs(q - pm.get(l0 + t, f)))
+                dist.set(j, d)
+                ne += na(d) ? 0 : 1
+    w = array.new_float(n, 0.0)
+    int k = int(math.round(math.sqrt(ne)))
+    ch = array.new_int()
+    while ch.size() < k
+        int b = -1
+        for j = n - 1 to 0
+            float d = dist.get(j)
+            ok = not na(d) and (b < 0 or d < dist.get(math.max(b, 0)))
+            for c in ch
+                ok := ok and math.abs(lg.get(c) - lg.get(j)) >= 4
+            b := ok ? j : b
+        if b < 0
+            break
+        ch.push(b)
+        w.set(b, 1.0 / ch.size())
+    float sw = w.sum()
+    float s2 = 0.0
+    for y in w
+        s2 += y * y
+    s2 > 0 and sw * sw / s2 >= 3 ? w : array.new_float()
+// The first index whose cumulative weight passes u (a share of the total).
+f_pick(array<float> cw, float u) =>
+    float x = u * cw.last()
+    int i = 0
+    while i < cw.size() - 1 and cw.get(i) <= x
+        i += 1
+    i
+// @function Cumulative weights.
+export f_cum(array<float> w) =>
+    cw = array.new_float()
+    float s = 0.0
+    for y in w
+        s += y
+        cw.push(s)
+    cw
+// @function A stationary-bootstrap path whose start and each jump fall on a quarter with probability its weight (cumulative weights cw); otherwise as f_path.
+export f_wpath(WH g, array<float> cw, float blen, int h) =>
+    out = array.new_int()
+    int n = cw.size()
+    int i = f_pick(cw, g.nxt())
+    out.push(i)
+    if h > 1
+        for s = 2 to h
+            i := g.nxt() < 1.0 / blen ? f_pick(cw, g.nxt()) : (i + 1) % n
+            out.push(i)
+    out
+// @function A series less its mean under the weighted paths: the average over the h steps of where a path is (step 1 the weights, each next step a jump to the weights with probability 1 / blen or a move to the next quarter), so the weighted draws are centred as the equal ones are.
+// @returns A new array.
+export f_wdemean(array<float> x, array<float> w, float blen, int h) =>
+    int n = x.size()
+    float sw = w.sum()
+    p = array.new_float()
+    for y in w
+        p.push(y / sw)
+    float mu = 0.0
+    for s = 1 to h
+        if s > 1
+            np = array.new_float()
+            for i = 0 to n - 1
+                np.push(w.get(i) / sw / blen + (1 - 1 / blen) * p.get((i - 1 + n) % n))
+            p := np
+        for i = 0 to n - 1
+            mu += p.get(i) * x.get(i) / h
+    out = array.new_float()
+    for v in x
+        out.push(v - mu)
+    out
+// @function nd draws of one driver on its own with kNN start weights w: the changes centred on their weighted-path mean, then summed along weighted paths (f_wpath), the block length the series' own optimal one.
+// @returns The nd sums, in draw order.
+export f_wdraws1(WH g, array<float> ch, array<float> w, int nd, int h) =>
+    out = array.new_float()
+    float bl = f_blen(ch, ch, ch)
+    x = f_wdemean(ch, w, bl, h)
+    cw = f_cum(w)
+    for i = 1 to nd
+        float s = 0.0
+        for j in f_wpath(g, cw, bl, h)
+            s += x.get(j)
+        out.push(s)
     out
 // @function Variance of a weekly series' one-year (q-week) change, from overlapping windows with the Lo and MacKinlay (1988) small-sample correction: the changes are centred on their mean (as the bootstrap's are) and the sum of squares divided by m (1 - q / T), m windows from T weekly steps. A window whose two ends carry a different source code, or a stand-in code (2, 4), is left out, as the quarterly pool skips a source switch.
 // @returns [variance of the one-year change (na under q windows), windows used].
@@ -1526,11 +1672,11 @@ export tx(int id) =>
         115 => 'Nine binary tests of profitability, leverage / liquidity and operating efficiency.'
         116 => '(Net Income - Operating Cash Flow) / Total Assets.\n\nSloan (1996) is a RETURNS anomaly, not a fraud test. Beneish M-Score (the Z+M matrix, in the balance sheet and red-flag tooltips) is the manipulation model.'
         117 => 'COMP DCF GRA EPV RIM R40 PE PS FCF PB TBV EV CF AFFO ACQ OE RNPV ECF ADCF UNB APV EVA DDM'
-        118 => 'How often the current value lands nearest each scenario when the assumptions are revised as much as they have been within a year. It is not a forecast of the value a year ahead: earnings and cash flows stay as they are now.\n\nEach of {0} draws replays a 4-quarter path through the last {1} stored quarters (stationary block bootstrap, Politis and Romano; mean block {2,number,#.#} quarters by the Politis-White rule; Wichmann-Hill random numbers with a fixed seed, so a reload gives the same result). The discount rates move by the summed risk-free changes along the path, rescaled so their spread is the risk-free rate\'\'s own one-year moves taken week by week over the same span ({4} overlapping one-year windows, Lo and MacKinlay correction; under 52: the quarterly changes as they are), stage-1 and terminal growth by their summed changes (Graham with stage-1), and each own multiple takes its value at the last quarter of the path. Rule of 40 draws its revenue growth along its own paths (it needs revenue 5 quarters back); the Acquirer multiple stays at Base. Each driver\'\'s changes have their average taken out first (centred bootstrap, Hall and Wilson), so a past trend does not tilt the draws. These are the same draws whose 25th / 75th percentiles set each axis\'\'s Bear / Bull.\n\nBear / Base / Bull: the draws nearest each case (cut halfway between them; beyond Bear counts as Bear, beyond Bull as Bull). P > price: the draws above the current price. Hover a cell for its 95% error.\n\nQuarterly changes skipped because the rate source or the growth parts switched (a data artefact, not a revision): {3}.\n\nA row moved by one driver has a split largely set by construction (its Bear / Bull are that driver\'\'s percentiles); the information is in the rows several drivers move together and in the fair value.'
+        118 => 'How often the current value lands nearest each scenario when the assumptions are revised as much as they have been within a year. It is not a forecast of the value a year ahead: earnings and cash flows stay as they are now.\n\nEach of {0} draws replays a 4-quarter path through the last {1} stored quarters (stationary block bootstrap, Politis and Romano; mean block {2,number,#.#} quarters by the Politis-White rule; Wichmann-Hill random numbers with a fixed seed, so a reload gives the same result). The discount rates move by the summed risk-free changes along the path, rescaled so their spread is the risk-free rate\'\'s own one-year moves taken week by week over the same span ({4} overlapping one-year windows, Lo and MacKinlay correction; under 52: the quarterly changes as they are), stage-1 and terminal growth by their summed changes (Graham with stage-1; the stage-1 spread is widened, never narrowed, to that of the market-implied growth, the growth at which the DCF, or the RIM for a bank, prices the stock at each week\'\'s close, over its one-year moves: {5} windows, none for a loss maker), and each own multiple takes its value at the last quarter of the path. Rule of 40 draws its revenue growth along its own paths (it needs revenue 5 quarters back); the Acquirer multiple stays at Base. Paths start (and jump) more often at the quarters whose conditions most resemble now: volatility, trend, distance from the 52-week high and sector strength, each as a percentile of the stock\'\'s own history over 3 quarter-ends, the nearest round(sqrt n) at least a year apart weighted 1, 1/2, 1/3 ... (k-nearest-neighbour bootstrap, Lall and Sharma; up to {6} neighbours in a pool; 0: too few distinct neighbours, equal weights). Each driver\'\'s changes have their average along those paths taken out first (centred bootstrap, Hall and Wilson), so a past trend does not tilt the draws. These are the same draws whose 25th / 75th percentiles set each axis\'\'s Bear / Bull.\n\nBear / Base / Bull: the draws nearest each case (cut halfway between them; beyond Bear counts as Bear, beyond Bull as Bull). P > price: the draws above the current price. Hover a cell for its 95% error.\n\nQuarterly changes skipped because the rate source or the growth parts switched (a data artefact, not a revision): {3}.\n\nA row moved by one driver has a split largely set by construction (its Bear / Bull are that driver\'\'s percentiles); the information is in the rows several drivers move together and in the fair value.'
         119 => 'N/A: needs {0} stored quarters with the rate, growth and terminal growth known (the Bear/Bull minimum); has {1}.'
         120 => "\n\nOwn-multiple model: its Bear and Bull are percentiles of the same quarters the draws replay, so its split is largely set by construction. The information is in the intrinsic rows and the fair value."
         121 => '{0} of {1} draws priced.'
-        122 => '\n\nBear / Bull moves: the 25th / 75th percentile of {0} bootstrapped 4-quarter changes of the stock\'\'s stored quarters, each driver\'\'s average change taken out first so a past trend does not remove a side (drivers drawn {1}; a side on the wrong side of 0 gives no move). The rate\'\'s spread is set from its weekly one-year moves over the same span ({2} windows; under 52: the quarterly changes alone).'
+        122 => '\n\nBear / Bull moves: the 25th / 75th percentile of {0} bootstrapped 4-quarter changes of the stock\'\'s stored quarters, each driver\'\'s average change taken out first so a past trend does not remove a side (drivers drawn {1}; a side on the wrong side of 0 gives no move). The rate\'\'s spread is set from its weekly one-year moves over the same span ({2} windows; under 52: the quarterly changes alone); the growth spread is at least that of the market-implied growth\'\'s weekly one-year moves ({3} windows). Paths start more often at past quarters whose volatility, trend, distance from the high and sector strength resemble now (up to {4} neighbours; 0: equal weights).'
         => ''
 
 // @function Altman Z + Beneish M quadrant: [label, colour index into cl (3 good, 5 amber, 4 bad, -1 red), tooltip].

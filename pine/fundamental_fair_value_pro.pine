@@ -1060,9 +1060,10 @@ int Q_MULT = Q_FV + MD.size()
 // net income and operating cash flow (TTM), days inventory and days payable.
 int Q_X = Q_MULT + MD.size()
 // Monte Carlo history (CLOSE): the risk-free rate, stage-1 growth, terminal growth, then which
-// rate source and which growth parts were in use (a change across a switch is skipped).
+// rate source and which growth parts were in use (a change across a switch is skipped), then the
+// four conditions the draws' kNN start weights match on (FFVLib f_cond).
 int Q_MC = Q_X + 15
-var QStore ST = QStore.new(matrix.new<float>(128, Q_X + 20, na))
+var QStore ST = QStore.new(matrix.new<float>(128, Q_X + 24, na))
 // FIRM (F_*): report data, rebuilt when the clock marks it dirty. Solved items (sh ... nd) with their
 // tiers before the staleness cap (Drivers caps them), the released fields read later, then the
 // derived drivers, diagnostics and scores.
@@ -1735,6 +1736,19 @@ if tw_new and timeframe.in_seconds() <= 604800 and close[1] > 0
         TW_M.shift()
         TW_A.shift()
         TW_W.shift()
+// The Monte Carlo's kNN conditions, refreshed with the weekly closes and stored per quarter.
+var float KC_V = na
+var float KC_T = na
+var float KC_H = na
+var float KC_X = na
+if tw_new and timeframe.in_seconds() <= 604800 and close[1] > 0
+    [kv, kt, kh, kx] = FL.f_cond(TW_S, TW_X, TW_A)
+    KC_V := kv, KC_T := kt, KC_H := kh, KC_X := kx
+// Written now, not with the other CLOSE columns below, so the draws see this quarter's conditions.
+ST.write(Q_MC + 5, KC_V)
+ST.write(Q_MC + 6, KC_T)
+ST.write(Q_MC + 7, KC_H)
+ST.write(Q_MC + 8, KC_X)
 // Trailing returns run high after bull markets, the opposite of forward returns: half the
 // 5-year excess return plus half a 5% long-run anchor, held to 4.5-8%. The excess is over
 // the proxy's OWN currency's 10Y (VNINDEX: VN 10Y; the default SPY: US 10Y): a USD return
@@ -2103,6 +2117,32 @@ for pass = 0 to 1
                 r0.value := na
                 r0.why := FL.tx(11)
 float implied_exit_multiple = M_DCF.res.get(0).aux
+// Market-implied stage-1 growth, weekly, over the rate's span: the growth at which the DCF (banks:
+// the RIM) prices the stock at this bar's close, by bisection on [-50%, 100%] as the reverse DCF
+// readout solves it. na when that row has no positive Base value or no growth in the bracket
+// prices it. Its one-year moves set a floor on the growth axis's spread (draw block).
+var array<float> WK_G = array.new_float()
+if tw_new
+    float gi = na
+    if time >= last_bar_time - (i_numQuarters * 13 + 1) * 604800000.0 and close > 0
+        for m in MD
+            if m.code == (use_bank_model ? 'RIM' : 'DCF') and m.live and m.fv > 0
+                p = Pos.new(g1 = -0.5)
+                float a = -0.5, float b = 1.0
+                float ea = f_eval(m, D, CL, p, 3) - close
+                p.g1 := b
+                if ea * (f_eval(m, D, CL, p, 3) - close) <= 0
+                    for st = 2 to 21
+                        p.g1 := (a + b) / 2
+                        float e = f_eval(m, D, CL, p, 3) - close
+                        if e * ea > 0
+                            a := p.g1, ea := e
+                        else
+                            b := p.g1
+                    gi := (a + b) / 2
+    WK_G.push(gi)
+    if WK_G.size() > i_numQuarters * 13 + 1
+        WK_G.shift()
 // Provenance tier of each row: the worse of its tier sources' tiers. A relative multiple is on
 // when the framework allocates it and the inputs it needs are positive (P/E: EPS, P/FCF: FCF);
 // every other row, when allocated.
@@ -2267,10 +2307,20 @@ int mc_q = 0
 int mc_sk = 0
 int mc_rw = 0
 float mc_b = na
-f_draws(matrix<float> ds, int c, array<float> ch, float seed) =>
+int mc_gw = 0
+int mc_kn = 0
+// One driver's draws on its own: kNN-weighted starts (pm the conditions' percentiles) when there are
+// enough distinct neighbours, else equal. Returns the neighbours used (0: equal).
+f_draws(matrix<float> ds, int c, array<float> ch, array<int> lg, matrix<float> pm, float seed) =>
+    int nk = 0
     if ch.size() >= i_scen_min_n
-        for [i, v] in FL.f_draws1(FL.WH.new(a = seed), ch, MC_N, MC_H)
+        w = FL.f_knn(pm, lg)
+        g = FL.WH.new(a = seed)
+        for y in w
+            nk += y > 0 ? 1 : 0
+        for [i, v] in (nk > 0 ? FL.f_wdraws1(g, ch, w, MC_N, MC_H) : FL.f_draws1(g, FL.f_demean(ch), MC_N, MC_H))
             ds.set(i, c, v)
+    nk
 // [25th percentile, at most 0 | 75th, at least 0] of a draw column (na without draws).
 f_side(matrix<float> ds, int c) =>
     s = ds.col(c)
@@ -2295,13 +2345,22 @@ if barstate.islast
     AXQ.fill(0)
     [lg, cr0, cg0, ct0, sk] = FL.f_pool(ST.v, ST.q, i_numQuarters, Q_MC)
     cr = FL.f_demean(cr0), cg = FL.f_demean(cg0), ct = FL.f_demean(ct0)
+    pm = FL.f_pctl(ST.v, ST.q, Q_MC + 5, 4)
     mc_q := lg.size()
     mc_sk := sk
     if mc_q >= i_scen_min_n
         mc_b := FL.f_blen(cr, cg, ct)
+        // Blocks start where past conditions resemble now (kNN weights), the changes centred on the
+        // weighted paths' mean; equal weights and the plain mean without enough neighbours.
+        w = FL.f_knn(pm, lg)
+        cw = FL.f_cum(w)
+        for y in w
+            mc_kn += y > 0 ? 1 : 0
+        if mc_kn > 0
+            cr := FL.f_wdemean(cr0, w, mc_b, MC_H), cg := FL.f_wdemean(cg0, w, mc_b, MC_H), ct := FL.f_wdemean(ct0, w, mc_b, MC_H)
         g = FL.WH.new()
         for i = 0 to MC_N - 1
-            path = FL.f_path(g, mc_q, mc_b, MC_H)
+            path = mc_kn > 0 ? FL.f_wpath(g, cw, mc_b, MC_H) : FL.f_path(g, mc_q, mc_b, MC_H)
             float sr = 0.0, float sg = 0.0, float st = 0.0
             for j in path
                 sr += cr.get(j)
@@ -2315,9 +2374,9 @@ if barstate.islast
             AXQ.set(c, mc_q)
     else
         for c = 0 to 2
-            ch = FL.f_demean(FL.f_pool1(ST.v, ST.q, i_numQuarters, Q_MC + c, Q_MC + (c == 1 ? 4 : 3)))
+            [ch, cl] = FL.f_pool1(ST.v, ST.q, i_numQuarters, Q_MC + c, Q_MC + (c == 1 ? 4 : 3))
             AXQ.set(c, ch.size())
-            f_draws(DS, c, ch, 211111111.0 + c * 100000000.0)
+            mc_kn := math.max(mc_kn, f_draws(DS, c, ch, cl, pm, 211111111.0 + c * 100000000.0))
     // The rate draws keep their paths (and so their co-movement with growth) but are rescaled to
     // the spread of the rate's weekly one-year moves; under 52 windows they stay as drawn.
     [yv, yn] = FL.f_yvar(WK_R, WK_S, 52)
@@ -2328,9 +2387,19 @@ if barstate.islast
             float rk = math.sqrt(yv) / s0
             for i = 0 to MC_N - 1
                 DS.set(i, 0, DS.get(i, 0) * rk)
-    rv = FL.f_demean(FL.f_pool_yoy(ST.v, ST.q, i_numQuarters, Q_REV))
+    // The growth draws widen (never narrow) to the spread of the market-implied growth's weekly
+    // one-year moves, under 52 windows (or no implied growth: losses) they stay as drawn.
+    [gv, gn] = FL.f_yvar(WK_G, WK_S, 52)
+    mc_gw := gn
+    if not na(gv) and not na(DS.get(0, 1))
+        float s1 = DS.col(1).stdev()
+        if s1 > 0
+            float gk = math.max(1.0, math.sqrt(gv) / s1)
+            for i = 0 to MC_N - 1
+                DS.set(i, 1, DS.get(i, 1) * gk)
+    [rv, rvl] = FL.f_pool_yoy(ST.v, ST.q, i_numQuarters, Q_REV)
     AXQ.set(3, rv.size())
-    f_draws(DS, 4, rv, 511111111.0)
+    mc_kn := math.max(mc_kn, f_draws(DS, 4, rv, rvl, pm, 511111111.0))
     [rl, rh] = f_side(DS, 0)
     [gl, gh] = f_side(DS, 1)
     [tl, th] = f_side(DS, 2)
@@ -3027,7 +3096,7 @@ f_mc_row(string lbl, int r, string why, string tt) =>
 // below Base and Bull above it (the cuts sit halfway between them).
 f_mc() =>
     string why = mc_q < i_scen_min_n ? str.format(FL.tx(119), i_scen_min_n, mc_q) : ''
-    f_hdr('Monte Carlo (1 year)', 'Bear', 'Base', 'Bull', why != '' ? why : str.format(FL.tx(118), MC_N, mc_q, mc_b, mc_sk, mc_rw))
+    f_hdr('Monte Carlo (1 year)', 'Bear', 'Base', 'Bull', why != '' ? why : str.format(FL.tx(118), MC_N, mc_q, mc_b, mc_sk, mc_rw, mc_gw, mc_kn))
     f_cell(4, RW.get(0) - 1, 'P > price', color_text, color_header)
     for [k, m] in MD
         if m.grp != Group.comp and f_sh(m) > 0
@@ -3068,7 +3137,7 @@ f_sum_val() =>
     for a = 0 to 3
         sc_tt += str.format('\n{0}: {1}', AXN.get(a), (na(att.get(a)) ? 'N/A' : str.format('{0,number,#.#}pp', att.get(a) / finalFairValue * 100)))
     sc_tt += n_inv > 0 ? str.format(FL.tx(63), str.tostring(n_inv)) : ''
-    sc_tt += str.format(FL.tx(122), MC_N, mc_q >= i_scen_min_n ? 'together' : 'each on its own', mc_rw)
+    sc_tt += str.format(FL.tx(122), MC_N, mc_q >= i_scen_min_n ? 'together' : 'each on its own', mc_rw, mc_gw, mc_kn)
     sc_tt += f_axtt('Rate', D.r_hi, D.r_lo, 0) + f_axtt('Stage-1 growth', D.g_lo, D.g_hi, 1) + f_axtt('Terminal growth', D.t_lo, D.t_hi, 2) + f_axtt('Revenue growth (Rule of 40)', D.v_lo, D.v_hi, 3)
     f_row4('Scenarios', sc_tt, 'Pos ' + ipos_txt, na(sens) ? 'Rate N/A' : 'Rate ' + (sens > 0 ? '+' : '') + str.tostring(sens * 100, '#.#') + '%', (na(att.get(top)) ? 'Bear: N/A' : 'Bear: ' + AXN.get(top)) + (n_inv > 0 ? ' !' : ''), stt = sc_tt)
     f_mc()
