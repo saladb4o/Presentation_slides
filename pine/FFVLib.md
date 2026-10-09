@@ -1461,7 +1461,7 @@ export tx(int id) =>
         74 => '% (a level the family cap cannot reach is lifted to the reachable floor + 1 point).'
         75 => ' Settings > Cap own-history multiples.'
         76 => '[xx%] = weight in the live blend (Standard or Omnibus). * = synthetic base multiple (under 4 quarters of history).'
-        77 => 'SYNTHETIC: fewer than 4 quarters of history, so the base multiple is a default (none stored) or the average of the few quarters stored.\n\n'
+        77 => 'SYNTHETIC: fewer than 4 quarters of history, so the base multiple is the average of the few quarters stored. With none stored the row is N/A (no default multiple stands in).\n\n'
         78 => 'CAPE: 10-year inflation-adjusted EPS, against a history of the same (Shiller) P/E.\n\n'
         79 => 'RIM R40 GRA ACQ DCF EPV RNPV ECF ADCF UNB APV EVA DDM'
         80 => '%\n(Hyper-Growth Premium Unlocked!)'

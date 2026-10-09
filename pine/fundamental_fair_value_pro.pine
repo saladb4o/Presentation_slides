@@ -52,7 +52,7 @@ f_pct_sorted(array<float> s, float p) =>
     lo == hi ? s.get(lo) : s.get(lo) * (1 - (idx - lo)) + s.get(hi) * (idx - lo)
 // Central tendency + both percentile legs from ONE sort. Stateless: the caller
 // caches the result in the registry, recomputing only when the history changes.
-f_ratio_stats(array<float> arr, bool use_mean, float dflt, float lo_p, float hi_p, int min_n) =>
+f_ratio_stats(array<float> arr, bool use_mean, float lo_p, float hi_p, int min_n) =>
     int n = arr.size()
     float ct = na
     float c_lo = na
@@ -64,7 +64,7 @@ f_ratio_stats(array<float> arr, bool use_mean, float dflt, float lo_p, float hi_
         if n >= min_n
             c_lo := f_pct_sorted(s, lo_p)
             c_hi := f_pct_sorted(s, hi_p)
-    [nz(ct, dflt), na(ct) or n < 4, c_lo, c_hi]
+    [ct, not na(ct) and n < 4, c_lo, c_hi]
 // 0 below a, 1 above b, linear between: a premium phases in instead of stepping.
 f_ramp(float x, float a, float b) =>
     math.min(math.max((x - a) / (b - a), 0.0), 1.0)
@@ -303,7 +303,6 @@ type Model
     Lever lk = Lever.none
     float m0 = na
     bool tick = true
-    float dflt = na
     bool rkv = false
     int src_i = -1
     int held_by = -1
@@ -334,8 +333,7 @@ type Model
 // driver, next year's driver, a rule's growth and second input) | need1/2: streams that must
 // be positive for a value (a relative multiple is off without them) | t1/t2: tier sources (the row takes the worse tier) | src: the
 // row a reference row builds on | lk: the lever |
-// m0: a rule multiple's target | tick: listed in Omnibus Members (bar 0) | dflt: an own multiple with no
-// history | rkv: P/B drops value-trap quarters. Derived on bar 0: src_i, held_by (the
+// m0: a rule multiple's target | tick: listed in Omnibus Members (bar 0) | rkv: P/B drops value-trap quarters. Derived on bar 0: src_i, held_by (the
 // row that holds this one: rNPV holds the DCF, P/FCF holds P/AFFO), ps (per-share streams).
 enum Claim
     netdebt = 'net debt'
@@ -540,7 +538,7 @@ f_eval(Model m, Drv d, Claims c, Pos p, int k) =>
         if m.s_fwd != Sx.none
             r.fwd := c.bridge(f_mult(x.drv_f, x.mult) + r.add, firm, m.ps) / d.fwd_disc
             r.value := f_blend2(r.spot, r.fwd)
-    r.why := not ok ? 'needs positive ' + str.tostring(d.s.get(m.need1) > 0 ? m.need2 : m.need1) : not na(r.value) ? '' : m.eng == Eng.mult and not (x.drv > 0) ? 'needs positive ' + str.tostring(m.s_drv) : 'inputs missing'
+    r.why := not ok ? 'needs positive ' + str.tostring(d.s.get(m.need1) > 0 ? m.need2 : m.need1) : not na(r.value) ? '' : m.lk == Lever.pctl and na(m.avg) ? 'no stored quarters of this multiple yet' : na(x.g1) and (m.eng == Eng.vdcf or m.eng == Eng.rim or m.lk == Lever.g1) ? 'no stage-1 growth (no growth data)' : m.eng == Eng.mult and not (x.drv > 0) ? 'needs positive ' + str.tostring(m.s_drv) : 'inputs missing'
     r.value
 // A row's VIEW: 0 own history (a multiple of the ticker's own past), 1 a rule (Graham, Rule
 // of 40, Acquirer's), 2 intrinsic (perpetuities, growth paths, excess returns).
@@ -674,7 +672,7 @@ i_use_rkv = input.bool(true, '💎 Value-trap filter (justified P/B)', group = g
 i_flow_ttm = input.bool(true, 'Request flows as TTM', group = group_calc, tooltip = 'Income and cash-flow items are requested as TTM directly instead of summing four FQ values. Interest and R&D have no TTM field, so they are always summed from FQ.')
 group_iv = 'Intrinsic Value Models (Automated)'
 i_growth_src = input.string('Auto (Consensus EPS -> Sales CAGR)', 'Forward growth source', options = ['Auto (Consensus EPS -> Sales CAGR)', 'Manual'], group = group_iv, tooltip = 'Auto: FY consensus EPS growth (EARNINGS_ESTIMATE, has history and passes the report-lag gate), else FY consensus revenue growth (SALES_ESTIMATES, for loss makers), else 3y sales CAGR, else the manual value.\n\nAnalyst PRICE targets are never used here: they exist only for today, so they would leak into the backtest and make the street comparison circular.')
-i_analyst_growth = input.float(10.0, 'Manual forward growth %', group = group_iv, tooltip = 'Used when the source is Manual, or as the last fallback in Auto.') / 100
+i_analyst_growth = input.float(10.0, 'Manual forward growth %', group = group_iv, tooltip = 'Used only when the source is Manual.') / 100
 group_street = 'Street Consensus (analyst targets)'
 i_show_street = input.bool(true, 'Show street comparison', group = group_street, tooltip = 'Uses syminfo.target_price_* and syminfo.recommendations_* (0 request slots). Display only: never enters the blend, the plot or the backtest.')
 i_conf_gap = input.float(15.0, 'Agreement band: ours vs street PV (%)', minval = 1, maxval = 50, group = group_street) / 100
@@ -815,15 +813,15 @@ else if selected_industry == 'Utilities' or selected_industry == 'REITs' or sele
 // inputs it needs positive, its tier source, add-on, private scenario lever and family.
 // Adding a model: one row here (and its code in the Members default).
 var Model M_COMP = f_add(Model.new('COMP', 'Standard Composite', 'Composite (Final Blend)', Group.comp, eng = Eng.comp))
-var Model M_PE = f_add(Model.new('PE', 'Blended P/E', 'Blended PE', Group.rel, Level.equity, fam = 1, s_drv = Sx.eps_b, s_fwd = Sx.eps_f, need1 = Sx.eps_b, lk = Lever.pctl, dflt = 15.0))
+var Model M_PE = f_add(Model.new('PE', 'Blended P/E', 'Blended PE', Group.rel, Level.equity, fam = 1, s_drv = Sx.eps_b, s_fwd = Sx.eps_f, need1 = Sx.eps_b, lk = Lever.pctl))
 if barstate.isfirst
-    f_add(Model.new('PS', 'P/S', 'Price / Sales', Group.rel, Level.equity, fam = 2, s_drv = Sx.sales_ps, lk = Lever.pctl, dflt = 2.0))
-    f_add(Model.new('FCF', 'P/FCF', 'Price / FCF', Group.rel, Level.equity, fam = 3, s_drv = Sx.fcf_ps, need1 = Sx.fcf_ps, lk = Lever.pctl, dflt = 15.0))
-    f_add(Model.new('PB', 'P/B', 'Price / Book', Group.rel, Level.equity, fam = 4, s_drv = Sx.bvps, lk = Lever.pctl, dflt = 1.5, rkv = true))
-    f_add(Model.new('TBV', 'P/TBV', 'Price / TBV', Group.rel, Level.equity, fam = 4, s_drv = Sx.tbvps, lk = Lever.pctl, dflt = 2.0))
-    f_add(Model.new('EV', 'Blended EV/EBITDA', 'EV / EBITDA', Group.rel, fam = 5, s_drv = Sx.ebitda, s_fwd = Sx.ebitda_f, lk = Lever.pctl, dflt = 10.0))
-    f_add(Model.new('CF', 'P/CF', 'Price / OCF', Group.rel, Level.equity, fam = 3, s_drv = Sx.ocf_ps, lk = Lever.pctl, dflt = 10.0))
-    f_add(Model.new('AFFO', 'P/AFFO', 'Price / AFFO', Group.rel, Level.equity, fam = 3, s_drv = Sx.fcf_ps, lk = Lever.pctl, dflt = 12.0))
+    f_add(Model.new('PS', 'P/S', 'Price / Sales', Group.rel, Level.equity, fam = 2, s_drv = Sx.sales_ps, lk = Lever.pctl))
+    f_add(Model.new('FCF', 'P/FCF', 'Price / FCF', Group.rel, Level.equity, fam = 3, s_drv = Sx.fcf_ps, need1 = Sx.fcf_ps, lk = Lever.pctl))
+    f_add(Model.new('PB', 'P/B', 'Price / Book', Group.rel, Level.equity, fam = 4, s_drv = Sx.bvps, lk = Lever.pctl, rkv = true))
+    f_add(Model.new('TBV', 'P/TBV', 'Price / TBV', Group.rel, Level.equity, fam = 4, s_drv = Sx.tbvps, lk = Lever.pctl))
+    f_add(Model.new('EV', 'Blended EV/EBITDA', 'EV / EBITDA', Group.rel, fam = 5, s_drv = Sx.ebitda, s_fwd = Sx.ebitda_f, lk = Lever.pctl))
+    f_add(Model.new('CF', 'P/CF', 'Price / OCF', Group.rel, Level.equity, fam = 3, s_drv = Sx.ocf_ps, lk = Lever.pctl))
+    f_add(Model.new('AFFO', 'P/AFFO', 'Price / AFFO', Group.rel, Level.equity, fam = 3, s_drv = Sx.fcf_ps, lk = Lever.pctl))
     f_add(Model.new('RNPV', 'rNPV (Risk-Adjusted)', 'Risk-Adj NPV', Group.sect, eng = Eng.ref, fam = 3, src = 'DCF', addon = AddOn.pipeline, t1 = Sx.fcff))
     f_add(Model.new('ECF', 'Equity Cash Flow', 'Equity Cash Flow', Group.sect, Level.equity, Eng.vdcf, fam = 1, s_cf = Sx.fcfe, s_earn = Sx.ni_ps, s_ret = Sx.roe_n, need1 = Sx.ni_ps, need2 = Sx.roe_n, t1 = Sx.ni_ps, t2 = Sx.roe_n))
     f_add(Model.new('ADCF', 'AFFO DCF', 'AFFO DCF', Group.sect, Level.equity, Eng.vdcf, fam = 3, s_cf = Sx.fcf_ps, s_earn = Sx.fcf_ps))
@@ -1868,14 +1866,15 @@ if CK.dirty
     // is ROE x retention, not ROIC x reinvestment.
     float reinvestment_rate = F_nopat > 0 ? (F_nopat - F_fcff) / F_nopat : 0.0
     float roic_sgr = use_bank_model ? normalized_sgr : math.max(F_roic * reinvestment_rate, 0.0)
-    // [STREET-1] Forward growth leg: consensus EPS growth (historical, lag-gated),
-    // then sales CAGR, then the manual value. Replaces the fixed 10% input.
+    // [STREET-1] Forward growth leg: consensus EPS growth (historical, lag-gated), then sales
+    // CAGR; neither -> the leg leaves (no typed value stands in). Manual: the typed value.
     g_manual = i_growth_src == 'Manual'
-    float fwd_growth_leg = g_manual ? i_analyst_growth : nz(F_fwd_g, nz(sales_cagr_3y, i_analyst_growth))
-    fwd_growth_src = g_manual ? 'Manual' : not na(F_fwd_g) ? (F_eps > 0 and not na(F_eps_est) ? 'Consensus EPS' : 'Consensus sales') : not na(sales_cagr_3y) ? 'Sales CAGR' : 'Manual (fallback)'
+    float fwd_growth_leg = g_manual ? i_analyst_growth : nz(F_fwd_g, sales_cagr_3y)
+    fwd_growth_src = g_manual ? 'Manual' : not na(F_fwd_g) ? (F_eps > 0 and not na(F_eps_est) ? 'Consensus EPS' : 'Consensus sales') : not na(sales_cagr_3y) ? 'Sales CAGR' : 'none'
     // Triangulation: sustainable growth 15%, ROIC x reinvestment 40%, the forward leg 15%, the
     // 3-year sales CAGR 30%. A leg with no data leaves and the others are re-weighted (the sales
-    // leg used to enter at a guessed 5%). The forward leg always exists, so the blend does too.
+    // leg used to enter at a guessed 5%). No leg at all: no stage-1 growth (N/A), so the
+    // growth-path models are N/A too.
     array<float> g_leg = array.from(normalized_sgr, roic_sgr, fwd_growth_leg, sales_cagr_3y)
     array<float> g_wt = array.from(0.15, 0.40, 0.15, 0.30)
     g_num = 0.0
@@ -1902,7 +1901,7 @@ if CK.dirty
         for [k, m] in MD
             if m.lk == Lever.pctl
                 m.hist := ST.lastn(Q_MULT + k, i_numQuarters, 1)
-                [a, sy, plo, phi] = f_ratio_stats(m.hist, i_useMean, m.dflt, 0.25, 0.75, i_scen_min_n)
+                [a, sy, plo, phi] = f_ratio_stats(m.hist, i_useMean, 0.25, 0.75, i_scen_min_n)
                 m.avg := a, m.syn := sy, m.plo := plo, m.phi := phi
             if CK.adv
                 [tw, te] = f_model_weight(ST.window(Q_FV + k, 20, 1, true), px, w_algo, i_w_horizon)
@@ -3128,9 +3127,9 @@ f_det_models() =>
     f_row4('View mix', FL.tx(73) + (i_view_cap < 1.0 ? ' Own history capped at ' + str.tostring(i_view_cap * 100, '#') + FL.tx(74) : FL.tx(75)), 'Own ' + str.tostring(vm.get(0) * 100, '#') + '%', 'Rules ' + str.tostring(vm.get(1) * 100, '#') + '%', 'Intrinsic ' + str.tostring(vm.get(2) * 100, '#') + '%')
     f_hdr('Relative Valuation', 'Bear', 'Base', 'Bull', FL.tx(76))
     for m in MD
-        if m.grp == Group.rel and (m.on or m.om) and m.fv > 0
+        if m.grp == Group.rel and (m.on or m.om) and (m.fv > 0 or na(m.avg))
             float cur = f_cur(m)
-            f_model_row(m.name + (m.syn ? ' *' : '') + f_mlbl(m), m.lo, m.fv, m.hi, (m.syn ? FL.tx(77) : '') + (m.s_drv == Sx.eps_b and H_cape ? FL.tx(78) : '') + f_mult_tt(m.avg, cur, math.min(m.plo, m.avg), math.max(m.phi, m.avg)) + f_res_tt(m))
+            f_model_row(m.name + (m.syn ? ' *' : '') + f_mlbl(m), m.lo, m.fv, m.hi, (m.syn ? FL.tx(77) : '') + (m.s_drv == Sx.eps_b and H_cape ? FL.tx(78) : '') + (na(m.avg) ? '' : f_mult_tt(m.avg, cur, math.min(m.plo, m.avg), math.max(m.phi, m.avg))) + f_res_tt(m))
     f_hdr('Intrinsic Models', 'Bear', 'Base', 'Bull', '')
     // Rule of 40, or Rule of 65 once growth x 2 + FCF margin reaches 65.
     float r40_score = nz((F_rev_g + D.s.get(Sx.fcf_margin)) * 100)
