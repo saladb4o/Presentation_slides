@@ -1383,6 +1383,14 @@ export f_draws1(WH g, array<float> ch, int nd, int h) =>
             s += ch.get(j)
         out.push(s)
     out
+// @function A series less its own average (centred bootstrap, Hall and Wilson 1991): the draws then keep how much a driver has moved, not the direction it drifted in over the sample, so a one-way trend does not take away a side.
+// @returns A new array.
+export f_demean(array<float> x) =>
+    out = array.new_float()
+    float mu = x.size() > 0 ? x.avg() : na
+    for v in x
+        out.push(v - mu)
+    out
 // @function The indicator's long text number `id`.
 // @param id Text number.
 // @returns The text, or an empty string for an unknown number.
@@ -1502,11 +1510,11 @@ export tx(int id) =>
         115 => 'Nine binary tests of profitability, leverage / liquidity and operating efficiency.'
         116 => '(Net Income - Operating Cash Flow) / Total Assets.\n\nSloan (1996) is a RETURNS anomaly, not a fraud test. Beneish M-Score (the Z+M matrix, in the balance sheet and red-flag tooltips) is the manipulation model.'
         117 => 'COMP DCF GRA EPV RIM R40 PE PS FCF PB TBV EV CF AFFO ACQ OE RNPV ECF ADCF UNB APV EVA DDM'
-        118 => 'How often the current value lands nearest each scenario when the assumptions are revised as much as they have been within a year. It is not a forecast of the value a year ahead: earnings and cash flows stay as they are now.\n\nEach of {0} draws replays a 4-quarter path through the last {1} stored quarters (stationary block bootstrap, Politis and Romano; mean block {2,number,#.#} quarters by the Politis-White rule; Wichmann-Hill random numbers with a fixed seed, so a reload gives the same result). The discount rates move by the summed risk-free changes along the path, stage-1 and terminal growth by their summed changes (Graham with stage-1), and each own multiple takes its value at the last quarter of the path. Rule of 40 draws its revenue growth along its own paths (it needs revenue 5 quarters back); the Acquirer multiple stays at Base. These are the same draws whose 25th / 75th percentiles set each axis\'\'s Bear / Bull.\n\nBear / Base / Bull: the draws nearest each case (cut halfway between them; beyond Bear counts as Bear, beyond Bull as Bull). P > price: the draws above the current price. Hover a cell for its 95% error.\n\nQuarterly changes skipped because the rate source or the growth parts switched (a data artefact, not a revision): {3}.\n\nA row moved by one driver has a split largely set by construction (its Bear / Bull are that driver\'\'s percentiles); the information is in the rows several drivers move together and in the fair value.'
+        118 => 'How often the current value lands nearest each scenario when the assumptions are revised as much as they have been within a year. It is not a forecast of the value a year ahead: earnings and cash flows stay as they are now.\n\nEach of {0} draws replays a 4-quarter path through the last {1} stored quarters (stationary block bootstrap, Politis and Romano; mean block {2,number,#.#} quarters by the Politis-White rule; Wichmann-Hill random numbers with a fixed seed, so a reload gives the same result). The discount rates move by the summed risk-free changes along the path, stage-1 and terminal growth by their summed changes (Graham with stage-1), and each own multiple takes its value at the last quarter of the path. Rule of 40 draws its revenue growth along its own paths (it needs revenue 5 quarters back); the Acquirer multiple stays at Base. Each driver\'\'s changes have their average taken out first (centred bootstrap, Hall and Wilson), so a past trend does not tilt the draws. These are the same draws whose 25th / 75th percentiles set each axis\'\'s Bear / Bull.\n\nBear / Base / Bull: the draws nearest each case (cut halfway between them; beyond Bear counts as Bear, beyond Bull as Bull). P > price: the draws above the current price. Hover a cell for its 95% error.\n\nQuarterly changes skipped because the rate source or the growth parts switched (a data artefact, not a revision): {3}.\n\nA row moved by one driver has a split largely set by construction (its Bear / Bull are that driver\'\'s percentiles); the information is in the rows several drivers move together and in the fair value.'
         119 => 'N/A: needs {0} stored quarters with the rate, growth and terminal growth known (the Bear/Bull minimum); has {1}.'
         120 => "\n\nOwn-multiple model: its Bear and Bull are percentiles of the same quarters the draws replay, so its split is largely set by construction. The information is in the intrinsic rows and the fair value."
         121 => '{0} of {1} draws priced.'
-        122 => '\n\nBear / Bull moves: the 25th / 75th percentile of {0} bootstrapped 4-quarter changes of the stock\'\'s stored quarters (drivers drawn {1}; a side on the wrong side of 0 gives no move).'
+        122 => '\n\nBear / Bull moves: the 25th / 75th percentile of {0} bootstrapped 4-quarter changes of the stock\'\'s stored quarters, each driver\'\'s average change taken out first so a past trend does not remove a side (drivers drawn {1}; a side on the wrong side of 0 gives no move).'
         => ''
 
 // @function Altman Z + Beneish M quadrant: [label, colour index into cl (3 good, 5 amber, 4 bad, -1 red), tooltip].

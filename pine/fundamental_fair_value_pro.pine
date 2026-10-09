@@ -2239,7 +2239,10 @@ float st_hi_t = st_has ? nz(syminfo.target_price_high, st_md_t) : na
 // Each draw is a 4-quarter path through the stored quarters of the own-multiple window, by the
 // stationary block bootstrap (FFVLib), summing each driver's quarterly changes along it. Bear /
 // Bull of each axis are the 25th / 75th percentile of its 1,000 sums (a side on the wrong side
-// of 0 gives 0), so each driver's Bear / Bull is the Monte Carlo's own 25 / 75 for it. The joint
+// of 0 gives 0), so each driver's Bear / Bull is the Monte Carlo's own 25 / 75 for it. Each
+// driver's changes are demeaned first (centred bootstrap, Hall and Wilson 1991): the draws keep
+// how far it moves, not the way it drifted over the sample, so a one-way trend in rates does
+// not take the Bear away. The joint
 // pool (rate, stage-1 and terminal growth known together) keeps the drivers' co-movement, and
 // the Monte Carlo below replays those same draws. Joint pool short: each driver on its own pool;
 // still short: that axis does not move (N/A). Rule of 40's revenue growth needs revenue 5
@@ -2278,7 +2281,8 @@ f_moves(Model m) =>
 if barstate.islast
     DS.fill(na)
     AXQ.fill(0)
-    [lg, cr, cg, ct, sk] = FL.f_pool(ST.v, ST.q, i_numQuarters, Q_MC)
+    [lg, cr0, cg0, ct0, sk] = FL.f_pool(ST.v, ST.q, i_numQuarters, Q_MC)
+    cr = FL.f_demean(cr0), cg = FL.f_demean(cg0), ct = FL.f_demean(ct0)
     mc_q := lg.size()
     mc_sk := sk
     if mc_q >= i_scen_min_n
@@ -2299,10 +2303,10 @@ if barstate.islast
             AXQ.set(c, mc_q)
     else
         for c = 0 to 2
-            ch = FL.f_pool1(ST.v, ST.q, i_numQuarters, Q_MC + c, Q_MC + (c == 1 ? 4 : 3))
+            ch = FL.f_demean(FL.f_pool1(ST.v, ST.q, i_numQuarters, Q_MC + c, Q_MC + (c == 1 ? 4 : 3)))
             AXQ.set(c, ch.size())
             f_draws(DS, c, ch, 211111111.0 + c * 100000000.0)
-    rv = FL.f_pool_yoy(ST.v, ST.q, i_numQuarters, Q_REV)
+    rv = FL.f_demean(FL.f_pool_yoy(ST.v, ST.q, i_numQuarters, Q_REV))
     AXQ.set(3, rv.size())
     f_draws(DS, 4, rv, 511111111.0)
     [rl, rh] = f_side(DS, 0)
