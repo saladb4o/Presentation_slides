@@ -670,7 +670,7 @@ i_useBeneishCheck = input.bool(true, '🕵️ Apply Beneish M-Score (Fraud Check
 i_use_rkv = input.bool(true, '💎 Value-trap filter (justified P/B)', group = group_calc, tooltip = 'Justified P/B = (ROE - g) / (cost of equity - g) on the 5-year average ROE (Wilcox 1984; Ohlson 1995). A value trap is a P/B under 1 that is not below that: cheap on book, but the returns do not support even that price. Also a Piotroski F-score of 0-2 while the price is under the fair value (Piotroski 2000; not banks). Flags it, takes 0.2 off our confidence and puts a soft ceiling on the scorecard\'s Value pillar (over 50 it keeps a quarter of its excess). Also drops quarters with ROE under the 10Y + 5% from the P/B history average.')
 i_flow_ttm = input.bool(true, 'Request flows as TTM', group = group_calc, tooltip = 'Income and cash-flow items are requested as TTM directly instead of summing four FQ values. Interest and R&D have no TTM field, so they are always summed from FQ.')
 group_iv = 'Intrinsic Value Models (Automated)'
-i_growth_src = input.string('Auto (Consensus EPS -> Sales CAGR)', 'Forward growth source', options = ['Auto (Consensus EPS -> Sales CAGR)', 'Manual'], group = group_iv, tooltip = 'Auto: FY consensus EPS growth (EARNINGS_ESTIMATE, has history and passes the report-lag gate), else FY consensus revenue growth (SALES_ESTIMATES, for loss makers), else 3y sales CAGR, else the manual value.\n\nAnalyst PRICE targets are never used here: they exist only for today, so they would leak into the backtest and make the street comparison circular.')
+i_growth_src = input.string('Auto (Consensus EPS -> Sales CAGR)', 'Forward growth source', options = ['Auto (Consensus EPS -> Sales CAGR)', 'Manual'], group = group_iv, tooltip = 'Auto: FY consensus EPS growth (EARNINGS_ESTIMATE, has history and passes the report-lag gate), else FY consensus revenue growth (SALES_ESTIMATES, for loss makers), else 3y sales CAGR. That is then combined with a LASSO forecast of next-year sales growth (MIDAS summaries of the weekly stock, sector, market and rate moves, plus revenue growth), each weighted by its record against the revenue released 4 quarters later (the Omnibus MALE rule; equal weights before either has 4 scored quarters).\n\nAnalyst PRICE targets are never used here: they exist only for today, so they would leak into the backtest and make the street comparison circular.')
 i_analyst_growth = input.float(10.0, 'Manual forward growth %', group = group_iv, tooltip = 'Used only when the source is Manual.') / 100
 group_street = 'Street Consensus (analyst targets)'
 i_show_street = input.bool(true, 'Show street comparison', group = group_street, tooltip = 'Uses syminfo.target_price_* and syminfo.recommendations_* (0 request slots). Display only: never enters the blend, the plot or the backtest.')
@@ -1063,7 +1063,12 @@ int Q_X = Q_MULT + MD.size()
 // rate source and which growth parts were in use (a change across a switch is skipped), then the
 // four conditions the draws' kNN start weights match on (FFVLib f_cond).
 int Q_MC = Q_X + 15
-var QStore ST = QStore.new(matrix.new<float>(128, Q_X + 24, na))
+// Forward sales (RELEASE): the LASSO's 14 features (MIDAS summaries of the last 13 weekly changes
+// of the stock, its sector index, the market and the rate, 3 each, then revenue growth over 4
+// quarters and over 1), then the forward sales each forward-growth member stood for (LASSO,
+// consensus, sales CAGR), scored against the revenue released 4 quarters later.
+int Q_L = Q_MC + 9
+var QStore ST = QStore.new(matrix.new<float>(128, Q_L + 17, na))
 // FIRM (F_*): report data, rebuilt when the clock marks it dirty. Solved items (sh ... nd) with their
 // tiers before the staleness cap (Drivers caps them), the released fields read later, then the
 // derived drivers, diagnostics and scores.
@@ -1842,6 +1847,28 @@ var float H_g_fwd = na
 var string H_g_src = ''
 var float H_gmask = na
 var bool H_cape = false
+// The LASSO fit (FFVLib f_lasso) and the forward-growth members' MALE weights: LASSO, consensus,
+// sales CAGR.
+var array<float> LM = array.new_float()
+var array<float> LW = array.from(0.0, 0.0, 0.0)
+// One rate source across the last 14 weeks, none of them a stand-in (the rate's MIDAS tilt and
+// bend need one series).
+f_one_src(array<float> s) =>
+    bool ok = s.size() >= 14
+    if ok
+        for j = s.size() - 14 to s.size() - 1
+            ok := ok and s.get(j) == s.last() and s.get(j) != 2 and s.get(j) != 4
+    ok
+// A series' MIDAS summary (FFVLib f_midas) into three store columns from c.
+f_midas_w(array<float> a, bool lg, int c) =>
+    [m0, m1, m2] = FL.f_midas(a, lg)
+    ST.write(c, m0)
+    ST.write(c + 1, m1)
+    ST.write(c + 2, m2)
+// The LASSO's share of a forward-growth blend from the two members' weights; a member with no
+// value leaves; with no record on either side, equal shares.
+f_las_share(float w_inc, float w_las, float x_inc, float x_las) =>
+    na(x_las) ? 0.0 : na(x_inc) ? 1.0 : w_inc + w_las > 0 ? w_las / (w_inc + w_las) : 0.5
 if CK.dirty
     // RELEASE columns: report data with preferred at this bar's 10Y, rewritten while the open
     // quarter is dirty. Loss quarters stay in: dropping them biased the medians upward.
@@ -1885,11 +1912,36 @@ if CK.dirty
     // is ROE x retention, not ROIC x reinvestment.
     float reinvestment_rate = F_nopat > 0 ? (F_nopat - F_fcff) / F_nopat : 0.0
     float roic_sgr = use_bank_model ? normalized_sgr : math.max(F_roic * reinvestment_rate, 0.0)
-    // [STREET-1] Forward growth leg: consensus EPS growth (historical, lag-gated), then sales
-    // CAGR; neither -> the leg leaves (no typed value stands in). Manual: the typed value.
+    // [F] The LASSO's features as of this release, its fit on each advance (only quarters whose
+    // revenue 4 quarters on is out train, FFVLib f_lasso) and its year-ahead sales growth.
+    f_midas_w(TW_S, true, Q_L)
+    f_midas_w(TW_X, true, Q_L + 3)
+    f_midas_w(TW_M, true, Q_L + 6)
+    f_midas_w(f_one_src(WK_S) ? WK_R : array.new_float(), false, Q_L + 9)
+    ST.write(Q_L + 12, F_rev > 0 and ST.at(Q_REV, 4) > 0 ? math.log(F_rev / ST.at(Q_REV, 4)) : na)
+    ST.write(Q_L + 13, F_rev > 0 and ST.at(Q_REV, 1) > 0 ? math.log(F_rev / ST.at(Q_REV, 1)) : na)
+    if CK.adv
+        LM := FL.f_lasso(ST.v, ST.q, Q_L, 14, Q_REV, i_scen_min_n, 40)
+        // Each member's record (the Omnibus rule, MALE): its forward sales against the revenue
+        // released 4 quarters later.
+        array<float> rv = ST.window(Q_REV, 21, 0, true)
+        for i = 0 to 2
+            [w, e] = f_model_weight(ST.window(Q_L + 14 + i, 21, 0, true), rv, 2, 4)
+            LW.set(i, w)
+    float yl = FL.f_lasso_at(LM, ST.back(0), Q_L, 14)
+    float g_las = na(yl) ? na : math.max(math.min(math.exp(yl) - 1, 0.6), -0.5)
+    ST.write(Q_L + 14, F_rev * (1 + g_las))
+    ST.write(Q_L + 15, F_rev * (1 + F_fwd_g))
+    ST.write(Q_L + 16, F_rev * (1 + sales_cagr_3y))
+    // [STREET-1] Forward growth leg: consensus EPS growth (historical, lag-gated), else sales
+    // CAGR, combined with the LASSO's growth (Bates and Granger 1969) on their records; neither
+    // -> the leg leaves (no typed value stands in). Manual: the typed value.
     g_manual = i_growth_src == 'Manual'
-    float fwd_growth_leg = g_manual ? i_analyst_growth : nz(F_fwd_g, sales_cagr_3y)
-    fwd_growth_src = g_manual ? 'Manual' : not na(F_fwd_g) ? (F_eps > 0 and not na(F_eps_est) ? 'Consensus EPS' : 'Consensus sales') : not na(sales_cagr_3y) ? 'Sales CAGR' : 'none'
+    float g_inc = nz(F_fwd_g, sales_cagr_3y)
+    float w_las = f_las_share(LW.get(not na(F_fwd_g) ? 1 : 2), LW.get(0), g_inc, g_las)
+    float fwd_growth_leg = g_manual ? i_analyst_growth : na(g_las) or w_las == 0 ? g_inc : w_las == 1 ? g_las : (1 - w_las) * g_inc + w_las * g_las
+    string g_base = not na(F_fwd_g) ? (F_eps > 0 and not na(F_eps_est) ? 'Consensus EPS' : 'Consensus sales') : not na(sales_cagr_3y) ? 'Sales CAGR' : ''
+    fwd_growth_src = g_manual ? 'Manual' : w_las == 0 ? (g_base == '' ? 'none' : g_base) : g_base == '' ? 'LASSO' : str.format('{0} + LASSO ({1,number,#}%)', g_base, 100 * w_las)
     // Triangulation: sustainable growth 15%, ROIC x reinvestment 40%, the forward leg 15%, the
     // 3-year sales CAGR 30%. A leg with no data leaves and the others are re-weighted (the sales
     // leg used to enter at a guessed 5%). No leg at all: no stage-1 growth (N/A), so the
@@ -1908,7 +1960,9 @@ if CK.dirty
     // Next-year sales: the FY revenue consensus, else the sales CAGR; neither -> no forward
     // EBITDA leg (TTM only), not a guessed 5%.
     float sales_cagr = ST.cagr(Q_REV, F_rev, i_cagr_years)
-    float final_sales_f1 = nz(F_rev_est, F_rev * (1 + sales_cagr))
+    float s_inc = nz(F_rev_est, F_rev * (1 + sales_cagr))
+    float w_las_s = f_las_share(LW.get(not na(F_rev_est) ? 1 : 2), LW.get(0), s_inc, g_las)
+    float final_sales_f1 = na(g_las) or w_las_s == 0 ? s_inc : w_las_s == 1 ? F_rev * (1 + g_las) : (1 - w_las_s) * s_inc + w_las_s * F_rev * (1 + g_las)
     float ebitda_margin_ttm = F_rev > 0 ? F_ebitda / F_rev : na
     float est_ebitda_fwd = not na(ebitda_margin_ttm) ? final_sales_f1 * ebitda_margin_ttm : na
     // On an advance (and on bar 0): each own-history multiple's statistics from its stored
@@ -1936,7 +1990,7 @@ if CK.dirty
     H_g_src := fwd_growth_src
     // Which growth parts are in, and the forward part's source: a change in either moves the
     // estimate without any revision.
-    H_gmask := (na(normalized_sgr) ? 0 : 1) + (na(roic_sgr) ? 0 : 2) + (na(sales_cagr_3y) ? 0 : 4) + 8 * (g_manual ? 0 : not na(F_fwd_g) ? (F_eps > 0 and not na(F_eps_est) ? 1 : 2) : not na(sales_cagr_3y) ? 3 : 4)
+    H_gmask := (na(normalized_sgr) ? 0 : 1) + (na(roic_sgr) ? 0 : 2) + (na(sales_cagr_3y) ? 0 : 4) + 8 * (g_manual ? 0 : not na(F_fwd_g) ? (F_eps > 0 and not na(F_eps_est) ? 1 : 2) : not na(sales_cagr_3y) ? 3 : 4) + (w_las > 0 ? 64 : 0)
     H_cape := cape_on
 // =====================================================================
 // 3.7 DRIVERS, on every bar (f_drivers): claims, rates, growth and the stream table
