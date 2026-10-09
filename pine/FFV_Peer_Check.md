@@ -491,6 +491,22 @@ f_wk(float m, float t, int T) =>
     string s = T < 8 ? 'N/A' : m < 0 and t <= -2 ? 'Worked' : m > 0 and t >= 2 ? 'Opposite' : 'Not clear'
     [s, T < 8 ? str.tostring(T) + ' quarters (needs 8)' : 'IC ' + f_n2(m) + ', t ' + f_n2(t) + ', ' + str.tostring(T) + ' quarters', s == 'Worked' ? color.lime : s == 'Opposite' ? color.red : color.gray]
 
+// Line breaks at spaces, n characters a line at most, so the merged rows do not widen the table.
+f_wrap(string s, int n) =>
+    string out = ''
+    int len = 0
+    for x in str.split(s, ' ')
+        int l = str.length(x)
+        if len > 0 and len + 1 + l > n
+            out += '\n'
+            len := 0
+        else if len > 0
+            out += ' '
+            len += 1
+        out += x
+        len += l
+    out
+
 var table tb = table.new(position.top_right, 12, 8, bgcolor = color.new(color.black, 10), border_width = 1)
 f_c(int c, int r, string s, color col = color.white, string tt = '') =>
     table.cell(tb, c, r, s, text_color = col, text_size = size.small, text_halign = c == 0 ? text.align_left : text.align_center, tooltip = tt)
@@ -765,11 +781,11 @@ if barstate.islast
             sm := tk + ' is ' + str.tostring(math.abs(gp) * 100, '#') + '% ' + (gp < 0 ? 'below' : 'above') + ' the peer line (' + NM.get(win) + ')' + (na(us) ? '; usual gap N/A' : ', usually ' + f_pc(math.exp(us) - 1) + ', so ' + f_pc(math.exp(math.log(1 + gp) - us) - 1) + ' vs usual') + '. In this sector the gap signal: ' + g1 + '; the change signal: ' + h1 + '. A question, not a buy or sell signal: check it against the fair value and the scorecard.'
         else
             sm := 'No reliable peer model for ' + tk + '. A: ' + (why.get(0) == '' ? 'N/A for this stock' : why.get(0)) + '. B: ' + (why.get(1) == '' ? 'N/A for this stock' : why.get(1)) + '. C: ' + (why.get(2) == '' ? 'N/A for this stock' : why.get(2)) + '.'
-        f_c(0, 5, sm, win >= 0 ? color.yellow : color.orange)
+        f_c(0, 5, f_wrap(sm, 120), win >= 0 ? color.yellow : color.orange)
         table.merge_cells(tb, 0, 5, 11, 5)
-        f_c(0, 6, 'Peers with price, EPS and book value today: ' + str.tostring(npe) + ' of ' + str.tostring(nent) + (miss == '' ? '' : ' (missing: ' + miss + ')'), npe < 6 ? color.orange : color.gray)
+        f_c(0, 6, f_wrap('Peers with price, EPS and book value today: ' + str.tostring(npe) + ' of ' + str.tostring(nent) + (miss == '' ? '' : ' (missing: ' + miss + ')'), 120), npe < 6 ? color.orange : color.gray)
         table.merge_cells(tb, 0, 6, 11, 6)
-        f_c(0, 7, 'Display only. Peers only: a sector-wide bubble lifts the line too. A peer\'s latest book value per share can be off around a bonus issue (TradingView data); the robust lines limit the effect. P/E vs past growth stands in for expected growth (no forecasts for peers); in cyclical sectors its slope is often not above 0.', color.gray)
+        f_c(0, 7, f_wrap('Display only. Peers only: a sector-wide bubble lifts the line too. A one-off loss or provision cuts ROE and growth for a year, so the stock can sit far above the line while the market looks through it: a large Change vs usual flags it. A peer\'s latest book value per share can be off around a bonus issue (TradingView data); the robust lines limit the effect. P/E vs past growth stands in for expected growth (no forecasts for peers); its slope is often below 0 (the market expects fast growth to fade, and in cyclical sectors P/E is lowest at the peak).', 120), color.gray)
         table.merge_cells(tb, 0, 7, 11, 7)
         // drop the live column
         for i = 1 to 13
