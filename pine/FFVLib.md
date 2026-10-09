@@ -1239,6 +1239,110 @@ export cardRows(table t, int row, Card c, array<color> cl, string ts, array<stri
                     t.cell(j - 1, r, info.get(6 * k + j), text_color = color.gray, bgcolor = cl.get(1), text_size = ts, tooltip = info.get(6 * k + 5))
                 r += 1
     r
+// ==========================================
+// MONTE CARLO: random numbers, the history pool, the block length, the paths
+// ==========================================
+// @type Wichmann-Hill (2006) generator: four multiplicative congruential generators, period about 2^121. Plain arithmetic, so a copy in any language gives the same numbers from the same seeds.
+// @field a First state.
+// @field b Second state.
+// @field c Third state.
+// @field d Fourth state.
+export type WH
+    float a = 123456789.0
+    float b = 987654321.0
+    float c = 192837465.0
+    float d = 564738291.0
+// x mod m for whole numbers below 2^53 (the products here stay under 1.1e14, so this is exact).
+f_imod(float x, float m) =>
+    x - m * math.floor(x / m)
+// @function The next uniform number in [0, 1).
+export method nxt(WH g) =>
+    g.a := f_imod(11600.0 * g.a, 2147483579.0)
+    g.b := f_imod(47003.0 * g.b, 2147483543.0)
+    g.c := f_imod(23000.0 * g.c, 2147483423.0)
+    g.d := f_imod(33000.0 * g.d, 2147483123.0)
+    float w = g.a / 2147483579.0 + g.b / 2147483543.0 + g.c / 2147483423.0 + g.d / 2147483123.0
+    w - math.floor(w)
+// @function The quarters the Monte Carlo draws from: the n quarters before the open one (oldest first) whose rate, stage-1 growth and terminal growth (columns c0 to c0 + 2) are known at that quarter and the one before, and whose rate source (c0 + 3) and growth parts (c0 + 4) did not change between them. A change across a switch is a data artefact, not a revision: it is skipped and counted.
+// @returns [lags, rate changes, growth changes, terminal changes, skipped].
+export f_pool(matrix<float> hm, int hq, int n, int c0) =>
+    lg = array.new_int()
+    dr = array.new_float()
+    dg = array.new_float()
+    dt = array.new_float()
+    int sk = 0
+    int top = math.min(n, math.min(hq, 127) - 1)
+    if top >= 1
+        for lag = top to 1
+            a = hm.row((hq - lag) % 128)
+            b = hm.row((hq - lag - 1) % 128)
+            ok = true
+            for c = c0 to c0 + 2
+                ok := ok and not na(a.get(c)) and not na(b.get(c))
+            if ok and a.get(c0 + 3) == b.get(c0 + 3) and a.get(c0 + 4) == b.get(c0 + 4)
+                lg.push(lag)
+                dr.push(a.get(c0) - b.get(c0))
+                dg.push(a.get(c0 + 1) - b.get(c0 + 1))
+                dt.push(a.get(c0 + 2) - b.get(c0 + 2))
+            else if ok
+                sk += 1
+    [lg, dr, dg, dt, sk]
+// Sum of x[i0 + t] * x[j0 + t] for t = 0 .. len - 1.
+f_dot(array<float> x, int i0, int j0, int len) =>
+    float s = 0.0
+    if len > 0
+        for t = 0 to len - 1
+            s += x.get(i0 + t) * x.get(j0 + t)
+    s
+// @function Optimal stationary-bootstrap block length of one series (Politis and White 2004, with the Patton, Politis and White 2009 correction), computed as the Python arch package does. na when it cannot be computed (a series that never moves).
+export f_pwb(array<float> x) =>
+    int n = x.size()
+    float mu = x.avg()
+    e = array.new_float()
+    for v in x
+        e.push(v - mu)
+    int kn = math.max(5, int(math.floor(math.log10(n))))
+    int mmax = int(math.ceil(math.sqrt(n))) + kn
+    float cv = 2 * math.sqrt(math.log10(n) / n)
+    acv = array.new_float(mmax + 1, 0.0)
+    ac = array.new_float(mmax + 1, na)
+    int om = -1
+    for i = 0 to mmax
+        float v1 = f_dot(e, i + 1, i + 1, n - i - 1)
+        float v2 = f_dot(e, 0, 0, n - i - 1)
+        float cp = f_dot(e, i, 0, n - i)
+        acv.set(i, cp / n)
+        ac.set(i, v1 * v2 > 0 ? math.abs(cp) / math.sqrt(v1 * v2) : na)
+        if i >= kn and om < 0
+            all_in = true
+            for j = i - kn to i - 1
+                all_in := all_in and ac.get(j) < cv
+            om := all_in ? i - kn : -1
+    int m = math.min(om >= 0 ? 2 * math.max(om, 1) : mmax, mmax)
+    float g = 0.0
+    float lr = acv.get(0)
+    for k = 1 to m
+        float lam = k / m <= 0.5 ? 1.0 : 2 * (1 - k / m)
+        g += 2 * lam * k * acv.get(k)
+        lr += 2 * lam * acv.get(k)
+    float b = lr != 0 ? math.pow(2 * g * g / (2 * lr * lr), 1.0 / 3) * math.pow(n, 1.0 / 3) : na
+    b > 0 ? b : na
+// @function The block length for the joint draws: the largest of the three series' optimal lengths, n^(1/3) when none can be computed, held inside [1, ceil(min(3 sqrt(n), n / 3))] (the upper bound the method uses).
+export f_blen(array<float> a, array<float> b, array<float> c) =>
+    int n = a.size()
+    float x = math.max(nz(f_pwb(a), 0), nz(f_pwb(b), 0), nz(f_pwb(c), 0))
+    float bmax = math.ceil(math.min(3 * math.sqrt(n), n / 3.0))
+    math.max(1.0, math.min(x > 0 ? x : math.pow(n, 1.0 / 3), bmax))
+// @function One stationary-bootstrap path (Politis and Romano 1994) of h positions in a pool of n: a random start, then each step either moves to the next quarter (wrapping at the end) or, with probability 1 / blen, jumps to a new random quarter.
+export f_path(WH g, int n, float blen, int h) =>
+    out = array.new_int()
+    int i = int(math.floor(g.nxt() * n))
+    out.push(i)
+    if h > 1
+        for s = 2 to h
+            i := g.nxt() < 1.0 / blen ? int(math.floor(g.nxt() * n)) : (i + 1) % n
+            out.push(i)
+    out
 // @function The indicator's long text number `id`.
 // @param id Text number.
 // @returns The text, or an empty string for an unknown number.
@@ -1358,6 +1462,10 @@ export tx(int id) =>
         115 => 'Nine binary tests of profitability, leverage / liquidity and operating efficiency.'
         116 => '(Net Income - Operating Cash Flow) / Total Assets.\n\nSloan (1996) is a RETURNS anomaly, not a fraud test. Beneish M-Score (the Z+M matrix, in the balance sheet and red-flag tooltips) is the manipulation model.'
         117 => 'COMP DCF GRA EPV RIM R40 PE PS FCF PB TBV EV CF AFFO ACQ OE RNPV ECF ADCF UNB APV EVA DDM'
+        118 => 'How often the current value lands nearest each scenario when the assumptions are revised as much as they have been within a year. It is not a forecast of the value a year ahead: earnings and cash flows stay as they are now.\n\nEach of {0} draws replays a 4-quarter path through the last {1} stored quarters (stationary block bootstrap, Politis and Romano; mean block {2,number,#.#} quarters by the Politis-White rule; Wichmann-Hill random numbers with a fixed seed, so a reload gives the same result). The discount rates move by the summed risk-free changes along the path, stage-1 and terminal growth by their summed changes, and each own multiple takes its value at the last quarter of the path. Rules follow the growth draw on the Bear/Bull scale; the Acquirer multiple stays at Base.\n\nBear / Base / Bull: the draws nearest each case (cut halfway between them; beyond Bear counts as Bear, beyond Bull as Bull). P > price: the draws above the current price. Hover a cell for its 95% error.\n\nQuarterly changes skipped because the rate source or the growth parts switched (a data artefact, not a revision): {3}.\n\nMostly Bear and Bull with little Base: the scenario shifts are narrow next to how far the inputs really move.'
+        119 => 'N/A: needs {0} stored quarters with the rate, growth and terminal growth known (the Bear/Bull minimum); has {1}.'
+        120 => "\n\nOwn-multiple model: its Bear and Bull are percentiles of the same quarters the draws replay, so its split is largely set by construction. The information is in the intrinsic rows and the fair value."
+        121 => '{0} of {1} draws priced.'
         => ''
 
 // @function Altman Z + Beneish M quadrant: [label, colour index into cl (3 good, 5 amber, 4 bad, -1 red), tooltip].
