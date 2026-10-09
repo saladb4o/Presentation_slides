@@ -1338,6 +1338,46 @@ export f_path(WH g, int n, float blen, int h) =>
             i := g.nxt() < 1.0 / blen ? int(math.floor(g.nxt() * n)) : (i + 1) % n
             out.push(i)
     out
+// @function One driver's own pool, for when the joint pool is too short: the quarterly changes of column c over the n quarters before the open one (oldest first), where c is known at that quarter and the one before and the switch column cs (rate source or growth parts) did not change between them.
+// @returns The changes.
+export f_pool1(matrix<float> hm, int hq, int n, int c, int cs) =>
+    ch = array.new_float()
+    int top = math.min(n, math.min(hq, 127) - 1)
+    if top >= 1
+        for lag = top to 1
+            int ra = (hq - lag) % 128
+            int rb = (hq - lag - 1) % 128
+            float a = hm.get(ra, c)
+            float b = hm.get(rb, c)
+            if not na(a) and not na(b) and hm.get(ra, cs) == hm.get(rb, cs)
+                ch.push(a - b)
+    ch
+// @function The quarterly changes of a year-on-year growth rate built from column c (a TTM total, such as revenue): growth at a quarter is its total against the one 4 quarters before, and each change needs the total at that quarter, the one before, and 4 quarters before each (non-zero).
+// @returns The changes, oldest first.
+export f_pool_yoy(matrix<float> hm, int hq, int n, int c) =>
+    ch = array.new_float()
+    int top = math.min(n, math.min(hq, 127) - 5)
+    if top >= 1
+        for lag = top to 1
+            float a0 = hm.get((hq - lag) % 128, c)
+            float a4 = hm.get((hq - lag - 4) % 128, c)
+            float b0 = hm.get((hq - lag - 1) % 128, c)
+            float b4 = hm.get((hq - lag - 5) % 128, c)
+            if not na(a0) and not na(a4) and not na(b0) and not na(b4) and a4 != 0 and b4 != 0
+                ch.push((a0 - a4) / math.abs(a4) - (b0 - b4) / math.abs(b4))
+    ch
+// @function nd draws of one driver on its own: each the sum of its changes along an h-step stationary-bootstrap path, the block length that series' own optimal one.
+// @returns The nd sums, in draw order.
+export f_draws1(WH g, array<float> ch, int nd, int h) =>
+    out = array.new_float()
+    int n = ch.size()
+    float bl = f_blen(ch, ch, ch)
+    for i = 1 to nd
+        float s = 0.0
+        for j in f_path(g, n, bl, h)
+            s += ch.get(j)
+        out.push(s)
+    out
 // @function The indicator's long text number `id`.
 // @param id Text number.
 // @returns The text, or an empty string for an unknown number.
@@ -1422,8 +1462,8 @@ export tx(int id) =>
         80 => '%\n(Hyper-Growth Premium Unlocked!)'
         81 => 'N/A (needs a year-ago revenue)'
         82 => '\n\nASSUMPTION: fixed EV/Sales rule -- 1x + 0.25x per Rule-of-40 point (floor 1.5x); the Rule-of-X multiple (12x + 0.3x per point above 65, never below that base) phases in as Rule-of-X goes from 55 to 65; capped at 25x.'
-        83 => 'Needs positive EPS. Growth capped at 15%; the 4.4/Y bond-yield factor is capped at 1.0.'
-        84 => 'Bear/Bull shift the EBIT multiple by +/-'
+        83 => 'Needs positive EPS. Growth is the stage-1 growth, held to 0-15%, so Bear/Bull move it with the growth axis (at the 15% cap they equal Base); the 4.4/Y bond-yield factor is capped at 1.0.'
+        84 => 'Bear/Bull N/A: a fixed EBIT multiple has no history to draw a move from. Its Base stays in the blend, and in the blend\'s Bear/Bull.'
         85 => 'ASSUMPTION (not fitted, no trial-outcome data): pipeline = 5x annual R&D, 15% risk-adjusted, added to the DCF firm value. In the Omnibus it replaces the DCF, which it contains.'
         86 => '% = net PPE / invested capital (30-90%). NetCo = that share of invested capital (the network) at a RAB multiple; ServeCo = the rest of the unlevered FCF and NOPAT through the DCF at WACC. Less '
         87 => 'Unlevered FCF (FCF + after-tax interest) and NOPAT at WACC, less '
@@ -1457,10 +1497,11 @@ export tx(int id) =>
         115 => 'Nine binary tests of profitability, leverage / liquidity and operating efficiency.'
         116 => '(Net Income - Operating Cash Flow) / Total Assets.\n\nSloan (1996) is a RETURNS anomaly, not a fraud test. Beneish M-Score (the Z+M matrix, in the balance sheet and red-flag tooltips) is the manipulation model.'
         117 => 'COMP DCF GRA EPV RIM R40 PE PS FCF PB TBV EV CF AFFO ACQ OE RNPV ECF ADCF UNB APV EVA DDM'
-        118 => 'How often the current value lands nearest each scenario when the assumptions are revised as much as they have been within a year. It is not a forecast of the value a year ahead: earnings and cash flows stay as they are now.\n\nEach of {0} draws replays a 4-quarter path through the last {1} stored quarters (stationary block bootstrap, Politis and Romano; mean block {2,number,#.#} quarters by the Politis-White rule; Wichmann-Hill random numbers with a fixed seed, so a reload gives the same result). The discount rates move by the summed risk-free changes along the path, stage-1 and terminal growth by their summed changes, and each own multiple takes its value at the last quarter of the path. Rules follow the growth draw on the Bear/Bull scale; the Acquirer multiple stays at Base.\n\nBear / Base / Bull: the draws nearest each case (cut halfway between them; beyond Bear counts as Bear, beyond Bull as Bull). P > price: the draws above the current price. Hover a cell for its 95% error.\n\nQuarterly changes skipped because the rate source or the growth parts switched (a data artefact, not a revision): {3}.\n\nMostly Bear and Bull with little Base: the scenario shifts are narrow next to how far the inputs really move.'
+        118 => 'How often the current value lands nearest each scenario when the assumptions are revised as much as they have been within a year. It is not a forecast of the value a year ahead: earnings and cash flows stay as they are now.\n\nEach of {0} draws replays a 4-quarter path through the last {1} stored quarters (stationary block bootstrap, Politis and Romano; mean block {2,number,#.#} quarters by the Politis-White rule; Wichmann-Hill random numbers with a fixed seed, so a reload gives the same result). The discount rates move by the summed risk-free changes along the path, stage-1 and terminal growth by their summed changes (Graham with stage-1), and each own multiple takes its value at the last quarter of the path. Rule of 40 draws its revenue growth along its own paths (it needs revenue 5 quarters back); the Acquirer multiple stays at Base. These are the same draws whose 25th / 75th percentiles set each axis\'\'s Bear / Bull.\n\nBear / Base / Bull: the draws nearest each case (cut halfway between them; beyond Bear counts as Bear, beyond Bull as Bull). P > price: the draws above the current price. Hover a cell for its 95% error.\n\nQuarterly changes skipped because the rate source or the growth parts switched (a data artefact, not a revision): {3}.\n\nA row moved by one driver has a split largely set by construction (its Bear / Bull are that driver\'\'s percentiles); the information is in the rows several drivers move together and in the fair value.'
         119 => 'N/A: needs {0} stored quarters with the rate, growth and terminal growth known (the Bear/Bull minimum); has {1}.'
         120 => "\n\nOwn-multiple model: its Bear and Bull are percentiles of the same quarters the draws replay, so its split is largely set by construction. The information is in the intrinsic rows and the fair value."
         121 => '{0} of {1} draws priced.'
+        122 => '\n\nBear / Bull moves: the 25th / 75th percentile of {0} bootstrapped 4-quarter changes of the stock\'\'s stored quarters (drivers drawn {1}; a side on the wrong side of 0 gives no move).'
         => ''
 
 // @function Altman Z + Beneish M quadrant: [label, colour index into cl (3 good, 5 amber, 4 bad, -1 red), tooltip].

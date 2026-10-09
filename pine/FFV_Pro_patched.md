@@ -167,12 +167,14 @@ enum AddOn
 enum Lever
     none = 'none'
     pctl = 'own-history percentiles'
-    scale = 'scale'
-    step = 'step'
+    g1 = 'stage-1 growth'
+    revg = 'revenue growth'
+    fixed = 'fixed'
 // A row's private scenario rule. pctl: Bear/Bull take the low / high percentile of the
-// ticker's own multiple (held at the average when on the wrong side of it) | scale: Graham's
-// growth x0.5 / x1.5 | step: Rule of 40's revenue growth -/+ a shift, Acquirer's multiple -/+ a
-// step (Bear floor 1x). Each follows its axis position, so a partial move scales it.
+// ticker's own multiple (held at the average when on the wrong side of it) | g1: Graham's
+// growth is the moved stage-1 growth, held 0-15% | revg: Rule of 40's revenue growth moves by
+// its own drawn changes | fixed: Acquirer's multiple has nothing to draw, so no Bear/Bull.
+// Each follows its axis position, so a partial move scales it.
 // STREAMS: every input a model reads, each formed once per bar in the stream table
 // (f_drivers). f_sunit states each stream's unit.
 enum Sx
@@ -304,9 +306,6 @@ type Model
     AddOn addon = AddOn.none
     string src = ''
     Lever lk = Lever.none
-    float lv_bear = 0.0
-    float lv_bull = 0.0
-    float lv_floor = na
     float m0 = na
     bool tick = true
     float dflt = na
@@ -339,7 +338,7 @@ type Model
 // Row fields: s_* the streams by role (cash flow, earnings, return on capital, capital,
 // driver, next year's driver, a rule's growth and second input) | need1/2: streams that must
 // be positive for a value (a relative multiple is off without them) | t1/t2: tier sources (the row takes the worse tier) | src: the
-// row a reference row builds on | lk, lv_*: the lever, its Bear / Bull moves, a Bear floor |
+// row a reference row builds on | lk: the lever |
 // m0: a rule multiple's target | tick: listed in Omnibus Members (bar 0) | dflt: an own multiple with no
 // history | rkv: P/B drops value-trap quarters. Derived on bar 0: src_i, held_by (the
 // row that holds this one: rNPV holds the DCF, P/FCF holds P/AFFO), ps (per-share streams).
@@ -364,8 +363,10 @@ method txt(Claims c) =>
         t += (i == 0 ? '' : i == k.size() - 1 ? ' and ' : ', ') + str.tostring(x)
     t
 // The per-bar inputs of the model stage (filled by f_drivers; f_kin is its only reader): the
-// stream table and each stream's provenance tier, the base rate of each level, today's
-// scenario shifts, growth, and the add-ons' inputs (totals). ev, mc, roe, wacc, cod: EV, market
+// stream table and each stream's provenance tier, the base rate of each level, each axis's
+// Bear / Bull move (lo: the 25th percentile of its drawn 4-quarter changes, at most 0; hi: the
+// 75th, at least 0; na: too few quarters; set on the last bar) for the rate, stage-1 growth,
+// terminal growth and Rule of 40's revenue growth, growth, and the add-ons' inputs (totals). ev, mc, roe, wacc, cod: EV, market
 // cap, ROE on average parent equity, WACC before its 2% floor, the synthetic cost of debt.
 type Drv
     map<Sx, float> s
@@ -374,9 +375,14 @@ type Drv
     float r_unlev = na
     float r_eq = na
     float r_bank = na
-    float sh_r = 0.0
-    float sh_g = 0.0
-    float sh_t = 0.0
+    float r_lo = na
+    float r_hi = na
+    float g_lo = na
+    float g_hi = na
+    float t_lo = na
+    float t_hi = na
+    float v_lo = na
+    float v_hi = na
     float g1 = na
     float gcap = na
     float gT = na
@@ -450,8 +456,9 @@ f_add(Model m) =>
 // A SCENARIO: a position on each of four axes, each in [-1, +1]: r the discount rate, g stage-1
 // growth, t terminal growth, m the own multiple. Bear is r +1 and the rest -1, Bull the reverse,
 // Base all 0, and any point between is a partial move. dr: a rate bump on top (the sensitivity
-// readout) | g1: the stage-1 growth itself (the reverse DCF solves for it) | dg, dt: growth and
-// terminal-growth moves on top | sim: a Monte Carlo draw (own multiples take the row's mq).
+// readout) | g1: the stage-1 growth itself (the reverse DCF solves for it) | dg, dt, dv: growth,
+// terminal-growth and revenue-growth moves on top | sim: a Monte Carlo draw (own multiples take
+// the row's mq).
 type Pos
     float r = 0.0
     float g = 0.0
@@ -461,19 +468,18 @@ type Pos
     float g1 = na
     float dg = 0.0
     float dt = 0.0
+    float dv = 0.0
     bool sim = false
 // THE ONE MOVE: a quote moved by d and held inside its domain [lo, hi] (na = open), but never
 // past Base: an edge only stops a move, it never lifts Base (a rate under 2% keeps Bull at Base).
 f_mv(float base, float d, float lo, float hi) =>
     float x = base + d
     math.min(math.max(x, na(lo) ? x : math.min(lo, base)), na(hi) ? x : math.max(hi, base))
-// A row's private scenario rule, following its axis position p: Graham scales its growth x0.5
-// at Bear and x1.5 at Bull (never under 0 for a draw past Bear), Rule of 40 shifts revenue
-// growth, Acquirer's steps its multiple (its Bear never under 1x).
-f_lever(Model m, float p, float base) =>
-    float k = math.abs(p)
-    float lv = p < 0 ? m.lv_bear : m.lv_bull
-    m.lk == Lever.scale ? math.max(base * ((1 - k) + k * lv), 0.0) : m.lk == Lever.step ? f_mv(base, k * lv, p < 0 ? m.lv_floor : na, na) : base
+// An axis's move at position p: the Bear side's move for p < 0 on the growth axes (or p > 0 on
+// the rate axis, whose Bear is a rise), scaled by how far along p is; 0 at Base and on an axis
+// with too few quarters (na).
+f_ax(float p, float lo, float hi) =>
+    p > 0 ? p * nz(hi) : p < 0 ? -p * nz(lo) : 0.0
 // An own multiple at position p: its average at Base, moving to its low (Bear) or high (Bull)
 // percentile, and held at the average when that percentile is on the wrong side of it.
 f_mpos(Model m, float p) =>
@@ -482,13 +488,13 @@ f_mpos(Model m, float p) =>
 f_rate0(Drv d, Level l) =>
     l == Level.firm ? d.r_firm : l == Level.unlev ? d.r_unlev : l == Level.equity ? d.r_eq : d.r_bank
 // THE ONE INPUTS PATH, for Base and every scenario alike: each quote moved along its axis
-// (rate +/-sh_r, floor 2% | stage-1 growth +/-sh_g inside -5% and the sector cap | terminal
-// growth +/-sh_t, floor 0), the one terminal cap, the row's lever and its streams. A zero move
-// returns Base exactly. Fills x in place.
+// (rate r_lo / r_hi, floor 2% | stage-1 growth g_lo / g_hi inside -5% and the sector cap |
+// terminal growth t_lo / t_hi, floor 0), the one terminal cap, the row's lever and its streams.
+// A zero move returns Base exactly. Fills x in place.
 f_kin(Model m, Drv d, Pos p, KIn x) =>
-    x.rate := f_mv(f_rate0(d, m.level), p.r * d.sh_r + p.dr, 0.02, na)
-    x.g1 := nz(p.g1, f_mv(d.g1, p.g * d.sh_g + p.dg, -0.05, d.gcap))
-    x.gT := math.min(f_mv(d.gT, p.t * d.sh_t + p.dt, 0.0, na), x.rate - TCAP)
+    x.rate := f_mv(f_rate0(d, m.level), f_ax(p.r, d.r_lo, d.r_hi) + p.dr, 0.02, na)
+    x.g1 := nz(p.g1, f_mv(d.g1, f_ax(p.g, d.g_lo, d.g_hi) + p.dg, -0.05, d.gcap))
+    x.gT := math.min(f_mv(d.gT, f_ax(p.t, d.t_lo, d.t_hi) + p.dt, 0.0, na), x.rate - TCAP)
     x.yrs := m.eng == Eng.rim ? d.yrs_rim : d.yrs
     x.cf := m.s_cf == Sx.fcfe ? d.s.get(Sx.ni_ps) * (1 - x.g1 / d.s.get(Sx.roe_n)) : d.s.get(m.s_cf)
     x.earn := d.s.get(m.s_earn)
@@ -496,8 +502,9 @@ f_kin(Model m, Drv d, Pos p, KIn x) =>
     x.cap := d.s.get(m.s_cap)
     x.drv := d.s.get(m.s_drv)
     x.drv_f := d.s.get(m.s_fwd)
-    x.mult := m.lk == Lever.pctl ? (p.sim ? m.mq : f_mpos(m, p.m)) : f_lever(m, p.m, m.m0)
-    x.gx := f_lever(m, p.g, d.s.get(m.s_gx))
+    x.mult := m.lk == Lever.pctl ? (p.sim ? m.mq : f_mpos(m, p.m)) : m.m0
+    float gx = d.s.get(m.s_gx)
+    x.gx := m.lk == Lever.g1 ? math.max(math.min(x.g1, 0.15), 0.0) : m.lk == Lever.revg ? gx + f_ax(p.g, d.v_lo, d.v_hi) + p.dv : gx
     x.adj := d.s.get(m.s_adj)
     x
 // A row's add-on, a total: added before the claims come off and before the one division.
@@ -543,7 +550,7 @@ f_eval(Model m, Drv d, Claims c, Pos p, int k) =>
 // A row's VIEW: 0 own history (a multiple of the ticker's own past), 1 a rule (Graham, Rule
 // of 40, Acquirer's), 2 intrinsic (perpetuities, growth paths, excess returns).
 f_view(Model m) =>
-    m.lk == Lever.pctl ? 0 : m.lk == Lever.scale or m.lk == Lever.step ? 1 : 2
+    m.lk == Lever.pctl ? 0 : m.lk == Lever.none ? 2 : 1
 f_stier(Drv d, Sx s) =>
     s == Sx.none ? 3 : nz(d.t.get(s), 3)
 // Provenance tier of a row: the worse of its tier sources' tiers.
@@ -631,14 +638,7 @@ i_lr_rgdp = input.float(0.0, 'Long-run real GDP growth % (0 = auto by currency)'
 i_financial_model_type = input.string('Auto (by industry)', 'Financials Valuation Model', options = ['Auto (by industry)', 'Equity Model (Bank/Insurer)', 'Entity Model (Brokerage/FinTech)'], group = group_industry, tooltip = 'Auto: banks and insurers use the Equity model (Net Income / Book); brokers, asset managers and lenders use the Entity model (NOPAT / Invested Capital).')
 group_scen = 'Scenario Analysis (Bear / Base / Bull)'
 i_scen_fair_band = input.float(15.0, 'Fair-value band +/- %', group = group_scen, minval = 0, maxval = 40, step = 1, tooltip = 'A scenario cell within this distance of the current price shades amber. Beyond it, green (price below the case) or red (price above it).\n\nSet to 0 for a hard red/green flip at the price.') / 100
-i_scen_min_n = input.int(8, 'Min quarters for multiple percentiles', group = group_scen, minval = 4, maxval = 20, tooltip = 'Below this many stored observations the Bear/Bull cells stay blank instead of quoting a quartile built on a few points.')
-i_scen_lo_pct = input.float(25.0, 'Bear percentile', group = group_scen, minval = 5, maxval = 45, step = 5) / 100
-i_scen_hi_pct = input.float(75.0, 'Bull percentile', group = group_scen, minval = 55, maxval = 95, step = 5) / 100
-i_scen_wacc_bps = input.float(100, 'DCF scenario: WACC shift (bps)', group = group_scen, minval = 0, maxval = 400, step = 25, tooltip = 'Bear raises the discount rate by this much and lowers terminal growth; Bull does the reverse.') / 10000
-i_scen_g_bps = input.float(50, 'DCF scenario: terminal growth shift (bps)', group = group_scen, minval = 0, maxval = 200, step = 25) / 10000
-i_scen_growth_bps = input.float(200, 'DCF scenario: explicit growth shift (bps)', group = group_scen, minval = 0, maxval = 1000, step = 50, tooltip = 'Bear lowers the stage-1 growth rate by this much, Bull raises it.') / 10000
-i_scen_acq_delta = input.float(2.0, "Acquirer's Multiple: EBIT multiple +/-", group = group_scen, minval = 0, maxval = 6, step = 0.5)
-i_scen_r40_bps = input.float(300, 'Rule of 40: revenue growth shift (bps)', group = group_scen, minval = 0, maxval = 1000, step = 50) / 10000
+i_scen_min_n = input.int(8, 'Min quarters for Bear / Bull', group = group_scen, minval = 4, maxval = 20, tooltip = "Bear / Bull come from the stock's own stored quarters: the 25th / 75th percentile of its own multiples, and of 1,000 bootstrapped 4-quarter changes of the rate, stage-1 growth, terminal growth and (Rule of 40) revenue growth. Below this many quarters an axis does not move and shows N/A.")
 i_rab_allowed_return = input.float(0.0, 'Regulatory Allowed Return %', group = group_industry, minval = 0.0, maxval = 20.0, step = 0.25, tooltip = 'The post-tax return the regulator permits on the asset base.\n\n0 = assume the allowed return equals WACC, giving a 1.0x RAB multiple.') / 100
 group_factors = 'Factor Models (VN 5-Factor)'
 i_use_factors = input.bool(true, '✨ Use Live Index-Based Factor Premium', group = group_factors)
@@ -843,9 +843,9 @@ var Model M_DCF = f_add(Model.new('DCF', 'DCF (McKinsey/ROIC)', 'DCF (McKinsey)'
 if barstate.isfirst
     f_add(Model.new('RIM', 'Residual Income (RIM)', 'Residual Income', level = use_bank_model ? Level.bank : Level.firm, eng = Eng.rim, fam = 1, s_earn = use_bank_model ? Sx.ni : Sx.nopat, s_cap = use_bank_model ? Sx.book : Sx.ic, t2 = use_bank_model ? Sx.book : Sx.none))
     f_add(Model.new('EPV', 'EPV (Greenwald)', 'EPV (Greenwald)', eng = Eng.perp, fam = 1, s_cf = Sx.nopat_n))
-    f_add(Model.new('GRA', 'Graham', 'Graham Number', level = Level.equity, eng = Eng.graham, fam = 1, s_earn = Sx.eps_pos, s_gx = Sx.g_gra, s_adj = Sx.yadj, need1 = Sx.eps_pos, lk = Lever.scale, lv_bear = 0.5, lv_bull = 1.5))
-    f_add(Model.new('R40', 'Rule of 40', 'Rule of 40', eng = Eng.rulex, fam = 2, s_drv = Sx.rev, s_gx = Sx.rev_g, s_adj = Sx.fcf_margin, t2 = Sx.fcf_margin, lk = Lever.step, lv_bear = -i_scen_r40_bps, lv_bull = i_scen_r40_bps))
-    f_add(Model.new('ACQ', "Acquirer's Multiple", "Acquirer's Mult", fam = 5, s_drv = Sx.ebit, need1 = Sx.ebit, lk = Lever.step, lv_bear = -i_scen_acq_delta, lv_bull = i_scen_acq_delta, lv_floor = 1.0, m0 = i_acquirer_mult))
+    f_add(Model.new('GRA', 'Graham', 'Graham Number', level = Level.equity, eng = Eng.graham, fam = 1, s_earn = Sx.eps_pos, s_gx = Sx.g_gra, s_adj = Sx.yadj, need1 = Sx.eps_pos, lk = Lever.g1))
+    f_add(Model.new('R40', 'Rule of 40', 'Rule of 40', eng = Eng.rulex, fam = 2, s_drv = Sx.rev, s_gx = Sx.rev_g, s_adj = Sx.fcf_margin, t2 = Sx.fcf_margin, lk = Lever.revg))
+    f_add(Model.new('ACQ', "Acquirer's Multiple", "Acquirer's Mult", fam = 5, s_drv = Sx.ebit, need1 = Sx.ebit, lk = Lever.fixed, m0 = i_acquirer_mult))
 var Model M_OE = f_add(Model.new('OE', "Owners' Earnings", "Owners' Earnings", level = Level.equity, eng = Eng.vdcf, fam = 3, s_cf = Sx.oe_ps, s_earn = Sx.oe_ps, need1 = Sx.oe_ps))
 // Bar 0: what the framework allocates, the Standard scope (every allocated multiple and
 // sector model, plus the absolute models the framework is named after), then the row checks.
@@ -1907,7 +1907,7 @@ if CK.dirty
         for [k, m] in MD
             if m.lk == Lever.pctl
                 m.hist := ST.lastn(Q_MULT + k, i_numQuarters, 1)
-                [a, sy, plo, phi] = f_ratio_stats(m.hist, i_useMean, m.dflt, i_scen_lo_pct, i_scen_hi_pct, i_scen_min_n)
+                [a, sy, plo, phi] = f_ratio_stats(m.hist, i_useMean, m.dflt, 0.25, 0.75, i_scen_min_n)
                 m.avg := a, m.syn := sy, m.plo := plo, m.phi := phi
             if CK.adv
                 [tw, te] = f_model_weight(ST.window(Q_FV + k, 20, 1, true), px, w_algo, i_w_horizon)
@@ -2028,9 +2028,6 @@ f_drivers(Clock ck, Drv d, Claims c) =>
     d.r_unlev := math.max(coe - (beta_mkt - ub) * calc_erp, math.min(nz(cod, base_rf_for_calc + 0.01), coe), 0.02)
     d.r_eq := coe
     d.r_bank := math.min(coe, 0.15)
-    d.sh_r := i_scen_wacc_bps
-    d.sh_g := i_scen_growth_bps
-    d.sh_t := i_scen_g_bps
     d.g1 := H_g1
     d.gcap := dynamic_growth_cap
     d.gT := gT
@@ -2248,6 +2245,83 @@ float st_md_t = nz(syminfo.target_price_median, syminfo.target_price_average)
 st_has = st_md_t > 0
 float st_lo_t = st_has ? nz(syminfo.target_price_low, st_md_t) : na
 float st_hi_t = st_has ? nz(syminfo.target_price_high, st_md_t) : na
+// ==============================================================
+// === THE DRAWS (last bar): Bear / Bull and the Monte Carlo ====
+// ==============================================================
+// Each draw is a 4-quarter path through the stored quarters of the own-multiple window, by the
+// stationary block bootstrap (FFVLib), summing each driver's quarterly changes along it. Bear /
+// Bull of each axis are the 25th / 75th percentile of its 1,000 sums (a side on the wrong side
+// of 0 gives 0), so each driver's Bear / Bull is the Monte Carlo's own 25 / 75 for it. The joint
+// pool (rate, stage-1 and terminal growth known together) keeps the drivers' co-movement, and
+// the Monte Carlo below replays those same draws. Joint pool short: each driver on its own pool;
+// still short: that axis does not move (N/A). Rule of 40's revenue growth needs revenue 5
+// quarters back, so it always has its own pool and paths. DS: per draw | rate, growth, terminal
+// sums, end quarter, revenue-growth sum. AXQ: quarters behind each axis.
+MC_N = 1000
+MC_H = 4
+var matrix<float> DS = matrix.new<float>(MC_N, 5, na)
+var array<int> AXQ = array.new_int(4, 0)
+int mc_q = 0
+int mc_sk = 0
+float mc_b = na
+f_draws(matrix<float> ds, int c, array<float> ch, float seed) =>
+    if ch.size() >= i_scen_min_n
+        for [i, v] in FL.f_draws1(FL.WH.new(a = seed), ch, MC_N, MC_H)
+            ds.set(i, c, v)
+// [25th percentile, at most 0 | 75th, at least 0] of a draw column (na without draws).
+f_side(matrix<float> ds, int c) =>
+    s = ds.col(c)
+    float lo = na
+    float hi = na
+    if not na(s.first())
+        s.sort()
+        lo := math.min(f_pct_sorted(s, 0.25), 0.0)
+        hi := math.max(f_pct_sorted(s, 0.75), 0.0)
+    [lo, hi]
+// Whether a row has an axis to move on: an own multiple its percentiles, Graham stage-1 growth, Rule of 40 revenue growth, Acquirer's none, any other row the
+// rate, growth or terminal axis. A row with none shows Bear / Bull N/A.
+f_moves(Model m) =>
+    switch m.lk
+        Lever.pctl => not na(m.plo)
+        Lever.g1 => not na(D.g_lo)
+        Lever.revg => not na(D.v_lo)
+        Lever.fixed => false
+        => not na(D.r_lo) or not na(D.g_lo) or not na(D.t_lo)
+if barstate.islast
+    DS.fill(na)
+    AXQ.fill(0)
+    [lg, cr, cg, ct, sk] = FL.f_pool(ST.v, ST.q, i_numQuarters, Q_MC)
+    mc_q := lg.size()
+    mc_sk := sk
+    if mc_q >= i_scen_min_n
+        mc_b := FL.f_blen(cr, cg, ct)
+        g = FL.WH.new()
+        for i = 0 to MC_N - 1
+            path = FL.f_path(g, mc_q, mc_b, MC_H)
+            float sr = 0.0, float sg = 0.0, float st = 0.0
+            for j in path
+                sr += cr.get(j)
+                sg += cg.get(j)
+                st += ct.get(j)
+            DS.set(i, 0, sr)
+            DS.set(i, 1, sg)
+            DS.set(i, 2, st)
+            DS.set(i, 3, lg.get(path.last()))
+        for c = 0 to 2
+            AXQ.set(c, mc_q)
+    else
+        for c = 0 to 2
+            ch = FL.f_pool1(ST.v, ST.q, i_numQuarters, Q_MC + c, Q_MC + (c == 1 ? 4 : 3))
+            AXQ.set(c, ch.size())
+            f_draws(DS, c, ch, 211111111.0 + c * 100000000.0)
+    rv = FL.f_pool_yoy(ST.v, ST.q, i_numQuarters, Q_REV)
+    AXQ.set(3, rv.size())
+    f_draws(DS, 4, rv, 511111111.0)
+    [rl, rh] = f_side(DS, 0)
+    [gl, gh] = f_side(DS, 1)
+    [tl, th] = f_side(DS, 2)
+    [vl, vh] = f_side(DS, 4)
+    D.r_lo := rl, D.r_hi := rh, D.g_lo := gl, D.g_hi := gh, D.t_lo := tl, D.t_hi := th, D.v_lo := vl, D.v_hi := vh
 B = array.new_float(16, na)
 att = array.new_float(4, na)
 rdcf = array.new_float(5, na)
@@ -2340,6 +2414,10 @@ if barstate.islast
                     ip_b := q
     ipos := close >= compositeLo and close <= compositeHi ? (ip_a + ip_b) / 2 : na
     ipos_txt := na(compositeLo) or na(compositeHi) ? 'N/A' : close < compositeLo ? 'below Bear' : close > compositeHi ? 'above Bull' : (ipos > 0 ? '+' : '') + str.tostring(ipos, '#.##')
+    for m in MD
+        if m.grp != Group.comp and not f_moves(m)
+            m.lo := na
+            m.hi := na
     // Shapley shares of the Bear gap: each axis's step, over the subsets without it, weighted by
     // the orders that add it at that point (n = 4: 1/4, 1/12, 1/12, 1/4 by subset size).
     B.set(0, finalFairValue)
@@ -2351,6 +2429,22 @@ if barstate.islast
                 int n = s % 2 + int(s / 2) % 2 + int(s / 4) % 2 + int(s / 8) % 2
                 phi += (n == 0 or n == 3 ? 0.25 : 1.0 / 12) * (B.get(s + bit) - B.get(s))
         att.set(a, phi)
+    // No member of the live blend has an axis to move on (a new listing): the blend's Bear / Bull
+    // are N/A, not Base. The Standard Composite as an Omnibus member moves with its members.
+    mv_std = false
+    for m in MD
+        mv_std := mv_std or (m.w > 0 and f_moves(m))
+    mv = mv_std
+    if omni_active
+        mv := false
+        for m in MD
+            mv := mv or (m.om and (m.grp == Group.comp ? mv_std : f_moves(m)))
+    if not mv
+        compositeLo := na
+        compositeHi := na
+        ipos := na
+        ipos_txt := 'N/A'
+        att.fill(na)
     // Order: a row whose Bear sits above its Base (or Bull below) keeps its value and is marked,
     // with the axis that moves it the wrong way at Bear.
     for [k, m] in MD
@@ -2364,71 +2458,50 @@ if barstate.islast
 // ==============================================================
 // === MONTE CARLO (last bar): how likely each scenario is ======
 // ==============================================================
-// Today's value replayed under assumption revisions the size of past years'. A draw is a
-// 4-quarter path through the stored quarters of the own-multiple window, by the stationary
-// block bootstrap (FFVLib): every discount rate moves by the path's summed risk-free changes (as
-// the Bear/Bull rate axis moves them all), stage-1 and terminal growth by their summed changes,
-// and each own multiple takes its value at the path's last quarter. Rules follow the growth
-// draw on the Bear/Bull scale (a draw the size of the Bear shift gives the Bear lever);
-// Acquirer's multiple stays at Base. Earnings and cash flows stay at today's. The live blend's
-// members (and the rows they build on) are priced on the one f_eval path, the blend on its Base
-// shares, and each value counted under the scenario it lands nearest (cut halfway Bear-Base and
-// Base-Bull) and against the price. MCC: a row per model, then the live blend | Bear, Base,
-// Bull, above the price, draws priced, draws where a member had no value (it keeps its Base).
-MC_N = 1000
-MC_H = 4
+// Today's value replayed under assumption revisions the size of past years': the draws above,
+// on the joint pool only (a driver's own pool would lose the co-movement the shares measure).
+// Every discount rate moves by the draw's summed risk-free change (as the Bear/Bull rate axis
+// moves them all), stage-1 and terminal growth by their sums (Graham's growth with stage-1),
+// Rule of 40's revenue growth by its own draw, and each own multiple takes its value at the
+// draw's end quarter; Acquirer's multiple stays at Base. Earnings and cash flows stay at
+// today's. The live blend's members (and the rows they build on) are priced on the one f_eval
+// path, the blend on its Base shares, and each value counted under the scenario it lands
+// nearest (cut halfway Bear-Base and Base-Bull) and against the price. MCC: a row per model,
+// then the live blend | Bear, Base, Bull, above the price, draws priced, draws where a member
+// had no value (it keeps its Base).
 MCC = matrix.new<float>(MD.size() + 1, 6, 0.0)
-int mc_q = 0
-int mc_sk = 0
-float mc_b = na
 f_mc_add(int r, float v, float lo, float b, float hi) =>
     if not na(v)
         int c = v <= (lo + b) / 2 ? 0 : v >= (b + hi) / 2 ? 2 : 1
         MCC.set(r, c, MCC.get(r, c) + 1)
         MCC.set(r, 3, MCC.get(r, 3) + (v > close ? 1 : 0))
         MCC.set(r, 4, MCC.get(r, 4) + 1)
-if barstate.islast
-    [lg, cr, cg, ct, sk] = FL.f_pool(ST.v, ST.q, i_numQuarters, Q_MC)
-    mc_q := lg.size()
-    mc_sk := sk
-    if mc_q >= i_scen_min_n
-        mc_b := FL.f_blen(cr, cg, ct)
-        int nb = MD.size()
-        need = array.new_bool(nb, false)
-        for [k, m] in MD
-            if m.live and m.grp != Group.comp and (m.w > 0 or m.om)
-                need.set(k, true)
-                if m.src_i >= 0
-                    need.set(m.src_i, true)
-        g = FL.WH.new()
-        for i = 1 to MC_N
-            path = FL.f_path(g, mc_q, mc_b, MC_H)
-            p = Pos.new(sim = true)
-            float dg = 0.0
-            for j in path
-                p.dr += cr.get(j)
-                dg += cg.get(j)
-                p.dt += ct.get(j)
-            if D.sh_g > 0
-                p.g := dg / D.sh_g
-            else
-                p.dg := dg
-            int qe = lg.get(path.last())
-            vj = array.new_float(nb, na)
-            for pass = 0 to 1
-                for [k, m] in MD
-                    if need.get(k) and (m.eng == Eng.ref) == (pass == 1)
-                        m.mq := ST.at(Q_MULT + k, qe)
-                        vj.set(k, f_eval(m, D, CL, p, 3))
-            nf = false
+if barstate.islast and mc_q >= i_scen_min_n
+    int nb = MD.size()
+    need = array.new_bool(nb, false)
+    for [k, m] in MD
+        if m.live and m.grp != Group.comp and (m.w > 0 or m.om)
+            need.set(k, true)
+            if m.src_i >= 0
+                need.set(m.src_i, true)
+    for i = 0 to MC_N - 1
+        p = Pos.new(dr = DS.get(i, 0), dg = DS.get(i, 1), dt = DS.get(i, 2), dv = nz(DS.get(i, 4)), sim = true)
+        int qe = int(DS.get(i, 3))
+        vj = array.new_float(nb, na)
+        for pass = 0 to 1
             for [k, m] in MD
-                if need.get(k)
-                    float v = vj.get(k)
-                    nf := nf or (na(v) and (m.w > 0 or m.om))
-                    f_mc_add(k, na(v) ? na : math.max(v, 0.0), m.lo, m.fv, m.hi)
-            [sv, bv] = f_bv(vj, false)
-            f_mc_add(nb, bv, compositeLo, finalFairValue, compositeHi)
-            MCC.set(nb, 5, MCC.get(nb, 5) + (nf ? 1 : 0))
+                if need.get(k) and (m.eng == Eng.ref) == (pass == 1)
+                    m.mq := ST.at(Q_MULT + k, qe)
+                    vj.set(k, f_eval(m, D, CL, p, 3))
+        nf = false
+        for [k, m] in MD
+            if need.get(k)
+                float v = vj.get(k)
+                nf := nf or (na(v) and (m.w > 0 or m.om))
+                f_mc_add(k, na(v) ? na : math.max(v, 0.0), m.lo, m.fv, m.hi)
+        [sv, bv] = f_bv(vj, false)
+        f_mc_add(nb, bv, compositeLo, finalFairValue, compositeHi)
+        MCC.set(nb, 5, MCC.get(nb, 5) + (nf ? 1 : 0))
 // ==========================================
 // JUSTIFIED P/B & VALUE TRAP (Wilcox 1984; Ohlson 1995)
 // ==========================================
@@ -2945,9 +3018,14 @@ f_mc() =>
     for [k, m] in MD
         if m.grp != Group.comp and f_sh(m) > 0
             bad = m.inv != '' or not (m.lo < m.fv * (1 - 1e-9) and m.hi > m.fv * (1 + 1e-9))
-            f_mc_row(m.name, k, why != '' ? why : m.code == 'ACQ' ? 'N/A: a fixed-multiple rule with no history to draw, so every draw is Base.' : bad ? 'N/A: Bear must sit below Base and Bull above it.' : '', m.lk == Lever.pctl ? FL.tx(120) : '')
+            f_mc_row(m.name, k, why != '' ? why : m.code == 'ACQ' ? 'N/A: a fixed-multiple rule with no history to draw, so every draw is Base.' : na(m.lo) or na(m.hi) ? 'N/A: no Bear / Bull (too few quarters).' : bad ? 'N/A: Bear must sit below Base and Bull above it.' : '', m.lk == Lever.pctl ? FL.tx(120) : '')
     fbad = not (compositeLo < finalFairValue * (1 - 1e-9) and compositeHi > finalFairValue * (1 + 1e-9))
     f_mc_row('Fair value', MD.size(), why != '' ? why : fbad ? 'N/A: Bear must sit below Base and Bull above it.' : '', str.format('\n\nDraws where a member had no value (it keeps its Base value in the blend): {0}.', MCC.get(MD.size(), 5)))
+// One axis's Bear / Bull move for the Scenarios tooltip, in percentage points.
+f_pp(float x) =>
+    (x > 0 ? '+' : '') + str.tostring(x * 100, '#.##') + 'pp'
+f_axtt(string nm, float bear, float bull, int a) =>
+    '\n' + nm + ': ' + (na(bear) ? str.format('N/A ({0} of {1} quarters)', AXQ.get(a), i_scen_min_n) : bear == 0 and bull == 0 ? str.format('no move ({0} quarters)', AXQ.get(a)) : 'Bear ' + f_pp(bear) + ', Bull ' + f_pp(bull) + str.format(' ({0} quarters)', AXQ.get(a)))
 f_sum_val() =>
     f_hdr('Fair Value', 'Bear', 'Base', 'Bull', '')
     // Ours
@@ -2976,6 +3054,8 @@ f_sum_val() =>
     for a = 0 to 3
         sc_tt += str.format('\n{0}: {1}', AXN.get(a), (na(att.get(a)) ? 'N/A' : str.format('{0,number,#.#}pp', att.get(a) / finalFairValue * 100)))
     sc_tt += n_inv > 0 ? str.format(FL.tx(63), str.tostring(n_inv)) : ''
+    sc_tt += str.format(FL.tx(122), MC_N, mc_q >= i_scen_min_n ? 'together' : 'each on its own')
+    sc_tt += f_axtt('Rate', D.r_hi, D.r_lo, 0) + f_axtt('Stage-1 growth', D.g_lo, D.g_hi, 1) + f_axtt('Terminal growth', D.t_lo, D.t_hi, 2) + f_axtt('Revenue growth (Rule of 40)', D.v_lo, D.v_hi, 3)
     f_row4('Scenarios', sc_tt, 'Pos ' + ipos_txt, na(sens) ? 'Rate N/A' : 'Rate ' + (sens > 0 ? '+' : '') + str.tostring(sens * 100, '#.#') + '%', (na(att.get(top)) ? 'Bear: N/A' : 'Bear: ' + AXN.get(top)) + (n_inv > 0 ? ' !' : ''), stt = sc_tt)
     f_mc()
     if i_show_street
@@ -3071,7 +3151,7 @@ f_det_models() =>
             tt = switch m.code
                 'R40' => (super_stock ? 'Rule of 65 Score: ' + str.tostring(rx_score, '#.#') + FL.tx(80) : 'Rule of 40 Score: ' + (na(F_rev_g) ? FL.tx(81) : str.tostring(r40_score, '#.#') + '%')) + FL.tx(82)
                 'GRA' => FL.tx(83)
-                'ACQ' => FL.tx(84) + str.tostring(i_scen_acq_delta) + 'x.'
+                'ACQ' => FL.tx(84)
                 'RNPV' => FL.tx(85)
                 'UNB' => 'NetCo share ' + str.tostring(F_netco_sh * 100, '#') + FL.tx(86) + cl_txt + ', once.'
                 'DCF' => FL.tx(87) + cl_txt + FL.tx(88)
