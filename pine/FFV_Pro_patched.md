@@ -1757,6 +1757,17 @@ float calc_crp = i_auto_calc_erp_crp ? auto_crp : i_crp_manual
 float beta_mkt = not na(raw_beta_s) ? (0.67 * raw_beta_s) + 0.33 : 1.0
 // [FIX RF] One base: local 10Y (90d avg) for local-currency cash flows, or US 10Y + CRP.
 float base_rf_for_calc = rf_local ? rf_local_avg / 100 : us10y_true_raw / 100
+// The rate base and its source code, sampled on the first bar of each week over the own-multiple
+// span (13 weeks a quarter): the rate axis takes its spread from these one-year moves (FFVLib
+// f_yvar), as the rate is a market series with far more history than the stock's quarters.
+var array<float> WK_R = array.new_float()
+var array<float> WK_S = array.new_float()
+if ta.change(time('W')) != 0
+    WK_R.push(base_rf_for_calc)
+    WK_S.push(rf_local ? rf_src : us_src)
+    if WK_R.size() > i_numQuarters * 13 + 1
+        WK_R.shift()
+        WK_S.shift()
 // [FIX FX] Live rate (1 request slot) instead of a hardcoded 25000 / 0.93 / 0.79.
 // fx_rate = local currency units per 1 USD.
 float fx_to_usd = request.currency_rate(curr, 'USD', ignore_invalid_currency = true)
@@ -2259,6 +2270,7 @@ var matrix<float> DS = matrix.new<float>(MC_N, 5, na)
 var array<int> AXQ = array.new_int(4, 0)
 int mc_q = 0
 int mc_sk = 0
+int mc_rw = 0
 float mc_b = na
 f_draws(matrix<float> ds, int c, array<float> ch, float seed) =>
     if ch.size() >= i_scen_min_n
@@ -2311,6 +2323,16 @@ if barstate.islast
             ch = FL.f_demean(FL.f_pool1(ST.v, ST.q, i_numQuarters, Q_MC + c, Q_MC + (c == 1 ? 4 : 3)))
             AXQ.set(c, ch.size())
             f_draws(DS, c, ch, 211111111.0 + c * 100000000.0)
+    // The rate draws keep their paths (and so their co-movement with growth) but are rescaled to
+    // the spread of the rate's weekly one-year moves; under 52 windows they stay as drawn.
+    [yv, yn] = FL.f_yvar(WK_R, WK_S, 52)
+    mc_rw := yn
+    if not na(yv) and not na(DS.get(0, 0))
+        float s0 = DS.col(0).stdev()
+        if s0 > 0
+            float rk = math.sqrt(yv) / s0
+            for i = 0 to MC_N - 1
+                DS.set(i, 0, DS.get(i, 0) * rk)
     rv = FL.f_demean(FL.f_pool_yoy(ST.v, ST.q, i_numQuarters, Q_REV))
     AXQ.set(3, rv.size())
     f_draws(DS, 4, rv, 511111111.0)
@@ -3010,7 +3032,7 @@ f_mc_row(string lbl, int r, string why, string tt) =>
 // below Base and Bull above it (the cuts sit halfway between them).
 f_mc() =>
     string why = mc_q < i_scen_min_n ? str.format(FL.tx(119), i_scen_min_n, mc_q) : ''
-    f_hdr('Monte Carlo (1 year)', 'Bear', 'Base', 'Bull', why != '' ? why : str.format(FL.tx(118), MC_N, mc_q, mc_b, mc_sk))
+    f_hdr('Monte Carlo (1 year)', 'Bear', 'Base', 'Bull', why != '' ? why : str.format(FL.tx(118), MC_N, mc_q, mc_b, mc_sk, mc_rw))
     f_cell(4, RW.get(0) - 1, 'P > price', color_text, color_header)
     for [k, m] in MD
         if m.grp != Group.comp and f_sh(m) > 0
@@ -3051,7 +3073,7 @@ f_sum_val() =>
     for a = 0 to 3
         sc_tt += str.format('\n{0}: {1}', AXN.get(a), (na(att.get(a)) ? 'N/A' : str.format('{0,number,#.#}pp', att.get(a) / finalFairValue * 100)))
     sc_tt += n_inv > 0 ? str.format(FL.tx(63), str.tostring(n_inv)) : ''
-    sc_tt += str.format(FL.tx(122), MC_N, mc_q >= i_scen_min_n ? 'together' : 'each on its own')
+    sc_tt += str.format(FL.tx(122), MC_N, mc_q >= i_scen_min_n ? 'together' : 'each on its own', mc_rw)
     sc_tt += f_axtt('Rate', D.r_hi, D.r_lo, 0) + f_axtt('Stage-1 growth', D.g_lo, D.g_hi, 1) + f_axtt('Terminal growth', D.t_lo, D.t_hi, 2) + f_axtt('Revenue growth (Rule of 40)', D.v_lo, D.v_hi, 3)
     f_row4('Scenarios', sc_tt, 'Pos ' + ipos_txt, na(sens) ? 'Rate N/A' : 'Rate ' + (sens > 0 ? '+' : '') + str.tostring(sens * 100, '#.#') + '%', (na(att.get(top)) ? 'Bear: N/A' : 'Bear: ' + AXN.get(top)) + (n_inv > 0 ? ' !' : ''), stt = sc_tt)
     f_mc()

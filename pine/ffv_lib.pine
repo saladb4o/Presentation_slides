@@ -1386,6 +1386,27 @@ export f_demean(array<float> x) =>
     for v in x
         out.push(v - mu)
     out
+// @function Variance of a weekly series' one-year (q-week) change, from overlapping windows with the Lo and MacKinlay (1988) small-sample correction: the changes are centred on their mean (as the bootstrap's are) and the sum of squares divided by m (1 - q / T), m windows from T weekly steps. A window whose two ends carry a different source code, or a stand-in code (2, 4), is left out, as the quarterly pool skips a source switch.
+// @returns [variance of the one-year change (na under q windows), windows used].
+export f_yvar(array<float> x, array<float> s, int q) =>
+    d = array.new_float()
+    int n = x.size()
+    if n > q
+        for t = q to n - 1
+            float a = x.get(t)
+            float b = x.get(t - q)
+            float sa = s.get(t)
+            if not na(a) and not na(b) and sa == s.get(t - q) and sa != 2 and sa != 4
+                d.push(a - b)
+    int m = d.size()
+    float v = na
+    if m >= q
+        float mu = d.avg()
+        float ss = 0.0
+        for y in d
+            ss += (y - mu) * (y - mu)
+        v := ss / (m * (1.0 - float(q) / (n - 1)))
+    [v, m]
 // @function The indicator's long text number `id`.
 // @param id Text number.
 // @returns The text, or an empty string for an unknown number.
@@ -1505,11 +1526,11 @@ export tx(int id) =>
         115 => 'Nine binary tests of profitability, leverage / liquidity and operating efficiency.'
         116 => '(Net Income - Operating Cash Flow) / Total Assets.\n\nSloan (1996) is a RETURNS anomaly, not a fraud test. Beneish M-Score (the Z+M matrix, in the balance sheet and red-flag tooltips) is the manipulation model.'
         117 => 'COMP DCF GRA EPV RIM R40 PE PS FCF PB TBV EV CF AFFO ACQ OE RNPV ECF ADCF UNB APV EVA DDM'
-        118 => 'How often the current value lands nearest each scenario when the assumptions are revised as much as they have been within a year. It is not a forecast of the value a year ahead: earnings and cash flows stay as they are now.\n\nEach of {0} draws replays a 4-quarter path through the last {1} stored quarters (stationary block bootstrap, Politis and Romano; mean block {2,number,#.#} quarters by the Politis-White rule; Wichmann-Hill random numbers with a fixed seed, so a reload gives the same result). The discount rates move by the summed risk-free changes along the path, stage-1 and terminal growth by their summed changes (Graham with stage-1), and each own multiple takes its value at the last quarter of the path. Rule of 40 draws its revenue growth along its own paths (it needs revenue 5 quarters back); the Acquirer multiple stays at Base. Each driver\'\'s changes have their average taken out first (centred bootstrap, Hall and Wilson), so a past trend does not tilt the draws. These are the same draws whose 25th / 75th percentiles set each axis\'\'s Bear / Bull.\n\nBear / Base / Bull: the draws nearest each case (cut halfway between them; beyond Bear counts as Bear, beyond Bull as Bull). P > price: the draws above the current price. Hover a cell for its 95% error.\n\nQuarterly changes skipped because the rate source or the growth parts switched (a data artefact, not a revision): {3}.\n\nA row moved by one driver has a split largely set by construction (its Bear / Bull are that driver\'\'s percentiles); the information is in the rows several drivers move together and in the fair value.'
+        118 => 'How often the current value lands nearest each scenario when the assumptions are revised as much as they have been within a year. It is not a forecast of the value a year ahead: earnings and cash flows stay as they are now.\n\nEach of {0} draws replays a 4-quarter path through the last {1} stored quarters (stationary block bootstrap, Politis and Romano; mean block {2,number,#.#} quarters by the Politis-White rule; Wichmann-Hill random numbers with a fixed seed, so a reload gives the same result). The discount rates move by the summed risk-free changes along the path, rescaled so their spread is the risk-free rate\'\'s own one-year moves taken week by week over the same span ({4} overlapping one-year windows, Lo and MacKinlay correction; under 52: the quarterly changes as they are), stage-1 and terminal growth by their summed changes (Graham with stage-1), and each own multiple takes its value at the last quarter of the path. Rule of 40 draws its revenue growth along its own paths (it needs revenue 5 quarters back); the Acquirer multiple stays at Base. Each driver\'\'s changes have their average taken out first (centred bootstrap, Hall and Wilson), so a past trend does not tilt the draws. These are the same draws whose 25th / 75th percentiles set each axis\'\'s Bear / Bull.\n\nBear / Base / Bull: the draws nearest each case (cut halfway between them; beyond Bear counts as Bear, beyond Bull as Bull). P > price: the draws above the current price. Hover a cell for its 95% error.\n\nQuarterly changes skipped because the rate source or the growth parts switched (a data artefact, not a revision): {3}.\n\nA row moved by one driver has a split largely set by construction (its Bear / Bull are that driver\'\'s percentiles); the information is in the rows several drivers move together and in the fair value.'
         119 => 'N/A: needs {0} stored quarters with the rate, growth and terminal growth known (the Bear/Bull minimum); has {1}.'
         120 => "\n\nOwn-multiple model: its Bear and Bull are percentiles of the same quarters the draws replay, so its split is largely set by construction. The information is in the intrinsic rows and the fair value."
         121 => '{0} of {1} draws priced.'
-        122 => '\n\nBear / Bull moves: the 25th / 75th percentile of {0} bootstrapped 4-quarter changes of the stock\'\'s stored quarters, each driver\'\'s average change taken out first so a past trend does not remove a side (drivers drawn {1}; a side on the wrong side of 0 gives no move).'
+        122 => '\n\nBear / Bull moves: the 25th / 75th percentile of {0} bootstrapped 4-quarter changes of the stock\'\'s stored quarters, each driver\'\'s average change taken out first so a past trend does not remove a side (drivers drawn {1}; a side on the wrong side of 0 gives no move). The rate\'\'s spread is set from its weekly one-year moves over the same span ({2} windows; under 52: the quarterly changes alone).'
         => ''
 
 // @function Altman Z + Beneish M quadrant: [label, colour index into cl (3 good, 5 amber, 4 bad, -1 red), tooltip].
