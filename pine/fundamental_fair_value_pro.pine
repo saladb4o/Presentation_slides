@@ -638,7 +638,6 @@ i_use_factors = input.bool(true, '✨ Use Live Index-Based Factor Premium', grou
 i_small_etf = input.symbol('IJR', 'Small Cap ETF (SMB Proxy)', group = group_factors, tooltip = "IJR (S&P 600) is preferred over IWM (Russell 2000) due to its profitability filter, yielding a truer size premium.")
 i_value_etf = input.symbol('VTV', 'Value ETF (HML Proxy)', group = group_factors)
 i_growth_etf = input.symbol('VUG', 'Growth ETF', group = group_factors)
-i_mom_prem = input.float(1.0, 'Max Momentum Premium %', group = group_factors) / 100
 i_liq_prem = input.float(2.0, 'Max Liquidity Premium %', group = group_factors) / 100
 group_risk = 'Cost of Equity (CAPM)'
 i_auto_calc_erp_crp = input.bool(true, '✨ Auto-Calculate Risk Premiums', group = group_risk, tooltip = 'ERP: half the market proxy 5-year return over its own currency 10Y (US 10Y for SPY, VN 10Y for VNINDEX) plus half a 5% long-run anchor, held to 4.5-8% (trailing returns alone overshoot after bull markets). CRP: the local-minus-US sovereign spread.')
@@ -1757,14 +1756,9 @@ float base_rf_for_calc = rf_local ? rf_local_avg / 100 : us10y_true_raw / 100
 // fx_rate = local currency units per 1 USD.
 float fx_to_usd = request.currency_rate(curr, 'USD', ignore_invalid_currency = true)
 float fx_rate = fx_to_usd > 0 ? 1.0 / fx_to_usd : ((curr == 'VND') ? 25000.0 : (curr == 'EUR' ? 0.93 : (curr == 'GBP' ? 0.79 : 1.0)))
-float px_1m_ago = close[math.min(math.max(1, int(bpy / 12)), 4900)]
-float px_12m_ago = close[math.min(bpy, 4900)]
-mom_premium = 0.0
-float mom_hurdle = (curr == 'VND') ? 0.45 : 0.30
-if i_use_factors and not na(px_1m_ago) and px_12m_ago > 0
-    float trailing_11m_ret = (px_1m_ago - px_12m_ago) / px_12m_ago
-    // None inside 0.8x the hurdle, the full premium beyond 1.2x.
-    mom_premium := i_mom_prem * (f_ramp(trailing_11m_ret, 0.8 * mom_hurdle, 1.2 * mom_hurdle) - f_ramp(-trailing_11m_ret, 0.8 * mom_hurdle, 1.2 * mom_hurdle))
+// No momentum premium in the cost of equity: momentum is a 3-12 month effect that reverses
+// (Jegadeesh and Titman 1993), not a risk priced over a 10-year discount horizon. The Timing
+// row still reads it (MSCI method).
 microstructure_premium = 0.0
 // Liquidity on a DAILY basis whatever the chart timeframe: a bar spans days_per_bar trading
 // days, so per-bar turnover is divided by it and the per-bar Amihud ratio scaled by its
@@ -1964,7 +1958,7 @@ f_drivers(Clock ck, Drv d, Claims c) =>
         // in as operating profitability goes from 17.5% to 22.5%, -1.5% as it falls from 7.5% to 2.5%.
         float op = not na(F_ebit) and F_eq > 0 ? F_ebit / F_eq : 0.0
         rmw_p := 0.015 * (f_ramp(op, 0.175, 0.225) - f_ramp(-op, -0.075, -0.025))
-    float coe = math.max(base_rf_for_calc + (beta_mkt * calc_erp) + calc_crp + size_p + hml_p + mom_premium + rmw_p + microstructure_premium, base_rf_for_calc + 0.03)
+    float coe = math.max(base_rf_for_calc + (beta_mkt * calc_erp) + calc_crp + size_p + hml_p + rmw_p + microstructure_premium, base_rf_for_calc + 0.03)
     // [FIX CRP-2] CRP is charged once, in the cost of equity. Debt = the same base + a synthetic
     // spread from interest cover.
     float cod = base_rf_for_calc + f_synthetic_spread(F_ebit_n, F_interest) + (i_rf_base == 'Local 10Y' ? 0.0 : calc_crp)
