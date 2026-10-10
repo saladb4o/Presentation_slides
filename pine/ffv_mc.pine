@@ -516,3 +516,221 @@ export f_lasso_at(array<float> m, array<float> x, int c0, int p) =>
             if bj != 0
                 y += bj * (x.get(c0 + j) - m.get(1 + p + j)) / m.get(1 + 2 * p + j)
     y
+// ==========================================
+// STATISTICS HELPERS for the indicator (moved here to keep its compile time down)
+// ==========================================
+// @function Median of an array (na when empty); the input is not reordered.
+export f_median(array<float> a) =>
+    int n = a.size()
+    float r = na
+    if n > 0
+        array<float> s = a.copy()
+        s.sort()
+        r := n % 2 == 1 ? s.get(int(n / 2)) : (s.get(int(n / 2) - 1) + s.get(int(n / 2))) / 2.0
+    r
+// Harmonic mean of the positive entries (na with none).
+f_harmonic_mean(array<float> a) =>
+    sr = 0.0
+    k = 0
+    for v in a
+        if v > 0
+            sr += 1.0 / v
+            k += 1
+    sr > 0 ? k / sr : na
+// @function Percentile p (linear interpolation) of an ALREADY-SORTED array.
+export f_pct_sorted(array<float> s, float p) =>
+    float idx = (s.size() - 1) * p
+    int lo = int(math.floor(idx))
+    int hi = int(math.ceil(idx))
+    lo == hi ? s.get(lo) : s.get(lo) * (1 - (idx - lo)) + s.get(hi) * (idx - lo)
+// @function Central tendency (harmonic mean or median) and both percentile legs from one sort.
+// @returns [centre, centre from under 4 values, lo percentile, hi percentile (both na under min_n values)].
+export f_ratio_stats(array<float> arr, bool use_mean, float lo_p, float hi_p, int min_n) =>
+    int n = arr.size()
+    float ct = na
+    float c_lo = na
+    float c_hi = na
+    if n > 0
+        array<float> s = arr.copy()
+        s.sort()
+        ct := use_mean ? f_harmonic_mean(arr) : f_pct_sorted(s, 0.5)
+        if n >= min_n
+            c_lo := f_pct_sorted(s, lo_p)
+            c_hi := f_pct_sorted(s, hi_p)
+    [ct, not na(ct) and n < 4, c_lo, c_hi]
+// @function Predictive weight of a fair-value record: how well the value stored at quarter i predicted the price h quarters later (algo 0 IVW, 1 SMAPE, 2 MALE, 3 WMAPE, 4 RMSLE). No record (under 4 scored quarters) -> 0.
+// @returns [weight, error].
+export f_model_weight(array<float> fv, array<float> px, int algo, int h) =>
+    w = 0.0
+    float e = na
+    int np = math.min(fv.size(), px.size()) - h
+    if np >= 4
+        se = 0.0
+        sp = 0.0
+        k = 0
+        for i = 0 to np - 1
+            float f = fv.get(i)
+            float p = px.get(i + h)
+            if f > 0 and p > 0
+                float l = math.log(p / f)
+                se += algo == 1 ? 2 * math.abs(f - p) / (f + p) : algo == 2 ? math.abs(l) : algo == 3 ? math.abs(f - p) : l * l
+                sp += p
+                k += 1
+        if k >= 4
+            // IVW floor = a 5% RMS miss; nothing resolves price tighter.
+            float err = algo == 3 ? se / sp : algo == 4 ? math.sqrt(se / k) : se / k
+            w := math.min(k / 12.0, 1.0) / math.max(err, algo == 0 ? 0.0025 : 0.02)
+            e := err
+    [w, e]
+// @function Normalises the weights w in place and caps each family (fam: the family of each weight, 0-6) at max(40%, 1 / families), the excess spread over the families below the cap.
+// @returns w.
+export f_fam_cap(array<float> w, array<int> fam) =>
+    float tot = w.sum()
+    if tot > 0
+        fs = array.new_float(7, 0.0)
+        for i = 0 to w.size() - 1
+            float x = w.get(i) / tot
+            w.set(i, x)
+            int f = fam.get(i)
+            fs.set(f, fs.get(f) + x)
+        nf = 0
+        for y in fs
+            nf += y > 0 ? 1 : 0
+        float cap = math.max(0.4, 1.0 / nf)
+        for it = 0 to 5
+            over = 0.0
+            room = 0.0
+            // A family at (or within 1e-12 of) the cap is frozen there; the rest absorb the excess.
+            for y in fs
+                over += math.max(y - cap, 0.0)
+                room += y < cap - 1e-12 ? y : 0.0
+            if nf >= 3 and over > 1e-9 and room > 0
+                for i = 0 to w.size() - 1
+                    float fx = fs.get(fam.get(i))
+                    w.set(i, w.get(i) * (fx >= cap - 1e-12 ? cap / fx : 1 + over / room))
+                for f = 0 to 6
+                    float fx = fs.get(f)
+                    fs.set(f, fx >= cap - 1e-12 ? (fx > 0 ? cap : 0.0) : fx * (1 + over / room))
+    w
+// @function Band half-width: the members' share-weighted spread around the blend mu, floored at 15% of mu / sqrt(effective member count).
+export f_wsd(array<float> v, array<float> w, float mu) =>
+    ss = 0.0
+    w2 = 0.0
+    for [i, x] in v
+        float wi = w.get(i)
+        ss += wi * (x - mu) * (x - mu)
+        w2 += wi * wi
+    w2 > 0 ? math.max(math.sqrt(ss), 0.15 * mu * math.sqrt(w2)) : na
+// @function Whether the last 14 source codes are one and the same real source (not a stand-in, 2 or 4).
+export f_one_src(array<float> s) =>
+    bool ok = s.size() >= 14
+    if ok
+        for j = s.size() - 14 to s.size() - 1
+            ok := ok and s.get(j) == s.last() and s.get(j) != 2 and s.get(j) != 4
+    ok
+// @function Share of a (4+ value) array below x (na otherwise).
+export f_pct_rank(array<float> a, float x) =>
+    int n = a.size()
+    float r = na
+    if n >= 4 and not na(x)
+        below = 0
+        for v in a
+            below += v < x ? 1 : 0
+        r := below / float(n)
+    r
+// ==========================================
+// THE SCENARIO DRAWS: Bear / Bull of each axis and the Monte Carlo's draws
+// ==========================================
+// One driver's draws on its own into column c: kNN-weighted starts (pm the conditions' percentiles) when there are enough distinct neighbours, else equal. Returns the neighbours used (0: equal).
+f_draws(matrix<float> ds, int c, array<float> ch, array<int> lg, matrix<float> pm, float seed, int nmin, int nd, int h) =>
+    int nk = 0
+    if ch.size() >= nmin
+        w = f_knn(pm, lg)
+        g = WH.new(a = seed)
+        for y in w
+            nk += y > 0 ? 1 : 0
+        for [i, v] in (nk > 0 ? f_wdraws1(g, ch, lg, w, nd, h) : f_draws1(g, ch, lg, nd, h))
+            ds.set(i, c, v)
+    nk
+// [25th percentile, at most 0 | 75th, at least 0] of a draw column (na without draws).
+f_side(matrix<float> ds, int c) =>
+    s = ds.col(c)
+    float lo = na
+    float hi = na
+    if not na(s.first())
+        s.sort()
+        lo := math.min(f_pct_sorted(s, 0.25), 0.0)
+        hi := math.max(f_pct_sorted(s, 0.75), 0.0)
+    [lo, hi]
+// @function The scenario draws: nd h-quarter bootstrap sums of the rate, stage-1 growth and terminal growth changes (joint pool from column qmc, kNN-weighted starts; each driver on its own pool when the joint one is under nmin quarters), the rate draws rescaled to the weekly one-year rate moves (wkr, sources wks) and the growth draws widened to the implied-growth moves (wkg), plus the revenue-growth draws (column qrev).
+// @param v Quarter store matrix.
+// @param q Quarters stored.
+// @param nq Quarters in the own-multiple window.
+// @returns [draws (nd x 5: rate, growth, terminal sums, end quarter, revenue-growth sum), quarters behind each axis (4), Bear / Bull per axis (8: rate, growth, terminal, revenue growth), joint quarters, skipped quarters, rate windows, block length, growth windows, kNN neighbours].
+export f_scen_draws(matrix<float> v, int q, int nq, int qmc, int qrev, int nmin, array<float> wkr, array<float> wks, array<float> wkg, int nd, int h) =>
+    ds = matrix.new<float>(nd, 5, na)
+    axq = array.new_int(4, 0)
+    float mc_b = na
+    int mc_kn = 0
+    [lg, cr0, cg0, ct0, sk] = f_pool(v, q, nq, qmc)
+    cr = f_demean(cr0), cg = f_demean(cg0), ct = f_demean(ct0)
+    pm = f_pctl(v, q, qmc + 5, 4)
+    int mc_q = lg.size()
+    if mc_q >= nmin
+        mc_b := f_blen(cr, cg, ct)
+        // Blocks start where past conditions resemble now (kNN weights), the changes centred on the
+        // weighted paths' mean; equal weights and the plain mean without enough neighbours.
+        w = f_knn(pm, lg)
+        for y in w
+            mc_kn += y > 0 ? 1 : 0
+        if mc_kn == 0
+            w := array.new_float(mc_q, 1.0)
+        cw = f_cum(w)
+        nx = f_next(lg)
+        cr := f_wdemean(cr0, w, nx, mc_b, h), cg := f_wdemean(cg0, w, nx, mc_b, h), ct := f_wdemean(ct0, w, nx, mc_b, h)
+        g = WH.new()
+        for i = 0 to nd - 1
+            path = f_wpath(g, cw, nx, mc_b, h)
+            float sr = 0.0, float sg = 0.0, float st = 0.0
+            for j in path
+                sr += cr.get(j)
+                sg += cg.get(j)
+                st += ct.get(j)
+            ds.set(i, 0, sr)
+            ds.set(i, 1, sg)
+            ds.set(i, 2, st)
+            ds.set(i, 3, lg.get(path.last()))
+        for c = 0 to 2
+            axq.set(c, mc_q)
+    else
+        for c = 0 to 2
+            [ch, cl] = f_pool1(v, q, nq, qmc + c, qmc + (c == 1 ? 4 : 3))
+            axq.set(c, ch.size())
+            mc_kn := math.max(mc_kn, f_draws(ds, c, ch, cl, pm, 211111111.0 + c * 100000000.0, nmin, nd, h))
+    // The rate draws keep their paths but are rescaled to the spread of the rate's weekly one-year
+    // moves; under 52 windows they stay as drawn.
+    [yv, yn] = f_yvar(wkr, wks, 52)
+    if not na(yv) and not na(ds.get(0, 0))
+        float s0 = ds.col(0).stdev()
+        if s0 > 0
+            float rk = math.sqrt(yv) / s0
+            for i = 0 to nd - 1
+                ds.set(i, 0, ds.get(i, 0) * rk)
+    // The growth draws widen (never narrow) to the spread of the market-implied growth's weekly
+    // one-year moves; under 52 windows they stay as drawn.
+    [gv, gn] = f_yvar(wkg, wks, 52)
+    if not na(gv) and not na(ds.get(0, 1))
+        float s1 = ds.col(1).stdev()
+        if s1 > 0
+            float gk = math.max(1.0, math.sqrt(gv) / s1)
+            for i = 0 to nd - 1
+                ds.set(i, 1, ds.get(i, 1) * gk)
+    [rv, rvl] = f_pool_yoy(v, q, nq, qrev)
+    axq.set(3, rv.size())
+    mc_kn := math.max(mc_kn, f_draws(ds, 4, rv, rvl, pm, 511111111.0, nmin, nd, h))
+    sd = array.new_float(8, na)
+    for [i, c] in array.from(0, 1, 2, 4)
+        [lo, hi] = f_side(ds, c)
+        sd.set(2 * i, lo)
+        sd.set(2 * i + 1, hi)
+    [ds, axq, sd, mc_q, sk, yn, mc_b, gn, mc_kn]
