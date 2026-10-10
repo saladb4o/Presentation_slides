@@ -8,7 +8,7 @@ indicator('Fundamental Fair Value Pro (FF4 + McKinsey/Rev DCF) [Real-Time + Back
 // Companion library pine/ffv_lib.pine (backtester and long texts): publish it as a private
 // library named FFVLib; pine/ffv_mc.pine (Monte Carlo and forecast statistics) as a private
 // library named FFVMC. Then replace YOUR_TV_USERNAME with your TradingView username.
-import YOUR_TV_USERNAME/FFVLib/3 as FL
+import YOUR_TV_USERNAME/FFVLib/4 as FL
 import YOUR_TV_USERNAME/FFVMC/3 as FM
 // =====================================================================
 // ARCHITECTURE: one top-to-bottom pass per bar, on two clocks
@@ -568,7 +568,6 @@ i_dcf_stage1_yrs = input.int(10, 'DCF: High-Growth Years (Stage 1)', group = gro
 i_strict_cap = input.bool(true, 'Strict capital structure', group = group_iv, tooltip = "ON: minority interest and preferred equity are claims ahead of common shareholders. They are added to enterprise value and subtracted from every firm-value model (EV/EBITDA, DCF, rNPV, EPV, APV, EVA, RIM, Unbundled, Rule of 40, Acquirer's Multiple); book value is common equity (ex-MI, ex-preferred) and earnings are income attributable to common (net of preferred dividends). Preferred equity = preferred dividends capitalised at the local 10Y + 2%.")
 group_display = 'Display Options'
 i_detail = input.string('None', 'Table detail (below the summary)', options = ['None', 'Models', 'Monte Carlo', 'Street', 'Scorecard', 'Everything'], group = group_display, tooltip = 'The summary card is always shown. Pick one section to add below it.\n\nModels: every relative and intrinsic model.\nMonte Carlo: for each blend member and the fair value, the share of 1-year draws nearest Bear, Base and Bull, and the share above the price.\nStreet: analyst targets, implied growth and P/E, ratings, confidence parts.\nScorecard: every quality, low-risk and value metric behind the Buffett score.\n\nEverything can run off a short chart.')
-show_mc = i_detail == 'Monte Carlo' or i_detail == 'Everything'
 i_tablePos = input.string('top_right', 'Table Position', options = ['top_right', 'middle_right', 'bottom_right'], group = group_display)
 i_textSize = input.string('normal', 'Text Size', options = ['auto', 'tiny', 'small', 'normal', 'large', 'huge'], group = group_display)
 i_theme = input.string('Dark', 'Theme', options = ['Dark', 'Light'], group = group_display)
@@ -2417,8 +2416,6 @@ for [k, m] in MD
 // ==============================================================
 // Snapshot data (same value on every bar). Display only: the loops below
 // (reverse DCF, percentile rank, error) run on the last bar only.
-f_st_pe(float t) =>
-    not na(t) and F_eps_est > 0 ? t / F_eps_est : na
 // ==============================================================
 // ⚙️ QUANTITATIVE QUALITY & MANAGEMENT RATIOS
 // ==============================================================
@@ -2451,12 +2448,9 @@ f_scen_col(float v, float px, bool is_base) =>
     float dev = v > 0 ? px / v - 1 : na
     na(dev) ? color_bg : color.new(math.abs(dev) <= i_scen_fair_band ? color.orange : dev > 0 ? color.red : color.green, is_base ? 15 : 40)
 // One cell of the main table in the chosen text size.
-// The fifth column (shown with the Monte Carlo section) holds its P; elsewhere it takes the shade
-// of the row's last cell.
+// Only the Monte Carlo section writes the fifth column (its P > price), so it shows with it alone.
 f_cell(int col, int row, string txt, color tc, color bg, string tt = '') =>
     T.cell(col, row, txt, text_color = tc, bgcolor = bg, text_size = i_textSize, tooltip = tt)
-    if col == 3 and show_mc
-        T.cell(4, row, '', bgcolor = bg, text_size = i_textSize)
 // The main table's next free row: every row helper takes it and moves it on.
 var array<int> RW = array.new_int(1, 0)
 f_nr() =>
@@ -2483,7 +2477,7 @@ f_stxt(float c) => na(c) ? '-' : str.tostring(c, '#.00')
 // ==========================================
 // The summary (fair value + health) is always drawn; 'Table detail' adds one
 // section below it. Street and health numbers are computed once on the last
-// bar into the SV_* and HV_* values, and both the summary and the detail rows
+// bar into SV and the HV_* values, and both the summary and the detail rows
 // read them.
 // Section header: four grey cells, tooltip on the first.
 f_hdr(string a, string b, string c, string d, string tt) =>
@@ -2505,49 +2499,11 @@ f_on(float c) =>
     na(c) ? color_text : color.white
 // ---------- last-bar calculations ----------
 var array<string> CPN = array.from('Agreement', 'Depth', 'Reliability / Freshness', 'Quality / Conviction')
-bool SV_has = false
-float SV_n = 0.0
-float SV_lo_t = na
-float SV_md_t = na
-float SV_hi_t = na
-float SV_lo = na
-float SV_md = na
-float SV_hi = na
-float SV_g_lo = na
-float SV_g_md = na
-float SV_g_hi = na
-float SV_our_g = na
-float SV_pe_lo = na
-float SV_pe_md = na
-float SV_pe_hi = na
-float SV_rank_md = na
-float SV_rank_hi = na
-float SV_overlap = na
-float SV_our_conf = na
-float SV_st_conf = na
-float SV_gap = na
-float SV_cw_fv = na
-float SV_rc_buy = 0.0
-float SV_rc_hold = 0.0
-float SV_rc_sell = 0.0
-float SV_rc_score = na
-float SV_age_d = na
-string SV_verdict = 'No coverage'
-string SV_conf_tt = ''
-string SV_verdict_tt = ''
-array<float> SV_co = na
-array<float> SV_cs = na
-array<string> SV_ctt = na
+var FL.Street SV = FL.Street.new()
 if barstate.islast and i_show_street
-    float md_t = st_md_t
-    float st_n = nz(syminfo.target_price_estimates)
-    has = st_has
-    float lo_t = st_lo_t
-    float hi_t = st_hi_t
     // 12-month targets -> today: discount at CoE less the dividend carry (fwd_disc).
-    float st_lo = has ? lo_t / D.fwd_disc : na
-    float st_md = has ? md_t / D.fwd_disc : na
-    float st_hi = has ? hi_t / D.fwd_disc : na
+    float st_lo = st_has ? st_lo_t / D.fwd_disc : na
+    float st_hi = st_has ? st_hi_t / D.fwd_disc : na
     // --- OUR confidence ---
     int our_n_models = omni_active ? omni_n : 0
     our_track = omni_active ? not omni_eq : not blend_eq
@@ -2556,63 +2512,14 @@ if barstate.islast and i_show_street
             our_n_models += m.fv > 0 and m.w > 0 ? 1 : 0
     [our_w, our_err] = FM.f_model_weight(ST.window(Q_FFV, 20, 1, true), ST.window(Q_PX, 20, 1, true), 4, i_w_horizon) // RMS log error
     // Overlap of the ranges and our confidence; a part with no data leaves and the rest are re-weighted.
-    [overlap, oc_agree, oc_depth, oc_rel, oc_qual, our_conf] = FM.f_our_conf(has, finalFairValue, compositeLo, compositeHi, st_lo, st_hi, fv_stddev, our_n_models, our_track, our_err,
+    [overlap, oc_agree, oc_depth, oc_rel, oc_qual, our_conf] = FM.f_our_conf(st_has, finalFairValue, compositeLo, compositeHi, st_lo, st_hi, fv_stddev, our_n_models, our_track, our_err,
          (f_tier_q(f_stier(D, Sx.eps_b)) + f_tier_q(f_stier(D, Sx.rev)) + f_tier_q(f_stier(D, Sx.fcff)) + f_tier_q(f_stier(D, Sx.bvps)) + f_tier_q(f_stier(D, Sx.nopat))) / 5.0,
          (is_value_trap ? 0.2 : 0.0) + (i_useBeneishCheck and F_manip ? 0.2 : 0.0) + (is_distress ? 0.2 : 0.0) + (F_suspect ? 0.2 : 0.0))
-    // --- STREET confidence ---
-    [sc_agree, sc_depth, sc_fresh, sc_conv, st_conf, age_d, rc_buy, rc_hold, rc_sell, rc_score] = FL.f_street(has, lo_t, md_t, hi_t, st_n, syminfo.target_price_date, timenow, syminfo.recommendations_buy_strong, syminfo.recommendations_buy, syminfo.recommendations_hold, syminfo.recommendations_sell, syminfo.recommendations_sell_strong)
-    float rc_tot = rc_buy + rc_hold + rc_sell
-    // --- Verdict + confidence-weighted value ---
-    float gap = has and not na(finalFairValue) ? finalFairValue / st_md - 1 : na
-    verdict = FL.f_verdict(has, our_conf, st_conf, gap, i_conf_gap)
-    float cw_fv = has and not na(our_conf) and our_conf + st_conf > 0 ? (finalFairValue * our_conf + st_md * st_conf) / (our_conf + st_conf) : na
-    // Component breakdown: summary tooltip + Street detail rows.
-    array<float> co = array.from(oc_agree, oc_depth, oc_rel, oc_qual)
-    array<float> cs = array.from(sc_agree, sc_depth, sc_fresh, sc_conv)
-    array<string> ctt = array.from(FL.tx(18), 'Ours: ' + str.tostring(our_n_models) + ' models' + (our_track ? '' : ', no track record (x0.5)') + FL.tx(19), FL.tx(20) + (na(age_d) ? 'unknown' : str.tostring(age_d, '#') + ' days') + '.', FL.tx(21))
-    conf_tt = FL.tx(22)
-    for j = 0 to 3
-        conf_tt += str.format('\n{0}:  {1} / {2}', CPN.get(j), f_stxt(co.get(j)), f_stxt(cs.get(j)))
-    conf_tt += '\n'
-    for j = 0 to 3
-        conf_tt += str.format('\n{0} - {1}', CPN.get(j), ctt.get(j))
-    conf_tt += str.format(FL.tx(23), str.tostring(i_w_horizon), (na(our_err) ? FL.tx(24) : str.format(' = {0,number,#.##}', our_err)))
-    verdict_tt = str.format(FL.tx(25), (na(gap) ? 'N/A' : str.format('{0}{1,number,#}%', (gap > 0 ? '+' : ''), gap * 100)), i_conf_gap * 100, (na(rc_score) ? '' : str.format(FL.tx(26), rc_score, rc_tot)))
-    float pe_md = f_st_pe(md_t)
-    float pe_hi = f_st_pe(hi_t)
-    SV_has := has
-    SV_n := st_n
-    SV_lo_t := lo_t
-    SV_md_t := md_t
-    SV_hi_t := hi_t
-    SV_lo := st_lo
-    SV_md := st_md
-    SV_hi := st_hi
-    SV_g_lo := rdcf.get(2)
-    SV_g_md := rdcf.get(3)
-    SV_g_hi := rdcf.get(4)
-    SV_our_g := rdcf.get(1)
-    SV_pe_lo := f_st_pe(lo_t)
-    SV_pe_md := pe_md
-    SV_pe_hi := pe_hi
-    SV_rank_md := FM.f_pct_rank(M_PE.hist, pe_md)
-    SV_rank_hi := FM.f_pct_rank(M_PE.hist, pe_hi)
-    SV_overlap := overlap
-    SV_our_conf := our_conf
-    SV_st_conf := st_conf
-    SV_gap := gap
-    SV_cw_fv := cw_fv
-    SV_rc_buy := rc_buy
-    SV_rc_hold := rc_hold
-    SV_rc_sell := rc_sell
-    SV_rc_score := rc_score
-    SV_age_d := age_d
-    SV_verdict := verdict
-    SV_conf_tt := conf_tt
-    SV_verdict_tt := verdict_tt
-    SV_co := co
-    SV_cs := cs
-    SV_ctt := ctt
+    // Street confidence, verdict, confidence-weighted value and tooltips (FFVLib).
+    SV := FL.f_street_view(st_has, st_lo_t, st_md_t, st_hi_t, nz(syminfo.target_price_estimates), st_lo, st_has ? st_md_t / D.fwd_disc : na, st_hi, syminfo.target_price_date, timenow, syminfo.recommendations_buy_strong, syminfo.recommendations_buy, syminfo.recommendations_hold, syminfo.recommendations_sell, syminfo.recommendations_sell_strong,
+         finalFairValue, overlap, oc_agree, oc_depth, oc_rel, oc_qual, our_conf, our_n_models, our_track, our_err, i_w_horizon, i_conf_gap, F_eps_est, rdcf, CPN)
+    SV.rank_md := FM.f_pct_rank(M_PE.hist, SV.pe_md)
+    SV.rank_hi := FM.f_pct_rank(M_PE.hist, SV.pe_hi)
 float HV_nd = na
 string HV_nd_txt = 'N/A'
 color HV_nd_col = na
@@ -2651,49 +2558,10 @@ if barstate.islast
     // No WACC (a bank, whose cost of debt is N/A; or no cost of equity yet): no flag either.
     wacc_flag = na(final_discount_rate) ? 'N/A' : final_discount_rate < 0.05 ? 'Too Low' : final_discount_rate > 0.20 ? 'Extreme' : 'Normal'
     wacc_tt = str.format(FL.tx(38), beta_mkt, (na(downside_beta) ? 'N/A' : str.tostring(downside_beta, '#.##')), i_rf_base, base_rf_for_calc * 100, calc_erp * 100, calc_crp * 100, auto_crp_raw * 100) + str.format(FL.tx(39), na(D.cod) ? 'N/A' : str.tostring(D.cod * 100, '#.#') + '%', F_tax * 100, lr_infl * 100, lr_rgdp * 100, final_terminal_growth * 100)
-    // Red flags: one list, short names for the cell, full text for the tooltip.
-    fl = array.new_string(0)
-    flags_tt = ''
-    severe = false
-    if nd > 4.5
-        fl.push('Leverage')
-        flags_tt += str.format(FL.tx(40), nd)
-    if is_distress
-        fl.push('Distress')
-        flags_tt += '\nDistress: ' + HV_dz + '.'
-    if zm_on and F_manip
-        fl.push('Z+M')
-        flags_tt += str.format('\nZ+M matrix: {0}.', zm_txt)
-        severe := true
-    else if not zm_on and i_useBeneishCheck and F_manip
-        fl.push('M-score')
-        flags_tt += str.format(FL.tx(41), F_m_score)
-        severe := true
-    if i_cf_on and not cf_ok
-        fl.push('Feed')
-        flags_tt += '\nCompanion feed: not linked correctly (links, or report lag differs). Ignored.'
-    // Piotroski's nine tests are built for industrial firms (gross margin, current ratio, asset
-    // turnover): no flag for banks or VN brokers, as the value-trap test already skips them.
-    if F_pio <= 3 and not (use_bank_model or vn_broker)
-        fl.push('Piotroski')
-        flags_tt += str.format(FL.tx(42), F_pio)
-    if F_inv_dummy or F_deter
-        fl.push('Capital alloc')
-        flags_tt += str.format('\nCapital allocation: {0}.', inv_txt)
-    if is_value_trap
-        fl.push('Value trap')
-        flags_tt += (trap_pb ? str.format(FL.tx(43), current_pb_val, jpb_roe * 100, cost_of_equity * 100) : '') + (trap_pio ? str.format('\nValue trap: Piotroski F-score {0,number,#} under the fair value (Piotroski 2000: among cheap stocks the weak scores lagged).', F_pio) : '')
-    if wacc_flag != 'Normal' and wacc_flag != 'N/A'
-        fl.push('WACC')
-        flags_tt += str.format(FL.tx(44), final_discount_rate * 100, wacc_flag)
-    if implied_exit_multiple > 30
-        fl.push('Exit multiple')
-        flags_tt += str.format(FL.tx(45), implied_exit_multiple)
-    if show_sloan and sloan_ratio >= 0
-        fl.push('Accruals')
-        flags_tt += str.format(FL.tx(46), f_gtxt(sloan_ratio))
-    int n_flags = fl.size()
-    flags_tt := n_flags == 0 ? FL.tx(47) : str.format('{0} flag(s):{1}', str.tostring(n_flags), flags_tt)
+    // Red flags: one list, short names for the cell, full text for the tooltip (FFVLib).
+    // Piotroski's tests are skipped for banks and VN brokers, as in the value-trap test.
+    [n_flags, severe, flag1, flags_tt] = FL.f_flags(nd, is_distress, HV_dz, zm_on, zm_txt, i_useBeneishCheck and F_manip, F_m_score, i_cf_on and not cf_ok, use_bank_model or vn_broker ? na : F_pio, inv_txt, F_inv_dummy or F_deter,
+         is_value_trap, trap_pb, current_pb_val, jpb_roe, cost_of_equity, trap_pio, F_pio, wacc_flag, final_discount_rate, implied_exit_multiple, show_sloan and sloan_ratio >= 0, f_gtxt(sloan_ratio))
     HV_nd := nd
     HV_nd_txt := nd_txt
     HV_nd_col := nd_col
@@ -2705,7 +2573,7 @@ if barstate.islast
     HV_wacc_tt := wacc_tt
     HV_n_flags := n_flags
     HV_severe := severe
-    HV_flag1 := n_flags > 0 ? fl.get(0) : ''
+    HV_flag1 := flag1
     HV_flags_tt := flags_tt
 // [FIX ZONE] ONE entry margin, used by both the chart and the backtester.
 // Input margin x downside beta (min 0.5x), clamped 5%..50%.
@@ -2867,16 +2735,16 @@ f_sum_val() =>
     sc_tt += f_axtt('Rate', D.r_hi, D.r_lo, 0) + f_axtt('Stage-1 growth', D.g_lo, D.g_hi, 1) + f_axtt('Terminal growth', D.t_lo, D.t_hi, 2) + f_axtt('Revenue growth (Rule of 40)', D.v_lo, D.v_hi, 3)
     f_row4('Scenarios', sc_tt, 'Pos ' + ipos_txt, na(sens) ? 'Rate N/A' : 'Rate ' + (sens > 0 ? '+' : '') + str.tostring(sens * 100, '#.#') + '%', (na(att.get(top)) ? 'Bear: N/A' : 'Bear: ' + AXN.get(top)) + (n_inv > 0 ? ' !' : ''), stt = sc_tt)
     if i_show_street
-        if SV_has
-            f_model_row('Street PV (' + str.tostring(SV_n, '#') + ')', SV_lo, SV_md, SV_hi, str.format(FL.tx(64), SV_n, f_px(SV_lo_t), f_px(SV_md_t), f_px(SV_hi_t), cost_of_equity * 100, (na(SV_overlap) ? 'N/A' : str.format('{0,number,#}%', SV_overlap * 100))))
-            if not na(SV_cw_fv)
-                float cw_dev = (close / SV_cw_fv - 1) * 100
-                f_row4('Conf-weighted FV', FL.tx(65), '', f_px(SV_cw_fv), 'Price ' + (cw_dev > 0 ? '+' : '') + str.tostring(cw_dev, '#') + '%', c2 = color.white, b2 = f_scen_col(SV_cw_fv, close, true), c3 = cw_dev > 0 ? color.red : color.green)
+        if SV.has
+            f_model_row('Street PV (' + str.tostring(SV.n, '#') + ')', SV.lo, SV.md, SV.hi, str.format(FL.tx(64), SV.n, f_px(SV.lo_t), f_px(SV.md_t), f_px(SV.hi_t), cost_of_equity * 100, (na(SV.overlap) ? 'N/A' : str.format('{0,number,#}%', SV.overlap * 100))))
+            if not na(SV.cw_fv)
+                float cw_dev = (close / SV.cw_fv - 1) * 100
+                f_row4('Conf-weighted FV', FL.tx(65), '', f_px(SV.cw_fv), 'Price ' + (cw_dev > 0 ? '+' : '') + str.tostring(cw_dev, '#') + '%', c2 = color.white, b2 = f_scen_col(SV.cw_fv, close, true), c3 = cw_dev > 0 ? color.red : color.green)
         else
             f_row4('Street PV', FL.tx(66), 'No coverage', '', '')
-        v_plain = SV_verdict == 'No coverage' or SV_verdict == 'No fair value'
-        vcol = v_plain ? color_bg : SV_verdict == 'High conviction' or str.startswith(SV_verdict, 'Agree') ? color_under : SV_verdict == 'Real disagreement' or SV_verdict == 'Low information' ? color_over : C_OR40
-        f_row4('Confidence', SV_conf_tt, 'Ours ' + f_ctxt(SV_our_conf), 'Street ' + f_ctxt(SV_st_conf), SV_verdict, f_on(SV_our_conf), f_ccol(SV_our_conf), f_on(SV_st_conf), f_ccol(SV_st_conf), v_plain ? color_text : color.white, vcol, SV_verdict_tt)
+        v_plain = SV.verdict == 'No coverage' or SV.verdict == 'No fair value'
+        vcol = v_plain ? color_bg : SV.verdict == 'High conviction' or str.startswith(SV.verdict, 'Agree') ? color_under : SV.verdict == 'Real disagreement' or SV.verdict == 'Low information' ? color_over : C_OR40
+        f_row4('Confidence', SV.conf_tt, 'Ours ' + f_ctxt(SV.our_conf), 'Street ' + f_ctxt(SV.st_conf), SV.verdict, f_on(SV.our_conf), f_ccol(SV.our_conf), f_on(SV.st_conf), f_ccol(SV.st_conf), v_plain ? color_text : color.white, vcol, SV.verdict_tt)
 f_sum_health() =>
     f_hdr('Health', 'Value', 'Detail', 'Status', FL.tx(67))
     // Balance sheet: leverage value + status; Z / M in the middle, shaded by quadrant.
@@ -2992,22 +2860,22 @@ f_det_omni() =>
         f_cell(2, row, omni_manual ? (i_omni_strict ? 'Manual (strict)' : 'Manual') : 'Auto', color_text, color_bg)
         f_cell(3, row, omni_n == 0 ? 'INACTIVE' : omni_dupe ? 'DOUBLE-COUNT' : not omni_eq ? 'Weighted' : 'Equal wt', omni_n == 0 ? color.red : omni_dupe ? color.orange : color_text, color_bg)
 f_det_street() =>
-    f_hdr('Street detail' + (SV_has ? ' (' + str.tostring(SV_n, '#') + ' analysts)' : ''), 'Bear', 'Base', 'Bull', FL.tx(104))
-    if not SV_has
+    f_hdr('Street detail' + (SV.has ? ' (' + str.tostring(SV.n, '#') + ' analysts)' : ''), 'Bear', 'Base', 'Bull', FL.tx(104))
+    if not SV.has
         f_row4('No analyst coverage', FL.tx(66), '', '', '')
     else
-        f_model_row('Target (12M)', SV_lo_t, SV_md_t, SV_hi_t, SV_n <= 1 ? '1 analyst: no range.' : FL.tx(105))
-        f_row4('Implied growth', str.format(FL.tx(106), f_gtxt(SV_our_g), f_gtxt(final_growth_rate)), f_gtxt(SV_g_lo), f_gtxt(SV_g_md), f_gtxt(SV_g_hi))
-        pe_tt = str.format(FL.tx(107), (na(SV_rank_md) ? 'N/A' : str.format('{0,number,#}th', SV_rank_md * 100)), (na(SV_rank_hi) ? 'N/A' : str.format('{0,number,#}th', SV_rank_hi * 100)))
-        f_row4('Implied fwd P/E', pe_tt, f_petxt(SV_pe_lo), f_petxt(SV_pe_md), f_petxt(SV_pe_hi), c2 = SV_rank_md > 0.9 ? color.red : color_text, c3 = SV_rank_hi > 0.9 ? color.red : color_text, stt = pe_tt)
-        float rc_tot = SV_rc_buy + SV_rc_hold + SV_rc_sell
-        rt_tt = rc_tot > 0 ? str.format(FL.tx(108), SV_rc_score, rc_tot) : FL.tx(109)
-        f_row4('Ratings', rt_tt, 'Buy ' + str.tostring(SV_rc_buy, '#'), 'Hold ' + str.tostring(SV_rc_hold, '#'), 'Sell ' + str.tostring(SV_rc_sell, '#'), stt = rt_tt)
-        f_row4('Target age / overlap', FL.tx(110), na(SV_age_d) ? 'Age -' : str.tostring(SV_age_d, '#') + ' days', 'Overlap ' + (na(SV_overlap) ? '-' : str.tostring(SV_overlap * 100, '#') + '%'), '')
-    f_hdr('Confidence parts', 'Ours', 'Street', 'Weight', SV_conf_tt)
+        f_model_row('Target (12M)', SV.lo_t, SV.md_t, SV.hi_t, SV.n <= 1 ? '1 analyst: no range.' : FL.tx(105))
+        f_row4('Implied growth', str.format(FL.tx(106), f_gtxt(SV.our_g), f_gtxt(final_growth_rate)), f_gtxt(SV.g_lo), f_gtxt(SV.g_md), f_gtxt(SV.g_hi))
+        pe_tt = str.format(FL.tx(107), (na(SV.rank_md) ? 'N/A' : str.format('{0,number,#}th', SV.rank_md * 100)), (na(SV.rank_hi) ? 'N/A' : str.format('{0,number,#}th', SV.rank_hi * 100)))
+        f_row4('Implied fwd P/E', pe_tt, f_petxt(SV.pe_lo), f_petxt(SV.pe_md), f_petxt(SV.pe_hi), c2 = SV.rank_md > 0.9 ? color.red : color_text, c3 = SV.rank_hi > 0.9 ? color.red : color_text, stt = pe_tt)
+        float rc_tot = SV.rc_buy + SV.rc_hold + SV.rc_sell
+        rt_tt = rc_tot > 0 ? str.format(FL.tx(108), SV.rc_score, rc_tot) : FL.tx(109)
+        f_row4('Ratings', rt_tt, 'Buy ' + str.tostring(SV.rc_buy, '#'), 'Hold ' + str.tostring(SV.rc_hold, '#'), 'Sell ' + str.tostring(SV.rc_sell, '#'), stt = rt_tt)
+        f_row4('Target age / overlap', FL.tx(110), na(SV.age_d) ? 'Age -' : str.tostring(SV.age_d, '#') + ' days', 'Overlap ' + (na(SV.overlap) ? '-' : str.tostring(SV.overlap * 100, '#') + '%'), '')
+    f_hdr('Confidence parts', 'Ours', 'Street', 'Weight', SV.conf_tt)
     array<string> cwt = array.from('35%', '20%', '25%', '20%')
     for j = 0 to 3
-        f_row4(CPN.get(j), SV_ctt.get(j), f_stxt(SV_co.get(j)), f_stxt(SV_cs.get(j)), cwt.get(j))
+        f_row4(CPN.get(j), SV.ctt.get(j), f_stxt(SV.co.get(j)), f_stxt(SV.cs.get(j)), cwt.get(j))
 if barstate.islast
     f_tbl_head()
     f_sum_val()

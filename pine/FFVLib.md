@@ -1403,4 +1403,148 @@ export f_verdict(bool has, float oc, float sc, float gap, float cut) =>
     bool a = math.abs(gap) <= cut
     not has ? 'No coverage' : na(oc) ? 'No fair value' : oc >= 60 and sc >= 60 ? (a ? 'High conviction' : 'Real disagreement') : oc < 40 and sc < 40 ? 'Low information' : oc - sc >= 20 ? (a ? 'Agree (ours stronger)' : 'Trust ours') : sc - oc >= 20 ? (a ? 'Agree (street stronger)' : 'Trust street') : a ? 'Agree' : 'Mixed'
 
+// @function Red flags for the health card: [count, severe, first short name, tooltip]. pio is na where Piotroski's tests do not apply (banks, VN brokers); pio_v is the score for the value-trap text.
+export f_flags(float nd, bool distress, string dz, bool zm_on, string zm_txt, bool manip, float m_score, bool feed_bad, float pio, string inv_txt, bool inv_bad, bool trap, bool trap_pb, float pb, float jpb_roe, float coe, bool trap_pio, float pio_v, string wacc_flag, float wacc, float exit_mult, bool sloan, string sloan_txt) =>
+    fl = array.new_string(0)
+    tt = ''
+    severe = false
+    if nd > 4.5
+        fl.push('Leverage')
+        tt += str.format(tx(40), nd)
+    if distress
+        fl.push('Distress')
+        tt += '\nDistress: ' + dz + '.'
+    if zm_on and manip
+        fl.push('Z+M')
+        tt += str.format('\nZ+M matrix: {0}.', zm_txt)
+        severe := true
+    else if not zm_on and manip
+        fl.push('M-score')
+        tt += str.format(tx(41), m_score)
+        severe := true
+    if feed_bad
+        fl.push('Feed')
+        tt += '\nCompanion feed: not linked correctly (links, or report lag differs). Ignored.'
+    // Piotroski's nine tests are built for industrial firms (gross margin, current ratio, asset
+    // turnover): no flag for banks or VN brokers, as the value-trap test already skips them.
+    if pio <= 3
+        fl.push('Piotroski')
+        tt += str.format(tx(42), pio)
+    if inv_bad
+        fl.push('Capital alloc')
+        tt += str.format('\nCapital allocation: {0}.', inv_txt)
+    if trap
+        fl.push('Value trap')
+        tt += (trap_pb ? str.format(tx(43), pb, jpb_roe * 100, coe * 100) : '') + (trap_pio ? str.format('\nValue trap: Piotroski F-score {0,number,#} under the fair value (Piotroski 2000: among cheap stocks the weak scores lagged).', pio_v) : '')
+    if wacc_flag != 'Normal' and wacc_flag != 'N/A'
+        fl.push('WACC')
+        tt += str.format(tx(44), wacc * 100, wacc_flag)
+    if exit_mult > 30
+        fl.push('Exit multiple')
+        tt += str.format(tx(45), exit_mult)
+    if sloan
+        fl.push('Accruals')
+        tt += str.format(tx(46), sloan_txt)
+    int n = fl.size()
+    [n, severe, n > 0 ? fl.get(0) : '', n == 0 ? tx(47) : str.format('{0} flag(s):{1}', str.tostring(n), tt)]
+
+// @type Street comparison for the summary card and the Street detail rows (display only).
+// @field has Analyst targets exist.
+// @field n Number of target estimates.
+// @field lo_t Low 12-month target.
+// @field md_t Median 12-month target.
+// @field hi_t High 12-month target.
+// @field lo Low target in present value.
+// @field md Median target in present value.
+// @field hi High target in present value.
+// @field g_lo Growth implied by the low target (reverse DCF).
+// @field g_md Growth implied by the median target.
+// @field g_hi Growth implied by the high target.
+// @field our_g Growth implied by our fair value.
+// @field pe_lo P/E at the low target.
+// @field pe_md P/E at the median target.
+// @field pe_hi P/E at the high target.
+// @field rank_md Percentile of the median-target P/E in the P/E history.
+// @field rank_hi Percentile of the high-target P/E in the P/E history.
+// @field overlap Overlap of our range and the street range.
+// @field our_conf Our confidence 0-100.
+// @field st_conf Street confidence 0-100.
+// @field gap Ours / street PV - 1.
+// @field cw_fv Confidence-weighted value.
+// @field rc_buy Buy ratings.
+// @field rc_hold Hold ratings.
+// @field rc_sell Sell ratings.
+// @field rc_score Rating score 1 strong buy - 5 strong sell.
+// @field age_d Target age in days.
+// @field verdict Ours vs street verdict.
+// @field conf_tt Confidence tooltip.
+// @field verdict_tt Verdict tooltip.
+// @field co Our confidence parts.
+// @field cs Street confidence parts.
+// @field ctt Tooltip for each confidence part.
+export type Street
+    bool has = false
+    float n = 0.0
+    float lo_t
+    float md_t
+    float hi_t
+    float lo
+    float md
+    float hi
+    float g_lo
+    float g_md
+    float g_hi
+    float our_g
+    float pe_lo
+    float pe_md
+    float pe_hi
+    float rank_md
+    float rank_hi
+    float overlap
+    float our_conf
+    float st_conf
+    float gap
+    float cw_fv
+    float rc_buy = 0.0
+    float rc_hold = 0.0
+    float rc_sell = 0.0
+    float rc_score
+    float age_d
+    string verdict = 'No coverage'
+    string conf_tt = ''
+    string verdict_tt = ''
+    array<float> co
+    array<float> cs
+    array<string> ctt
+
+f_sxt(float c) => na(c) ? '-' : str.tostring(c, '#.00')
+f_tpe(float t, float eps) => not na(t) and eps > 0 ? t / eps : na
+
+// @function Street comparison: targets (12-month and PV), our confidence parts [overlap, agreement, depth, reliability, quality, score] from f_our_conf, street confidence, verdict, confidence-weighted value and tooltips. The P/E ranks are left to the caller.
+export f_street_view(bool has, float lo_t, float md_t, float hi_t, float n, float st_lo, float st_md, float st_hi, float dt, float now, float bs, float b, float h, float s, float ss, float fv, float overlap, float oa, float od, float orl, float oq, float oc, int nm, bool track, float err, int hz, float cut, float eps, array<float> rdcf, array<string> cpn) =>
+    Street v = Street.new(has, n, lo_t, md_t, hi_t, st_lo, st_md, st_hi, rdcf.get(2), rdcf.get(3), rdcf.get(4), rdcf.get(1), f_tpe(lo_t, eps), f_tpe(md_t, eps), f_tpe(hi_t, eps), na, na, overlap, oc)
+    [sa, sd, sf, sq, sc, age, rb, rh, rs, rcs] = f_street(has, lo_t, md_t, hi_t, n, dt, now, bs, b, h, s, ss)
+    float gap = has and not na(fv) ? fv / st_md - 1 : na
+    v.st_conf := sc
+    v.gap := gap
+    v.verdict := f_verdict(has, oc, sc, gap, cut)
+    v.cw_fv := has and not na(oc) and oc + sc > 0 ? (fv * oc + st_md * sc) / (oc + sc) : na
+    v.rc_buy := rb
+    v.rc_hold := rh
+    v.rc_sell := rs
+    v.rc_score := rcs
+    v.age_d := age
+    v.co := array.from(oa, od, orl, oq)
+    v.cs := array.from(sa, sd, sf, sq)
+    v.ctt := array.from(tx(18), 'Ours: ' + str.tostring(nm) + ' models' + (track ? '' : ', no track record (x0.5)') + tx(19), tx(20) + (na(age) ? 'unknown' : str.tostring(age, '#') + ' days') + '.', tx(21))
+    string ct = tx(22)
+    for j = 0 to 3
+        ct += str.format('\n{0}:  {1} / {2}', cpn.get(j), f_sxt(v.co.get(j)), f_sxt(v.cs.get(j)))
+    ct += '\n'
+    for j = 0 to 3
+        ct += str.format('\n{0} - {1}', cpn.get(j), v.ctt.get(j))
+    v.conf_tt := ct + str.format(tx(23), str.tostring(hz), (na(err) ? tx(24) : str.format(' = {0,number,#.##}', err)))
+    v.verdict_tt := str.format(tx(25), (na(gap) ? 'N/A' : str.format('{0}{1,number,#}%', (gap > 0 ? '+' : ''), gap * 100)), cut * 100, (na(rcs) ? '' : str.format(tx(26), rcs, rb + rh + rs)))
+    v
+
 ```
