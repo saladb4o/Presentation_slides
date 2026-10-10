@@ -1,8 +1,10 @@
 //@version=6
 indicator('Fundamental Fair Value Pro (FF4 + McKinsey/Rev DCF) [Real-Time + Backtest]', shorttitle = 'FFV Pro (Real)', overlay = true, dynamic_requests = true)
 // Companion library pine/ffv_lib.pine (backtester and long texts): publish it as a private
-// library named FFVLib, then replace YOUR_TV_USERNAME with your TradingView username.
+// library named FFVLib; pine/ffv_mc.pine (Monte Carlo and forecast statistics) as a private
+// library named FFVMC. Then replace YOUR_TV_USERNAME with your TradingView username.
 import YOUR_TV_USERNAME/FFVLib/3 as FL
+import YOUR_TV_USERNAME/FFVMC/1 as FM
 // =====================================================================
 // ARCHITECTURE: one top-to-bottom pass per bar, on two clocks
 //   1. Helpers and types   pure maths, backtest state, the model stage: enums, the
@@ -1751,7 +1753,7 @@ var float KC_T = na
 var float KC_H = na
 var float KC_X = na
 if tw_new and timeframe.in_seconds() <= 604800 and close[1] > 0
-    [kv, kt, kh, kx] = FL.f_cond(TW_S, TW_X, TW_A)
+    [kv, kt, kh, kx] = FM.f_cond(TW_S, TW_X, TW_A)
     KC_V := kv, KC_T := kt, KC_H := kh, KC_X := kx
 // Written now, not with the other CLOSE columns below, so the draws see this quarter's conditions.
 ST.write(Q_MC + 5, KC_V)
@@ -1868,7 +1870,7 @@ f_one_src(array<float> s) =>
     ok
 // A series' MIDAS summary (FFVLib f_midas) into three store columns from c.
 f_midas_w(array<float> a, bool lg, int c) =>
-    [m0, m1, m2] = FL.f_midas(a, lg)
+    [m0, m1, m2] = FM.f_midas(a, lg)
     ST.write(c, m0)
     ST.write(c + 1, m1)
     ST.write(c + 2, m2)
@@ -1929,14 +1931,14 @@ if CK.dirty
     ST.write(Q_L + 12, F_rev > 0 and ST.at(Q_REV, 4) > 0 ? math.log(F_rev / ST.at(Q_REV, 4)) : na)
     ST.write(Q_L + 13, F_rev > 0 and ST.at(Q_REV, 1) > 0 ? math.log(F_rev / ST.at(Q_REV, 1)) : na)
     if CK.adv
-        LM := FL.f_lasso(ST.v, ST.q, Q_L, 14, Q_REV, i_scen_min_n, 40)
+        LM := FM.f_lasso(ST.v, ST.q, Q_L, 14, Q_REV, i_scen_min_n, 40)
         // Each member's record (the Omnibus rule, MALE): its forward sales against the revenue
         // released 4 quarters later.
         array<float> rv = ST.window(Q_REV, 21, 0, true)
         for i = 0 to 2
             [w, e] = f_model_weight(ST.window(Q_L + 14 + i, 21, 0, true), rv, 2, 4)
             LW.set(i, w)
-    float yl = FL.f_lasso_at(LM, ST.back(0), Q_L, 14)
+    float yl = FM.f_lasso_at(LM, ST.back(0), Q_L, 14)
     // A feature that goes na partway through the quarter (a weekly series stops printing)
     // keeps the quarter's last reading: the record is what was known, not a blank. A new
     // release starts the quarter over.
@@ -2385,11 +2387,11 @@ int mc_kn = 0
 f_draws(matrix<float> ds, int c, array<float> ch, array<int> lg, matrix<float> pm, float seed) =>
     int nk = 0
     if ch.size() >= i_scen_min_n
-        w = FL.f_knn(pm, lg)
-        g = FL.WH.new(a = seed)
+        w = FM.f_knn(pm, lg)
+        g = FM.WH.new(a = seed)
         for y in w
             nk += y > 0 ? 1 : 0
-        for [i, v] in (nk > 0 ? FL.f_wdraws1(g, ch, lg, w, MC_N, MC_H) : FL.f_draws1(g, ch, lg, MC_N, MC_H))
+        for [i, v] in (nk > 0 ? FM.f_wdraws1(g, ch, lg, w, MC_N, MC_H) : FM.f_draws1(g, ch, lg, MC_N, MC_H))
             ds.set(i, c, v)
     nk
 // [25th percentile, at most 0 | 75th, at least 0] of a draw column (na without draws).
@@ -2414,28 +2416,28 @@ f_moves(Model m) =>
 if barstate.islast
     DS.fill(na)
     AXQ.fill(0)
-    [lg, cr0, cg0, ct0, sk] = FL.f_pool(ST.v, ST.q, i_numQuarters, Q_MC)
-    cr = FL.f_demean(cr0), cg = FL.f_demean(cg0), ct = FL.f_demean(ct0)
-    pm = FL.f_pctl(ST.v, ST.q, Q_MC + 5, 4)
+    [lg, cr0, cg0, ct0, sk] = FM.f_pool(ST.v, ST.q, i_numQuarters, Q_MC)
+    cr = FM.f_demean(cr0), cg = FM.f_demean(cg0), ct = FM.f_demean(ct0)
+    pm = FM.f_pctl(ST.v, ST.q, Q_MC + 5, 4)
     mc_q := lg.size()
     mc_sk := sk
     if mc_q >= i_scen_min_n
-        mc_b := FL.f_blen(cr, cg, ct)
+        mc_b := FM.f_blen(cr, cg, ct)
         // Blocks start where past conditions resemble now (kNN weights), the changes centred on the
         // weighted paths' mean; equal weights and the plain mean without enough neighbours.
         // Paths do not step across a skipped quarter or from the newest back to the oldest (FFVLib
         // f_next): they restart there, and the centring follows the same paths.
-        w = FL.f_knn(pm, lg)
+        w = FM.f_knn(pm, lg)
         for y in w
             mc_kn += y > 0 ? 1 : 0
         if mc_kn == 0
             w := array.new_float(mc_q, 1.0)
-        cw = FL.f_cum(w)
-        nx = FL.f_next(lg)
-        cr := FL.f_wdemean(cr0, w, nx, mc_b, MC_H), cg := FL.f_wdemean(cg0, w, nx, mc_b, MC_H), ct := FL.f_wdemean(ct0, w, nx, mc_b, MC_H)
-        g = FL.WH.new()
+        cw = FM.f_cum(w)
+        nx = FM.f_next(lg)
+        cr := FM.f_wdemean(cr0, w, nx, mc_b, MC_H), cg := FM.f_wdemean(cg0, w, nx, mc_b, MC_H), ct := FM.f_wdemean(ct0, w, nx, mc_b, MC_H)
+        g = FM.WH.new()
         for i = 0 to MC_N - 1
-            path = FL.f_wpath(g, cw, nx, mc_b, MC_H)
+            path = FM.f_wpath(g, cw, nx, mc_b, MC_H)
             float sr = 0.0, float sg = 0.0, float st = 0.0
             for j in path
                 sr += cr.get(j)
@@ -2449,12 +2451,12 @@ if barstate.islast
             AXQ.set(c, mc_q)
     else
         for c = 0 to 2
-            [ch, cl] = FL.f_pool1(ST.v, ST.q, i_numQuarters, Q_MC + c, Q_MC + (c == 1 ? 4 : 3))
+            [ch, cl] = FM.f_pool1(ST.v, ST.q, i_numQuarters, Q_MC + c, Q_MC + (c == 1 ? 4 : 3))
             AXQ.set(c, ch.size())
             mc_kn := math.max(mc_kn, f_draws(DS, c, ch, cl, pm, 211111111.0 + c * 100000000.0))
     // The rate draws keep their paths (and so their co-movement with growth) but are rescaled to
     // the spread of the rate's weekly one-year moves; under 52 windows they stay as drawn.
-    [yv, yn] = FL.f_yvar(WK_R, WK_S, 52)
+    [yv, yn] = FM.f_yvar(WK_R, WK_S, 52)
     mc_rw := yn
     if not na(yv) and not na(DS.get(0, 0))
         float s0 = DS.col(0).stdev()
@@ -2464,7 +2466,7 @@ if barstate.islast
                 DS.set(i, 0, DS.get(i, 0) * rk)
     // The growth draws widen (never narrow) to the spread of the market-implied growth's weekly
     // one-year moves, under 52 windows (or no implied growth: losses) they stay as drawn.
-    [gv, gn] = FL.f_yvar(WK_G, WK_S, 52)
+    [gv, gn] = FM.f_yvar(WK_G, WK_S, 52)
     mc_gw := gn
     if not na(gv) and not na(DS.get(0, 1))
         float s1 = DS.col(1).stdev()
@@ -2472,7 +2474,7 @@ if barstate.islast
             float gk = math.max(1.0, math.sqrt(gv) / s1)
             for i = 0 to MC_N - 1
                 DS.set(i, 1, DS.get(i, 1) * gk)
-    [rv, rvl] = FL.f_pool_yoy(ST.v, ST.q, i_numQuarters, Q_REV)
+    [rv, rvl] = FM.f_pool_yoy(ST.v, ST.q, i_numQuarters, Q_REV)
     AXQ.set(3, rv.size())
     mc_kn := math.max(mc_kn, f_draws(DS, 4, rv, rvl, pm, 511111111.0))
     [rl, rh] = f_side(DS, 0)
