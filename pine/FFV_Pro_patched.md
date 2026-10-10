@@ -8,8 +8,8 @@ indicator('Fundamental Fair Value Pro (FF4 + McKinsey/Rev DCF) [Real-Time + Back
 // Companion library pine/ffv_lib.pine (backtester and long texts): publish it as a private
 // library named FFVLib; pine/ffv_mc.pine (Monte Carlo and forecast statistics) as a private
 // library named FFVMC. Then replace YOUR_TV_USERNAME with your TradingView username.
-import YOUR_TV_USERNAME/FFVLib/5 as FL
-import YOUR_TV_USERNAME/FFVMC/4 as FM
+import YOUR_TV_USERNAME/FFVLib/6 as FL
+import YOUR_TV_USERNAME/FFVMC/5 as FM
 // =====================================================================
 // ARCHITECTURE: one top-to-bottom pass per bar, on two clocks
 //   1. Helpers and types   pure maths, backtest state, the model stage: enums, the
@@ -2020,7 +2020,7 @@ f_blend(bool omni) =>
             vs.push(m.fv)
             ws.push(x)
     fv := n > 0 ? fv : na
-    [fv, nz(FM.f_wsd(vs, ws, fv), fv * 0.15), n, tot <= 0, nsub, own]
+    [fv, FM.f_wsd(vs, ws, fv), n, tot <= 0, nsub, own]
 // Standard first: the Omnibus may hold the Standard Composite as a member.
 float compositeFairValue = na
 float fv_stddev = na
@@ -2379,13 +2379,14 @@ bool is_distress = HV_dz != ''
 // ==============================================================
 // === RESOLVE: BANDS + VERDICT (after the blend is final) ======
 // ==============================================================
-// No spread across the models: no bands (they were a typed +-15%).
+// Bands: the members' spread (none under two members with weight). Very Over/Undervalued needs the
+// price past both the band and the 3% fair zone.
 float upperBound = finalFairValue + fv_stddev
 float lowerBound = finalFairValue - fv_stddev
 upperBound := upperBound > 0 ? upperBound : na
 lowerBound := lowerBound > 0 ? lowerBound : na
 float fv_band = math.max(nz(finalFairValue) * 0.03, 0.0)
-valuation_status = na(finalFairValue) ? 'N/A' : close > upperBound ? 'Very Overvalued' : close > finalFairValue + fv_band ? 'Overvalued' : close < lowerBound ? 'Very Undervalued' : close < finalFairValue - fv_band ? 'Undervalued' : 'Fairly Valued'
+valuation_status = na(finalFairValue) ? 'N/A' : close > upperBound and close > finalFairValue + fv_band ? 'Very Overvalued' : close > finalFairValue + fv_band ? 'Overvalued' : close < lowerBound and close < finalFairValue - fv_band ? 'Very Undervalued' : close < finalFairValue - fv_band ? 'Undervalued' : 'Fairly Valued'
 // CLOSE columns, on every bar, so a closed quarter keeps its last bar: the price, the value
 // shown (Omnibus or Standard, which the confidence score grades), each row's fair value (its
 // track record) and each own multiple's observation (its ratio history). [FIX RKV-FLOOR] A low

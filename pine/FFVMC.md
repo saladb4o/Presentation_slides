@@ -5,15 +5,15 @@ Publish this as a new version of your private library FFVMC (version 2: it now a
 ```pine
 //@version=6
 // @description Companion library for Fundamental Fair Value Pro: the Monte Carlo engine (quasi-random
-// lattice, the history pools, block length, bootstrap paths and draws) and the forecast statistics
+// lattice and Array-RQMC, the history pools, block length, bootstrap paths and draws) and the forecast statistics
 // (rate-width variance, MIDAS, LASSO). It was split out of FFVLib to keep each library under the
 // compile-size limit. Publish it as a PRIVATE library named FFVMC; after any change, publish a new
 // version and bump the number in the indicator's import line.
 library('FFVMC')
 // ==========================================
-// MONTE CARLO: the lattice and its random shift, the history pool, the block length, the paths
+// MONTE CARLO: the lattice and its random shifts, the history pool, the block length, the paths
 // ==========================================
-// @type Wichmann-Hill (2006) generator: four multiplicative congruential generators, period about 2^121; it draws the lattice's random shift (f_lat). Plain arithmetic, so a copy in any language gives the same numbers from the same seeds.
+// @type Wichmann-Hill (2006) generator: four multiplicative congruential generators, period about 2^121; it draws the lattice's random shifts (f_lat, f_arq) and the shuffle that pairs independent path sets. Plain arithmetic, so a copy in any language gives the same numbers from the same seeds.
 // @field a First state.
 // @field b Second state.
 // @field c Third state.
@@ -39,18 +39,20 @@ export method nxt(WH g) =>
 // @field sh The shift, one per coordinate.
 // @field i The point (the draw).
 // @field j The next coordinate.
+// @field r The generator the shift came from, which goes on to draw Array-RQMC's shifts (f_arq).
 export type LP
     array<float> z
     array<float> sh
     int i = 0
     int j = 0
+    WH r
 // @function The lattice for the draws: the shift from the Wichmann-Hill generator at its fixed seeds, so a reload gives the same points.
 export f_lat() =>
     g = WH.new()
     sh = array.new_float()
     for j = 1 to 28
         sh.push(g.nxt())
-    LP.new(array.from(1.0, 275, 451, 245, 215, 367, 247, 363, 491, 143, 269, 359, 397, 187, 497, 221, 225, 393, 91, 185, 395, 87, 335, 179, 299, 125, 193, 457), sh)
+    LP.new(array.from(1.0, 275, 451, 245, 215, 367, 247, 363, 491, 143, 269, 359, 397, 187, 497, 221, 225, 393, 91, 185, 395, 87, 335, 179, 299, 125, 193, 457), sh, r = g)
 // @function The current point's next coordinate, in [0, 1).
 export method nxt(LP p) =>
     float x = p.i * p.z.get(p.j) / 1024.0 + p.sh.get(p.j)
@@ -325,21 +327,94 @@ export f_wdemean(array<float> x, array<float> w, array<int> nx, float blen, int 
     for v in x
         out.push(v - mu)
     out
-// @function nd draws of one driver on its own with kNN start weights w (lg the changes' lags, for the pool's gaps): the changes centred on their weighted-path mean, then summed along weighted paths (f_wpath; draw i on lattice point i from coordinate j0), the block length the series' own optimal one.
-// @returns The nd sums, in draw order.
-export f_wdraws1(LP g, int j0, array<float> ch, array<int> lg, array<float> w, int nd, int h) =>
-    out = array.new_float()
+// The order of the rows of k batch-sorted on its columns (L'Ecuyer, Lécot and L'Archevêque-Gaudet
+// 2009): sorted on the first column and cut into nb[0] equal batches, each sorted on the second
+// and cut into nb[1], and so on (one column: a plain sort).
+f_bsort(matrix<float> k, array<int> nb) =>
+    int n = k.rows()
+    ord = array.new_int()
+    for i = 0 to n - 1
+        ord.push(i)
+    int m = n
+    for [c, b] in nb
+        nord = array.new_int()
+        for s = 0 to int(n / m) - 1
+            seg = ord.slice(s * m, (s + 1) * m)
+            kk = array.new_float()
+            for i in seg
+                kk.push(k.get(i, c))
+            for j in kk.sort_indices()
+                nord.push(seg.get(j))
+        ord := nord
+        m := int(m / b)
+    ord
+// @function Array-RQMC (L'Ecuyer, Lécot and Tuffin 2008): the nd (1,024) weighted bootstrap paths of f_wpath (weights w, successors nx, block length blen) run side by side one step at a time. Before each step the paths are sorted on each driver's sum so far plus its expected sum over the steps still to come (for several drivers a batch sort, L'Ecuyer, Lécot and L'Archevêque-Gaudet 2009: 8 x 8 x 16 batches for three, about N^(1/3) each), and the step's points, a rank-1 lattice (f_lat's generating vector) under a fresh random shift, are sorted the same way on their first coordinates; the k-th path then takes the k-th point's last two coordinates for its jump and its pick. Paths that stand close get points that are spread evenly among them at every step, where the plain lattice spreads only the whole paths. Ties keep the path order.
+// @param x The drivers' changes, one column each (centred).
+// @returns [sums (nd x drivers), each path's end position].
+export f_arq(LP g, matrix<float> x, array<float> w, array<int> nx, float blen, int nd, int h) =>
+    int n = x.rows()
+    int c = x.columns()
+    nb = c == 1 ? array.from(nd) : array.from(8, 8, 16)
+    float sw = w.sum()
+    // Expected sum of the steps still to come from each position after t steps (columns (t - 1) c ..;
+    // none after the last): a jump to the weights with probability 1 / blen (always where there is
+    // no next quarter), else the next quarter.
+    rem = matrix.new<float>(n, c * h, 0.0)
+    if h > 1
+        for t = h - 1 to 1
+            for d = 0 to c - 1
+                float jm = 0.0
+                for i = 0 to n - 1
+                    jm += w.get(i) / sw * (x.get(i, d) + rem.get(i, t * c + d))
+                for i = 0 to n - 1
+                    int k = nx.get(i)
+                    rem.set(i, (t - 1) * c + d, k < 0 ? jm : jm / blen + (1 - 1 / blen) * (x.get(k, d) + rem.get(k, t * c + d)))
+    cw = f_cum(w)
+    sm = matrix.new<float>(nd, c, 0.0)
+    pos = array.new_int()
+    float u0 = g.r.nxt()
+    for k = 0 to nd - 1
+        float u = float(k) / nd + u0
+        int i = f_pick(cw, u - math.floor(u))
+        pos.push(i)
+        for d = 0 to c - 1
+            sm.set(k, d, x.get(i, d))
+    if h > 1
+        for t = 1 to h - 1
+            km = matrix.new<float>(nd, c, 0.0)
+            for k = 0 to nd - 1
+                int i = pos.get(k)
+                for d = 0 to c - 1
+                    km.set(k, d, sm.get(k, d) + rem.get(i, (t - 1) * c + d) + k * 1e-13)
+            o = f_bsort(km, nb)
+            sh = array.new_float()
+            for j = 0 to c + 1
+                sh.push(g.r.nxt())
+            pt = matrix.new<float>(nd, c + 2, 0.0)
+            for k = 0 to nd - 1
+                for j = 0 to c + 1
+                    float y = k * g.z.get(j) / 1024.0 + sh.get(j)
+                    pt.set(k, j, y - math.floor(y))
+            po = f_bsort(pt, nb)
+            for [r, k] in o
+                int p = po.get(r)
+                int i = pos.get(k)
+                i := pt.get(p, c) < 1.0 / blen or nx.get(i) < 0 ? f_pick(cw, pt.get(p, c + 1)) : nx.get(i)
+                pos.set(k, i)
+                for d = 0 to c - 1
+                    sm.set(k, d, sm.get(k, d) + x.get(i, d))
+    [sm, pos]
+// @function nd draws of one driver on its own with kNN start weights w (lg the changes' lags, for the pool's gaps): the changes centred on their weighted-path mean, then summed along weighted paths run by Array-RQMC (f_arq), the block length the series' own optimal one.
+// @returns The nd sums.
+export f_wdraws1(LP g, array<float> ch, array<int> lg, array<float> w, int nd, int h) =>
     float bl = f_blen(ch, ch, ch)
     nx = f_next(lg)
     x = f_wdemean(ch, w, nx, bl, h)
-    cw = f_cum(w)
-    for i = 0 to nd - 1
-        g.i := i, g.j := j0
-        float s = 0.0
-        for j in f_wpath(g, cw, nx, bl, h)
-            s += x.get(j)
-        out.push(s)
-    out
+    xm = matrix.new<float>(x.size(), 1, 0.0)
+    for [i, y] in x
+        xm.set(i, 0, y)
+    [sm, ep] = f_arq(g, xm, w, nx, bl, nd, h)
+    sm.col(0)
 // @function nd draws of one driver on its own: the changes centred on their mean under the paths (f_wdemean, equal weights), each draw the sum along an h-step stationary-bootstrap path (f_path; draw i on lattice point i from coordinate j0), the block length that series' own optimal one.
 // @param lg The changes' lags (oldest first), for the pool's gaps (f_next).
 // @returns The nd sums, in draw order.
@@ -643,15 +718,15 @@ export f_fam_cap(array<float> w, array<int> fam) =>
                     float fx = fs.get(f)
                     fs.set(f, fx >= cap - 1e-12 ? (fx > 0 ? cap : 0.0) : fx * (1 + over / room))
     w
-// @function Band half-width: the members' share-weighted spread around the blend mu, floored at 15% of mu / sqrt(effective member count).
+// @function Band half-width: the members' share-weighted spread around the blend mu; na under two members with weight (no spread to measure).
 export f_wsd(array<float> v, array<float> w, float mu) =>
     ss = 0.0
-    w2 = 0.0
+    int nw = 0
     for [i, x] in v
         float wi = w.get(i)
         ss += wi * (x - mu) * (x - mu)
-        w2 += wi * wi
-    w2 > 0 ? math.max(math.sqrt(ss), 0.15 * mu * math.sqrt(w2)) : na
+        nw += wi > 0 ? 1 : 0
+    nw >= 2 ? math.sqrt(ss) : na
 // @function Whether the last 14 source codes are one and the same real source (not a stand-in, 2 or 4).
 export f_one_src(array<float> s) =>
     bool ok = s.size() >= 14
@@ -672,14 +747,14 @@ export f_pct_rank(array<float> a, float x) =>
 // ==========================================
 // THE SCENARIO DRAWS: Bear / Bull of each axis and the Monte Carlo's draws
 // ==========================================
-// One driver's draws on its own into column c, on the lattice's coordinates from j0: kNN-weighted starts (pm the conditions' percentiles) when there are enough distinct neighbours, else equal. Returns the neighbours used (0: equal).
+// One driver's draws on its own into column c: kNN-weighted starts (pm the conditions' percentiles) by Array-RQMC when there are enough distinct neighbours, else equal on the lattice's coordinates from j0. Returns the neighbours used (0: equal).
 f_draws(matrix<float> ds, int c, array<float> ch, array<int> lg, matrix<float> pm, LP g, int j0, int nmin, int nd, int h) =>
     int nk = 0
     if ch.size() >= nmin
         w = f_knn(pm, lg)
         for y in w
             nk += y > 0 ? 1 : 0
-        for [i, v] in (nk > 0 ? f_wdraws1(g, j0, ch, lg, w, nd, h) : f_draws1(g, j0, ch, lg, nd, h))
+        for [i, v] in (nk > 0 ? f_wdraws1(g, ch, lg, w, nd, h) : f_draws1(g, j0, ch, lg, nd, h))
             ds.set(i, c, v)
     nk
 // [25th percentile, at most 0 | 75th, at least 0] of a draw column (na without draws).
@@ -692,7 +767,7 @@ f_side(matrix<float> ds, int c) =>
         lo := math.min(f_pct_sorted(s, 0.25), 0.0)
         hi := math.max(f_pct_sorted(s, 0.75), 0.0)
     [lo, hi]
-// @function The scenario draws: nd (1,024, the lattice's points; h = 4) h-quarter bootstrap sums of the rate, stage-1 growth and terminal growth changes (joint pool from column qmc, kNN-weighted starts; each driver on its own pool when the joint one is under nmin quarters), the rate draws rescaled to the weekly one-year rate moves (wkr, sources wks) and the growth draws widened to the implied-growth moves (wkg), plus the revenue-growth draws (column qrev).
+// @function The scenario draws: nd (1,024, the lattice's points; h = 4) h-quarter bootstrap sums (Array-RQMC, f_arq, with kNN weights; the lattice's points with equal weights) of the rate, stage-1 growth and terminal growth changes (joint pool from column qmc, kNN-weighted starts; each driver on its own pool when the joint one is under nmin quarters), the rate draws rescaled to the weekly one-year rate moves (wkr, sources wks) and the growth draws widened to the implied-growth moves (wkg), plus the revenue-growth draws (column qrev).
 // @param v Quarter store matrix.
 // @param q Quarters stored.
 // @param nq Quarters in the own-multiple window.
@@ -706,8 +781,9 @@ export f_scen_draws(matrix<float> v, int q, int nq, int qmc, int qrev, int nmin,
     cr = f_demean(cr0), cg = f_demean(cg0), ct = f_demean(ct0)
     pm = f_pctl(v, q, qmc + 5, 4)
     int mc_q = lg.size()
-    // One lattice for every path: the joint path (or the rate, growth and terminal ones each on its
-    // own) and the revenue-growth one read their own 2h - 1 coordinates of each point.
+    // One lattice for every path set with equal weights: the joint path (or the rate, growth and
+    // terminal ones each on its own) and the revenue-growth one read their own 2h - 1 coordinates of
+    // each point. With kNN weights a set runs by Array-RQMC (f_arq) on the generator's next shifts.
     g = f_lat()
     int dh = 2 * h - 1
     if mc_q >= nmin
@@ -722,18 +798,30 @@ export f_scen_draws(matrix<float> v, int q, int nq, int qmc, int qrev, int nmin,
         cw = f_cum(w)
         nx = f_next(lg)
         cr := f_wdemean(cr0, w, nx, mc_b, h), cg := f_wdemean(cg0, w, nx, mc_b, h), ct := f_wdemean(ct0, w, nx, mc_b, h)
-        for i = 0 to nd - 1
-            g.i := i, g.j := 0
-            path = f_wpath(g, cw, nx, mc_b, h)
-            float sr = 0.0, float sg = 0.0, float st = 0.0
-            for j in path
-                sr += cr.get(j)
-                sg += cg.get(j)
-                st += ct.get(j)
-            ds.set(i, 0, sr)
-            ds.set(i, 1, sg)
-            ds.set(i, 2, st)
-            ds.set(i, 3, lg.get(path.last()))
+        if mc_kn > 0
+            xm = matrix.new<float>(mc_q, 3, 0.0)
+            for i = 0 to mc_q - 1
+                xm.set(i, 0, cr.get(i))
+                xm.set(i, 1, cg.get(i))
+                xm.set(i, 2, ct.get(i))
+            [sm, ep] = f_arq(g, xm, w, nx, mc_b, nd, h)
+            for i = 0 to nd - 1
+                for c = 0 to 2
+                    ds.set(i, c, sm.get(i, c))
+                ds.set(i, 3, lg.get(ep.get(i)))
+        else
+            for i = 0 to nd - 1
+                g.i := i, g.j := 0
+                path = f_wpath(g, cw, nx, mc_b, h)
+                float sr = 0.0, float sg = 0.0, float st = 0.0
+                for j in path
+                    sr += cr.get(j)
+                    sg += cg.get(j)
+                    st += ct.get(j)
+                ds.set(i, 0, sr)
+                ds.set(i, 1, sg)
+                ds.set(i, 2, st)
+                ds.set(i, 3, lg.get(path.last()))
         for c = 0 to 2
             axq.set(c, mc_q)
     else
@@ -762,6 +850,15 @@ export f_scen_draws(matrix<float> v, int q, int nq, int qmc, int qrev, int nmin,
     [rv, rvl] = f_pool_yoy(v, q, nq, qrev)
     axq.set(3, rv.size())
     mc_kn := math.max(mc_kn, f_draws(ds, 4, rv, rvl, pm, g, 3 * dh, nmin, nd, h))
+    // Array-RQMC leaves a set's draws in an order that follows their values, so the revenue-growth
+    // draws are shuffled (Fisher-Yates) before a draw row pairs them with the joint path's: the two
+    // path sets stay independent, as they are drawn.
+    if mc_kn > 0
+        for k = nd - 1 to 1
+            int j = int(math.floor(g.r.nxt() * (k + 1)))
+            float y = ds.get(k, 4)
+            ds.set(k, 4, ds.get(j, 4))
+            ds.set(j, 4, y)
     sd = array.new_float(8, na)
     for [i, c] in array.from(0, 1, 2, 4)
         [lo, hi] = f_side(ds, c)
