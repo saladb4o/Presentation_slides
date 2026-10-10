@@ -1334,14 +1334,25 @@ export f_blen(array<float> a, array<float> b, array<float> c) =>
     float x = math.max(nz(f_pwb(a), 0), nz(f_pwb(b), 0), nz(f_pwb(c), 0))
     float bmax = math.ceil(math.min(3 * math.sqrt(n), n / 3.0))
     math.max(1.0, math.min(x > 0 ? x : math.pow(n, 1.0 / 3), bmax))
-// @function One stationary-bootstrap path (Politis and Romano 1994) of h positions in a pool of n: a random start, then each step either moves to the next quarter (wrapping at the end) or, with probability 1 / blen, jumps to a new random quarter.
-export f_path(WH g, int n, float blen, int h) =>
+// @function Each pool position's successor: the next position when it holds the very next quarter (its lag one less), else -1. A pool that skips quarters (a missing value, a source switch) has gaps, and its last quarter has no successor: a path does not step across either (it jumped from the newest quarter back to the oldest, or over the skipped ones), it restarts at a random quarter.
+// @param lg The pool's lags, oldest first.
+// @returns An array of positions (or -1), one per pool entry.
+export f_next(array<int> lg) =>
+    nx = array.new_int()
+    int n = lg.size()
+    for i = 0 to n - 1
+        nx.push(i + 1 < n and lg.get(i + 1) == lg.get(i) - 1 ? i + 1 : -1)
+    nx
+// @function One stationary-bootstrap path (Politis and Romano 1994) of h positions in a pool (successors nx, f_next): a random start, then each step either moves to the next quarter or, with probability 1 / blen or where there is no next quarter (f_next), jumps to a new random quarter.
+export f_path(WH g, array<int> nx, float blen, int h) =>
     out = array.new_int()
+    int n = nx.size()
     int i = int(math.floor(g.nxt() * n))
     out.push(i)
     if h > 1
         for s = 2 to h
-            i := g.nxt() < 1.0 / blen ? int(math.floor(g.nxt() * n)) : (i + 1) % n
+            bool jump = g.nxt() < 1.0 / blen
+            i := jump or nx.get(i) < 0 ? int(math.floor(g.nxt() * n)) : nx.get(i)
             out.push(i)
     out
 // @function One driver's own pool, for when the joint pool is too short: the quarterly changes of column c over the n quarters before the open one (oldest first), where c is known at that quarter and the one before and the switch column cs (rate source or growth parts) did not change between them.
@@ -1376,18 +1387,6 @@ export f_pool_yoy(matrix<float> hm, int hq, int n, int c) =>
                 ch.push((a0 - a4) / math.abs(a4) - (b0 - b4) / math.abs(b4))
                 lg.push(lag)
     [ch, lg]
-// @function nd draws of one driver on its own: each the sum of its changes along an h-step stationary-bootstrap path, the block length that series' own optimal one.
-// @returns The nd sums, in draw order.
-export f_draws1(WH g, array<float> ch, int nd, int h) =>
-    out = array.new_float()
-    int n = ch.size()
-    float bl = f_blen(ch, ch, ch)
-    for i = 1 to nd
-        float s = 0.0
-        for j in f_path(g, n, bl, h)
-            s += ch.get(j)
-        out.push(s)
-    out
 // @function A series less its own average (centred bootstrap, Hall and Wilson 1991): the draws then keep how much a driver has moved, not the direction it drifted in over the sample, so a one-way trend does not take away a side.
 // @returns A new array.
 export f_demean(array<float> x) =>
@@ -1493,20 +1492,20 @@ export f_cum(array<float> w) =>
         s += y
         cw.push(s)
     cw
-// @function A stationary-bootstrap path whose start and each jump fall on a quarter with probability its weight (cumulative weights cw); otherwise as f_path.
-export f_wpath(WH g, array<float> cw, float blen, int h) =>
+// @function A stationary-bootstrap path whose start and each jump (including where there is no next quarter, f_next) fall on a quarter with probability its weight (cumulative weights cw); otherwise as f_path.
+export f_wpath(WH g, array<float> cw, array<int> nx, float blen, int h) =>
     out = array.new_int()
-    int n = cw.size()
     int i = f_pick(cw, g.nxt())
     out.push(i)
     if h > 1
         for s = 2 to h
-            i := g.nxt() < 1.0 / blen ? f_pick(cw, g.nxt()) : (i + 1) % n
+            bool jump = g.nxt() < 1.0 / blen
+            i := jump or nx.get(i) < 0 ? f_pick(cw, g.nxt()) : nx.get(i)
             out.push(i)
     out
-// @function A series less its mean under the weighted paths: the average over the h steps of where a path is (step 1 the weights, each next step a jump to the weights with probability 1 / blen or a move to the next quarter), so the weighted draws are centred as the equal ones are.
+// @function A series less its mean under the weighted paths: the average over the h steps of where a path is (step 1 the weights, each next step a jump to the weights with probability 1 / blen, or where there is no next quarter (nx, f_next), else a move to the next quarter), so the draws are centred on the paths they are summed along.
 // @returns A new array.
-export f_wdemean(array<float> x, array<float> w, float blen, int h) =>
+export f_wdemean(array<float> x, array<float> w, array<int> nx, float blen, int h) =>
     int n = x.size()
     float sw = w.sum()
     p = array.new_float()
@@ -1515,9 +1514,16 @@ export f_wdemean(array<float> x, array<float> w, float blen, int h) =>
     float mu = 0.0
     for s = 1 to h
         if s > 1
-            np = array.new_float()
+            // Mass that jumps: 1 / blen of all of it, and the rest of it at a quarter with no successor.
+            float jm = 0.0
+            np = array.new_float(n, 0.0)
             for i = 0 to n - 1
-                np.push(w.get(i) / sw / blen + (1 - 1 / blen) * p.get((i - 1 + n) % n))
+                int k = nx.get(i)
+                jm += p.get(i) * (k < 0 ? 1.0 : 1 / blen)
+                if k >= 0
+                    np.set(k, np.get(k) + (1 - 1 / blen) * p.get(i))
+            for i = 0 to n - 1
+                np.set(i, np.get(i) + jm * w.get(i) / sw)
             p := np
         for i = 0 to n - 1
             mu += p.get(i) * x.get(i) / h
@@ -1525,16 +1531,31 @@ export f_wdemean(array<float> x, array<float> w, float blen, int h) =>
     for v in x
         out.push(v - mu)
     out
-// @function nd draws of one driver on its own with kNN start weights w: the changes centred on their weighted-path mean, then summed along weighted paths (f_wpath), the block length the series' own optimal one.
+// @function nd draws of one driver on its own with kNN start weights w (lg the changes' lags, for the pool's gaps): the changes centred on their weighted-path mean, then summed along weighted paths (f_wpath), the block length the series' own optimal one.
 // @returns The nd sums, in draw order.
-export f_wdraws1(WH g, array<float> ch, array<float> w, int nd, int h) =>
+export f_wdraws1(WH g, array<float> ch, array<int> lg, array<float> w, int nd, int h) =>
     out = array.new_float()
     float bl = f_blen(ch, ch, ch)
-    x = f_wdemean(ch, w, bl, h)
+    nx = f_next(lg)
+    x = f_wdemean(ch, w, nx, bl, h)
     cw = f_cum(w)
     for i = 1 to nd
         float s = 0.0
-        for j in f_wpath(g, cw, bl, h)
+        for j in f_wpath(g, cw, nx, bl, h)
+            s += x.get(j)
+        out.push(s)
+    out
+// @function nd draws of one driver on its own: the changes centred on their mean under the paths (f_wdemean, equal weights), each draw the sum along an h-step stationary-bootstrap path (f_path), the block length that series' own optimal one.
+// @param lg The changes' lags (oldest first), for the pool's gaps (f_next).
+// @returns The nd sums, in draw order.
+export f_draws1(WH g, array<float> ch, array<int> lg, int nd, int h) =>
+    out = array.new_float()
+    float bl = f_blen(ch, ch, ch)
+    nx = f_next(lg)
+    x = f_wdemean(ch, array.new_float(ch.size(), 1.0), nx, bl, h)
+    for i = 1 to nd
+        float s = 0.0
+        for j in f_path(g, nx, bl, h)
             s += x.get(j)
         out.push(s)
     out

@@ -1779,8 +1779,10 @@ float calc_crp = i_auto_calc_erp_crp ? auto_crp : i_crp_manual
 // Beta (sampled pairs, see FIX BETA-ALIGN) with the Blume adjustment.
 // Under 12 pairs: no beta (N/A, it was 1.0), so no cost of equity.
 float beta_mkt = (0.67 * raw_beta_s) + 0.33
-// [FIX RF] One base: local 10Y (90d avg) for local-currency cash flows, or US 10Y + CRP.
-float base_rf_for_calc = rf_local ? rf_local_avg / 100 : us10y_true_raw / 100
+// [FIX RF] One base: local 10Y (90d avg) for local-currency cash flows, or US 10Y + CRP. Both
+// legs take the 90-day average (the US leg read the spot print); the spot stands in only
+// while the average has not formed.
+float base_rf_for_calc = rf_local ? rf_local_avg / 100 : nz(us10y_smooth, us10y_true_raw) / 100
 // The rate base and its source code, sampled on the first bar of each week over the own-multiple
 // span (13 weeks a quarter): the rate axis takes its spread from these one-year moves (FFVLib
 // f_yvar), as the rate is a market series with far more history than the stock's quarters.
@@ -1940,7 +1942,15 @@ if CK.dirty
             [w, e] = f_model_weight(ST.window(Q_L + 14 + i, 21, 0, true), rv, 2, 4)
             LW.set(i, w)
     float yl = FL.f_lasso_at(LM, ST.back(0), Q_L, 14)
-    float g_las = na(yl) ? na : math.max(math.min(math.exp(yl) - 1, 0.6), -0.5)
+    // A feature that goes na partway through the quarter (a weekly series stops printing)
+    // keeps the quarter's last reading: the record is what was known, not a blank. A new
+    // release starts the quarter over.
+    var float g_las_q = na
+    if CK.adv
+        g_las_q := na
+    if not na(yl)
+        g_las_q := math.max(math.min(math.exp(yl) - 1, 0.6), -0.5)
+    float g_las = g_las_q
     ST.write(Q_L + 14, F_rev * (1 + g_las))
     ST.write(Q_L + 15, F_rev * (1 + F_fwd_g))
     ST.write(Q_L + 16, F_rev * (1 + sales_cagr_3y))
@@ -2384,7 +2394,7 @@ f_draws(matrix<float> ds, int c, array<float> ch, array<int> lg, matrix<float> p
         g = FL.WH.new(a = seed)
         for y in w
             nk += y > 0 ? 1 : 0
-        for [i, v] in (nk > 0 ? FL.f_wdraws1(g, ch, w, MC_N, MC_H) : FL.f_draws1(g, FL.f_demean(ch), MC_N, MC_H))
+        for [i, v] in (nk > 0 ? FL.f_wdraws1(g, ch, lg, w, MC_N, MC_H) : FL.f_draws1(g, ch, lg, MC_N, MC_H))
             ds.set(i, c, v)
     nk
 // [25th percentile, at most 0 | 75th, at least 0] of a draw column (na without draws).
@@ -2418,15 +2428,19 @@ if barstate.islast
         mc_b := FL.f_blen(cr, cg, ct)
         // Blocks start where past conditions resemble now (kNN weights), the changes centred on the
         // weighted paths' mean; equal weights and the plain mean without enough neighbours.
+        // Paths do not step across a skipped quarter or from the newest back to the oldest (FFVLib
+        // f_next): they restart there, and the centring follows the same paths.
         w = FL.f_knn(pm, lg)
-        cw = FL.f_cum(w)
         for y in w
             mc_kn += y > 0 ? 1 : 0
-        if mc_kn > 0
-            cr := FL.f_wdemean(cr0, w, mc_b, MC_H), cg := FL.f_wdemean(cg0, w, mc_b, MC_H), ct := FL.f_wdemean(ct0, w, mc_b, MC_H)
+        if mc_kn == 0
+            w := array.new_float(mc_q, 1.0)
+        cw = FL.f_cum(w)
+        nx = FL.f_next(lg)
+        cr := FL.f_wdemean(cr0, w, nx, mc_b, MC_H), cg := FL.f_wdemean(cg0, w, nx, mc_b, MC_H), ct := FL.f_wdemean(ct0, w, nx, mc_b, MC_H)
         g = FL.WH.new()
         for i = 0 to MC_N - 1
-            path = mc_kn > 0 ? FL.f_wpath(g, cw, mc_b, MC_H) : FL.f_path(g, mc_q, mc_b, MC_H)
+            path = FL.f_wpath(g, cw, nx, mc_b, MC_H)
             float sr = 0.0, float sg = 0.0, float st = 0.0
             for j in path
                 sr += cr.get(j)
@@ -3030,7 +3044,9 @@ if barstate.islast
     if i_cf_on and not cf_ok
         fl.push('Feed')
         flags_tt += '\nCompanion feed: not linked correctly (links, or report lag differs). Ignored.'
-    if F_pio <= 3
+    // Piotroski's nine tests are built for industrial firms (gross margin, current ratio, asset
+    // turnover): no flag for banks or VN brokers, as the value-trap test already skips them.
+    if F_pio <= 3 and not (use_bank_model or vn_broker)
         fl.push('Piotroski')
         flags_tt += str.format(FL.tx(42), F_pio)
     if F_inv_dummy or F_deter
