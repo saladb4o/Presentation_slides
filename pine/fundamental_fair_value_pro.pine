@@ -1815,7 +1815,7 @@ if i_use_factors
     // The premium reads the same traded-days ratio: a day without trades used to enter at 0
     // (perfectly liquid), which understated it most for the thinnest stocks. No trade at all
     // in 90 days (volume reported, all 0): the full premium.
-    float illiq_penalty = i_liq_prem * (na(liq_ami) ? (volume == 0 ? 1.0 : 0.0) : f_ramp(liq_ami, 0.1, 0.5))
+    float illiq_penalty = i_liq_prem * (na(liq_ami) ? (volume == 0 and fx_rate > 0 ? 1.0 : 0.0) : f_ramp(liq_ami, 0.1, 0.5))
     // ta.sma runs on every bar: inside the share-count condition it averaged only qualifying bars.
     float avg_turnover_12m = ta.sma(F_sh > 0 ? nz(volume) / F_sh : na, liq_n252) / days_per_bar
     float spec_penalty = not na(volume) and F_sh > 0 ? i_liq_prem * nz(f_ramp(avg_turnover_12m, 0.01, 0.02)) : 0.0
@@ -3016,7 +3016,8 @@ if barstate.islast
     // Capital allocation
     inv_txt = F_inv_dummy ? 'Empire Builder' : F_deter ? 'Deteriorating' : 'Efficient'
     // Discount rate (+ the macro assumptions behind terminal growth)
-    wacc_flag = final_discount_rate < 0.05 ? 'Too Low' : final_discount_rate > 0.20 ? 'Extreme' : 'Normal'
+    // No WACC (a bank, whose cost of debt is N/A; or no cost of equity yet): no flag either.
+    wacc_flag = na(final_discount_rate) ? 'N/A' : final_discount_rate < 0.05 ? 'Too Low' : final_discount_rate > 0.20 ? 'Extreme' : 'Normal'
     wacc_tt = str.format(FL.tx(38), beta_mkt, (na(downside_beta) ? 'N/A' : str.tostring(downside_beta, '#.##')), i_rf_base, base_rf_for_calc * 100, calc_erp * 100, calc_crp * 100, auto_crp_raw * 100) + str.format(FL.tx(39), na(D.cod) ? 'N/A' : str.tostring(D.cod * 100, '#.#') + '%', F_tax * 100, lr_infl * 100, lr_rgdp * 100, final_terminal_growth * 100)
     // Red flags: one list, short names for the cell, full text for the tooltip.
     fl = array.new_string(0)
@@ -3050,7 +3051,7 @@ if barstate.islast
     if is_value_trap
         fl.push('Value trap')
         flags_tt += (trap_pb ? str.format(FL.tx(43), current_pb_val, jpb_roe * 100, cost_of_equity * 100) : '') + (trap_pio ? str.format('\nValue trap: Piotroski F-score {0,number,#} under the fair value (Piotroski 2000: among cheap stocks the weak scores lagged).', F_pio) : '')
-    if wacc_flag != 'Normal'
+    if wacc_flag != 'Normal' and wacc_flag != 'N/A'
         fl.push('WACC')
         flags_tt += str.format(FL.tx(44), final_discount_rate * 100, wacc_flag)
     if implied_exit_multiple > 30
@@ -3240,7 +3241,7 @@ f_sum_health() =>
     // Buffett score (quality, low risk, value), built on the last bar
     RW.set(0, FL.cardSum(T, RW.get(0), CARD, CLR, i_textSize))
     // Discount rate
-    f_row4('Discount rate', HV_wacc_tt, 'WACC ' + str.tostring(final_discount_rate * 100, '#.#') + '%', 'CoE ' + str.tostring(cost_of_equity * 100, '#.#') + '% | g ' + str.tostring(final_terminal_growth * 100, '#.#') + '%', HV_wacc_flag, b1 = color_value, c3 = color.white, b3 = HV_wacc_flag == 'Normal' ? color_under : color_over, stt = HV_wacc_tt)
+    f_row4('Discount rate', HV_wacc_tt, 'WACC ' + (na(final_discount_rate) ? 'N/A' : str.tostring(final_discount_rate * 100, '#.#') + '%'), 'CoE ' + (na(cost_of_equity) ? 'N/A' : str.tostring(cost_of_equity * 100, '#.#') + '%') + ' | g ' + str.tostring(final_terminal_growth * 100, '#.#') + '%', HV_wacc_flag, b1 = color_value, c3 = color.white, b3 = HV_wacc_flag == 'Normal' ? color_under : HV_wacc_flag == 'N/A' ? color.gray : color_over, stt = HV_wacc_tt)
     // Growth the price implies: the stage-1 growth at which our displayed DCF equals the price
     // (reverse DCF), against the stage-1 growth the DCF uses.
     float g_imp = rdcf.get(0)

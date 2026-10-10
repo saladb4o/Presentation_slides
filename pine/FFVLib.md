@@ -442,7 +442,10 @@ export mant(float x) =>
     na(x) or x == 0 ? 0.0 : x / math.pow(10, math.floor(math.log10(math.abs(x))))
 // @function R&D capitalised over 3 years, straight line: [amortisation, unamortised asset]. Without all three past years it is not capitalised (expensed as reported: amortisation = this year's R&D, no asset); a missing year used to be typed in as 10% below the next.
 export f_rnd(float r0, float r1, float r2, float r3) =>
-    na(r1) or na(r2) or na(r3) ? [r0, 0.0] : [(r1 + r2 + r3) / 3.0, r0 + r1 * 2.0 / 3.0 + r2 / 3.0]
+    if na(r1) or na(r2) or na(r3)
+        [r0, 0.0]
+    else
+        [(r1 + r2 + r3) / 3.0, r0 + r1 * 2.0 / 3.0 + r2 / 3.0]
 // @function Weighted mean of the values that are not na, their weights re-normalised; na when none is.
 export f_wavg(array<float> x, array<float> w) =>
     float num = 0.0
