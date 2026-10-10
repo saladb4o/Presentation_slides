@@ -72,12 +72,12 @@ f_ramp(float x, float a, float b) =>
 f_synthetic_spread(float ebit, float interest) =>
     var array<float> cut = array.from(8.5, 6.5, 5.5, 4.25, 3.0, 2.5, 2.25, 2.0, 1.75, 1.5, 1.25, 0.8)
     var array<float> spr = array.from(0.0063, 0.0078, 0.0098, 0.0108, 0.0122, 0.0156, 0.0200, 0.0240, 0.0351, 0.0417, 0.0600, 0.0800, 0.1200)
-    // Unknown EBIT or unknown interest: a mid (BBB) bucket, not the distressed or the AAA one.
-    float icr = na(interest) ? 3.5 : interest > 0 ? nz(ebit / interest, 3.5) : 100.0
+    // Unknown EBIT or unknown interest: no spread (N/A), not a guessed mid (BBB) bucket.
+    float icr = na(interest) ? na : interest > 0 ? ebit / interest : 100.0
     k = 0
-    while k < 12 and not (icr > cut.get(k))
+    while not na(icr) and k < 12 and not (icr > cut.get(k))
         k += 1
-    spr.get(k)
+    na(icr) ? na : spr.get(k)
 // ==============================================================
 // === UNIFIED MODEL WEIGHT (predictive, scale-free) ============
 // ==============================================================
@@ -1115,7 +1115,7 @@ var float F_eps_est = na
 var float F_rev_est = na
 var float F_eps0 = na
 var float F_interest = na
-var float F_tax = 0.21
+var float F_tax = 0.20
 var float F_ebit_n = na
 var float F_nopat = na
 var float F_nopat_n = na
@@ -1432,8 +1432,9 @@ if CK.dirty
     // would count the capitalised R&D in NOPAT against a capital base that leaves it out.
     float safe_rnd = nz(rnd_ttm)
     [rnd_amortization, research_asset] = FL.f_rnd(safe_rnd, Y4.get(Q_RND), Y8.get(Q_RND), Y12.get(Q_RND))
-    // A missing tax line falls back to 21% as a loss year does (it made NOPAT and WACC na).
-    float effective_tax = pretax_income_ttm > 0 ? math.min(math.max(nz(income_tax_ttm / pretax_income_ttm, 0.21), 0.0), 0.35) : 0.21
+    // A loss year, or a missing tax line, takes the statutory marginal rate (Damodaran): 20%,
+    // Vietnam's corporate income tax rate (Law 14/2008/QH12 as amended; 21% was the US rate).
+    float effective_tax = pretax_income_ttm > 0 ? math.min(math.max(nz(income_tax_ttm / pretax_income_ttm, 0.20), 0.0), 0.35) : 0.20
     float nopat_adjusted = (ebit_ttm + safe_rnd - rnd_amortization) * (1 - effective_tax)
     // EPV capitalises NORMALISED earnings: EBIT averaged over up to three years.
     float nopat_norm = (ebit_normalized + safe_rnd - rnd_amortization) * (1 - effective_tax)
@@ -1607,7 +1608,7 @@ float us10y_smooth = f_locf(us_sm_r)
 [rf_spot_r, rf_sm_r] = request.security(final_rf_ticker, 'D', [close, ta.sma(close, 90)], ignore_invalid_symbol = true)
 float local_rf_raw = f_locf(rf_spot_r)
 float rf_local_avg = f_locf(rf_sm_r) // 90-day average of the LOCAL 10Y yield, in %
-// The rate source before the cascade (0 local, 1 US 10Y, 2 the 4% default | 3 US, 4 local or 4%).
+// The rate source before the cascade (0 local, 1 US 10Y, 2 none | 3 US, 4 local or none).
 int rf_src = na(rf_local_avg) ? (na(us10y_smooth) ? 2 : 1) : 0
 int us_src = na(us10y_true_raw) ? 4 : 3
 // Cascade: thin sovereign curves (VN10Y etc.) frequently print nothing.
@@ -1615,8 +1616,6 @@ if na(local_rf_raw)
     local_rf_raw := us10y_true_raw
 if na(rf_local_avg)
     rf_local_avg := nz(us10y_smooth, local_rf_raw)
-if na(rf_local_avg)
-    rf_local_avg := 4.0
 if na(local_rf_raw)
     local_rf_raw := rf_local_avg
 if na(us10y_true_raw)
@@ -1667,13 +1666,16 @@ if beta_sample
 // ==========================================
 // AUTO-PREMIUM CALCULATION
 // ==========================================
-// Annualised over the window actually used: intraday charts cap it below 5 years.
-f_get_cagr_optimized(current_price_series, bars_back_5y) =>
-    float p_old = current_price_series[bars_back_5y]
-    if not na(current_price_series) and p_old > 0
-        math.pow(current_price_series / p_old, bpy / float(bars_back_5y)) - 1.0
-    else
-        0.08
+// Annualised over the window actually used: up to 5 years, less where the series starts later
+// (or an intraday chart caps it), at least a year. Under a year of history: N/A (it was a
+// typed 8%), so the auto ERP and the cost of equity are N/A until a year has loaded.
+f_get_cagr_optimized(float src, int bars_back_5y) =>
+    var int b0 = na
+    if na(b0) and src > 0
+        b0 := bar_index
+    int k = na(b0) ? 0 : math.min(bars_back_5y, bar_index - b0)
+    float p_old = k >= bpy ? src[k] : na
+    src > 0 and p_old > 0 ? math.pow(src / p_old, bpy / float(k)) - 1.0 : na
 int bars_in_5y = math.min(5 * bpy, 4900)
 cagr_mkt = f_get_cagr_optimized(mkt_bench_p, bars_in_5y)
 auto_small_etf = (curr == 'VND') ? 'HOSE:VNSML' : i_small_etf
@@ -1682,11 +1684,13 @@ float small_c = request.security(auto_small_etf, i_beta_tf, close, ignore_invali
 float small_p = f_locf(small_c)
 max_bars_back(small_p, 5000)
 cagr_small = f_get_cagr_optimized(small_p, bars_in_5y)
-float live_smb_spread = nz(cagr_small - cagr_mkt, 0.02)
+// No small-cap or market CAGR: no size premium (it was a typed 2%).
+float live_smb_spread = cagr_small - cagr_mkt
 live_smb_spread := math.max(math.min(live_smb_spread, 0.05), -0.02)
 // [FIX HML] HML from the value and growth ETFs (the old line reused the SMB
 // spread). Value-vs-market is roughly half the value-vs-growth spread.
-// No VN value/growth proxy exists, so VND uses the 1.5% long-run default.
+// No VN value/growth proxy exists, so VND has no value premium (it was a typed 1.5%); nor does
+// any chart where either ETF is missing.
 // >>> SECURITY SLOTS 5-6/6 : value and growth ETFs
 // On VND charts the value slot loads the sector index for the Timing row instead (display only).
 // A manually chosen framework names the index; Auto-Detect, Energy/Materials (VNENE or VNMAT)
@@ -1715,7 +1719,7 @@ max_bars_back(value_p, 5000)
 max_bars_back(growth_p, 5000)
 float cagr_value = f_get_cagr_optimized(value_p, bars_in_5y)
 float cagr_growth = f_get_cagr_optimized(growth_p, bars_in_5y)
-float live_hml_spread = na(value_p) or na(growth_p) ? 0.015 : (cagr_value - cagr_growth) * 0.5
+float live_hml_spread = (cagr_value - cagr_growth) * 0.5
 live_hml_spread := math.max(math.min(live_hml_spread, 0.05), -0.02)
 // Timing (display only): weekly closes of the stock, the sector index and the market, taken on
 // the first bar of each week like the beta legs (the bar before holds last week's close), 3 years.
@@ -1768,7 +1772,8 @@ float auto_crp = (curr == 'USD' or rf_local) ? 0.0 : auto_crp_raw
 float calc_erp = i_auto_calc_erp_crp ? auto_erp : i_erp_manual
 float calc_crp = i_auto_calc_erp_crp ? auto_crp : i_crp_manual
 // Beta (sampled pairs, see FIX BETA-ALIGN) with the Blume adjustment.
-float beta_mkt = not na(raw_beta_s) ? (0.67 * raw_beta_s) + 0.33 : 1.0
+// Under 12 pairs: no beta (N/A, it was 1.0), so no cost of equity.
+float beta_mkt = (0.67 * raw_beta_s) + 0.33
 // [FIX RF] One base: local 10Y (90d avg) for local-currency cash flows, or US 10Y + CRP.
 float base_rf_for_calc = rf_local ? rf_local_avg / 100 : us10y_true_raw / 100
 // The rate base and its source code, sampled on the first bar of each week over the own-multiple
@@ -1785,7 +1790,9 @@ if ta.change(time('W')) != 0
 // [FIX FX] Live rate (1 request slot) instead of a hardcoded 25000 / 0.93 / 0.79.
 // fx_rate = local currency units per 1 USD.
 float fx_to_usd = request.currency_rate(curr, 'USD', ignore_invalid_currency = true)
-float fx_rate = fx_to_usd > 0 ? 1.0 / fx_to_usd : ((curr == 'VND') ? 25000.0 : (curr == 'EUR' ? 0.93 : (curr == 'GBP' ? 0.79 : 1.0)))
+// No rate: N/A (it was a typed 25000 / 0.93 / 0.79), so the USD-scaled readings (size premium,
+// Amihud, O-score) leave.
+float fx_rate = curr == 'USD' ? 1.0 : fx_to_usd > 0 ? 1.0 / fx_to_usd : na
 // No momentum premium in the cost of equity: momentum is a 3-12 month effect that reverses
 // (Jegadeesh and Titman 1993), not a risk priced over a 10-year discount horizon. The Timing
 // row still reads it (MSCI method).
@@ -1815,7 +1822,7 @@ if i_use_factors
 // budget has no balance field for it). Parent equity leaves out minority interest, and
 // preferred as well under the strict structure.
 f_pref() =>
-    nz(F_pref_div) / math.max(rf_local_avg / 100 + 0.02, 0.04)
+    F_pref_div > 0 ? F_pref_div / math.max(rf_local_avg / 100 + 0.02, 0.04) : 0.0
 f_peq() =>
     F_eq - nz(F_minority) - (f_claim_on(Claim.preferred) ? f_pref() : 0.0)
 // ROE on AVERAGE parent equity (now and a year earlier).
@@ -2024,12 +2031,13 @@ f_drivers(Clock ck, Drv d, Claims c) =>
     hml_p = 0.0
     rmw_p = 0.0
     if i_use_factors
-        float mc_usd_b = not na(mc) ? mc / fx_rate / 1e9 : 100.0
-        size_p := mc_usd_b < 1.0 ? live_smb_spread : mc_usd_b < 4.0 ? live_smb_spread * (1.0 - ((mc_usd_b - 1.0) / 3.0)) : 0.0
+        // A premium whose spread or size is unknown leaves (0), it is not typed in.
+        float mc_usd_b = mc / fx_rate / 1e9
+        size_p := na(live_smb_spread) or na(mc_usd_b) ? 0.0 : mc_usd_b < 1.0 ? live_smb_spread : mc_usd_b < 4.0 ? live_smb_spread * (1.0 - ((mc_usd_b - 1.0) / 3.0)) : 0.0
         // Loading = B/M / 2 (0.4-1.0: even the deepest value decile loads about 1 on HML),
         // phasing in from B/M 0.7 to 0.9.
         float bm = not na(bvps) and close > 0 ? bvps / close : 0.0
-        hml_p := live_hml_spread * math.min(bm, 2.0) / 2 * f_ramp(bm, 0.7, 0.9)
+        hml_p := nz(live_hml_spread * math.min(bm, 2.0) / 2 * f_ramp(bm, 0.7, 0.9))
         // [FIX RMW] Robust profitability earns a POSITIVE premium in Fama-French 5: +1.5% phases
         // in as operating profitability goes from 17.5% to 22.5%, -1.5% as it falls from 7.5% to 2.5%.
         float op = not na(F_ebit) and F_eq > 0 ? F_ebit / F_eq : 0.0
@@ -2039,14 +2047,15 @@ f_drivers(Clock ck, Drv d, Claims c) =>
     // spread from interest cover.
     float cod = base_rf_for_calc + f_synthetic_spread(F_ebit_n, F_interest) + (i_rf_base == 'Local 10Y' ? 0.0 : calc_crp)
     float ew = mc + F_debt > 0 ? mc / (mc + F_debt) : 1.0
-    float wacc = nz(ew * coe + (1.0 - ew) * nz(cod, 0.05) * (1 - F_tax), coe)
+    // With debt, an unknown cost of debt (no EBIT or no interest line) makes WACC N/A (it was 5%).
+    float wacc = ew == 1.0 ? coe : ew * coe + (1.0 - ew) * cod * (1 - F_tax)
     // Hamada on MARKET leverage, the weights WACC uses (book equity overstates D/E). The
     // unlevered cost keeps every premium in the cost of equity and strips only the leverage
     // part of beta.
     float de = nz(F_debt) / (mc > 0 ? mc : math.max(nz(F_eq), 1.0))
     float ub = beta_mkt / (1 + (1 - F_tax) * de)
     // Terminal growth: long-run inflation + 0.5pt, held to 1.5-3.5%, never above nominal GDP.
-    float gT = math.min(math.min(math.max(lr_infl + 0.005, 0.015), 0.035), math.max(nz(rf_local_avg / 100, 0.04), lr_infl + lr_rgdp))
+    float gT = math.min(math.min(math.max(lr_infl + 0.005, 0.015), 0.035), na(rf_local_avg) ? lr_infl + lr_rgdp : math.max(rf_local_avg / 100, lr_infl + lr_rgdp))
     int cap = ck.cap
     int te = math.min(F_t_eps, cap)
     int tr = math.min(F_t_rev, cap)
@@ -2081,7 +2090,7 @@ f_drivers(Clock ck, Drv d, Claims c) =>
     // 7-10 year rate); 4.4 / Y rescales for bond yields, capped at 1.0 so it only penalises.
     d.stream(Sx.eps_pos, F_eps > 0 ? F_eps : na, te)
     d.stream(Sx.g_gra, math.max(math.min(H_g1, 0.15), 0.0), 3)
-    d.stream(Sx.yadj, math.min(4.4 / (rf_local_avg > 0 ? rf_local_avg : 4.0), 1.0), 3)
+    d.stream(Sx.yadj, rf_local_avg > 0 ? math.min(4.4 / rf_local_avg, 1.0) : na, 3)
     d.stream(Sx.rev, F_rev, tr)
     d.stream(Sx.rev_g, F_rev_g, tr)
     d.stream(Sx.fcf_margin, F_fcf / F_rev, t_o)
@@ -2089,9 +2098,10 @@ f_drivers(Clock ck, Drv d, Claims c) =>
     // Discount rates: one base per level (a row's level picks one). WACC for the firm is floored
     // at 2%, so Bull is never above Base.
     d.r_firm := math.max(wacc, 0.02)
-    d.r_unlev := math.max(coe - (beta_mkt - ub) * calc_erp, math.min(nz(cod, base_rf_for_calc + 0.01), coe), 0.02)
+    // Floors: the cost of debt (when known) and the risk-free rate.
+    d.r_unlev := math.max(coe - (beta_mkt - ub) * calc_erp, na(cod) ? base_rf_for_calc : math.min(cod, coe), base_rf_for_calc)
     d.r_eq := coe
-    d.r_bank := math.min(coe, 0.15)
+    d.r_bank := coe
     d.g1 := H_g1
     d.gcap := dynamic_growth_cap
     d.gT := gT
@@ -2704,8 +2714,9 @@ bool is_distress = HV_dz != ''
 // ==============================================================
 // === RESOLVE: BANDS + VERDICT (after the blend is final) ======
 // ==============================================================
-float upperBound = finalFairValue + nz(fv_stddev, finalFairValue * 0.15)
-float lowerBound = finalFairValue - nz(fv_stddev, finalFairValue * 0.15)
+// No spread across the models: no bands (they were a typed +-15%).
+float upperBound = finalFairValue + fv_stddev
+float lowerBound = finalFairValue - fv_stddev
 upperBound := upperBound > 0 ? upperBound : na
 lowerBound := lowerBound > 0 ? lowerBound : na
 float fv_band = math.max(nz(finalFairValue) * 0.03, 0.0)
@@ -2715,7 +2726,7 @@ valuation_status = na(finalFairValue) ? 'N/A' : close > upperBound ? 'Very Overv
 // track record) and each own multiple's observation (its ratio history). [FIX RKV-FLOOR] A low
 // P/B earned by sub-CoE returns (CoE proxy: the local 10Y + 5%) is a deserved discount: the
 // observation is dropped (flooring it at 1.0 pushed the average P/B UP).
-rkv_trip = i_use_rkv and D.roe < nz(rf_local_avg, 4.0) / 100 + 0.05
+rkv_trip = i_use_rkv and D.roe < rf_local_avg / 100 + 0.05
 ST.write(Q_PX, close > 0 ? close : na)
 ST.write(Q_MC, base_rf_for_calc)
 ST.write(Q_MC + 1, H_g1)
@@ -2893,14 +2904,15 @@ if barstate.islast and i_show_street
     if not omni_active
         for m in MD
             our_n_models += m.fv > 0 and m.w > 0 ? 1 : 0
-    float oc_agree = finalFairValue > 0 ? f_clamp01(1 - (nz(fv_stddev, finalFairValue * 0.15) / finalFairValue) / 0.5) : na
+    // A part with no data (no spread, no scored record) leaves and the rest are re-weighted.
+    float oc_agree = finalFairValue > 0 ? f_clamp01(1 - (fv_stddev / finalFairValue) / 0.5) : na
     float oc_depth = f_clamp01(our_n_models / 8.0) * (our_track ? 1.0 : 0.5)
     [our_w, our_err] = f_model_weight(ST.window(Q_FFV, 20, 1, true), ST.window(Q_PX, 20, 1, true), 4, i_w_horizon) // RMS log error
-    float oc_rel = na(our_err) ? 0.3 : math.exp(-our_err / 0.3)
+    float oc_rel = math.exp(-our_err / 0.3)
     float oc_tier = (f_tier_q(f_stier(D, Sx.eps_b)) + f_tier_q(f_stier(D, Sx.rev)) + f_tier_q(f_stier(D, Sx.fcff)) + f_tier_q(f_stier(D, Sx.bvps)) + f_tier_q(f_stier(D, Sx.nopat))) / 5.0
     float oc_flags = (is_value_trap ? 0.2 : 0.0) + (i_useBeneishCheck and F_manip ? 0.2 : 0.0) + (is_distress ? 0.2 : 0.0) + (F_suspect ? 0.2 : 0.0)
     float oc_qual = f_clamp01(oc_tier - oc_flags)
-    float our_conf = na(oc_agree) ? na : 100 * (0.35 * oc_agree + 0.20 * oc_depth + 0.25 * oc_rel + 0.20 * oc_qual)
+    float our_conf = finalFairValue > 0 ? 100 * FL.f_wavg(array.from(oc_agree, oc_depth, oc_rel, oc_qual), array.from(0.35, 0.20, 0.25, 0.20)) : na
     // --- STREET confidence ---
     [sc_agree, sc_depth, sc_fresh, sc_conv, st_conf, age_d, rc_buy, rc_hold, rc_sell, rc_score] = FL.f_street(has, lo_t, md_t, hi_t, st_n, syminfo.target_price_date, timenow, syminfo.recommendations_buy_strong, syminfo.recommendations_buy, syminfo.recommendations_hold, syminfo.recommendations_sell, syminfo.recommendations_sell_strong)
     float rc_tot = rc_buy + rc_hold + rc_sell
@@ -2991,7 +3003,7 @@ if barstate.islast
     inv_txt = F_inv_dummy ? 'Empire Builder' : F_deter ? 'Deteriorating' : 'Efficient'
     // Discount rate (+ the macro assumptions behind terminal growth)
     wacc_flag = final_discount_rate < 0.05 ? 'Too Low' : final_discount_rate > 0.20 ? 'Extreme' : 'Normal'
-    wacc_tt = str.format(FL.tx(38), beta_mkt, (na(downside_beta) ? 'N/A' : str.tostring(downside_beta, '#.##')), i_rf_base, base_rf_for_calc * 100, calc_erp * 100, calc_crp * 100, auto_crp_raw * 100) + str.format(FL.tx(39), D.cod * 100, F_tax * 100, lr_infl * 100, lr_rgdp * 100, final_terminal_growth * 100)
+    wacc_tt = str.format(FL.tx(38), beta_mkt, (na(downside_beta) ? 'N/A' : str.tostring(downside_beta, '#.##')), i_rf_base, base_rf_for_calc * 100, calc_erp * 100, calc_crp * 100, auto_crp_raw * 100) + str.format(FL.tx(39), na(D.cod) ? 'N/A' : str.tostring(D.cod * 100, '#.#') + '%', F_tax * 100, lr_infl * 100, lr_rgdp * 100, final_terminal_growth * 100)
     // Red flags: one list, short names for the cell, full text for the tooltip.
     fl = array.new_string(0)
     flags_tt = ''

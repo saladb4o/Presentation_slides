@@ -435,12 +435,18 @@ export release(array<float> raw, array<float> pend, array<float> known, array<in
 // @function Check-value term: the mantissa of x (x / 10^floor(log10|x|)), 0 for na or 0. Summed with weights over every value the companion sends, so each link is checked at its own scale.
 export mant(float x) =>
     na(x) or x == 0 ? 0.0 : x / math.pow(10, math.floor(math.log10(math.abs(x))))
-// @function R&D capitalised over 3 years, straight line: [amortisation, unamortised asset]. A year with no figure is taken as 10% below the year after it.
+// @function R&D capitalised over 3 years, straight line: [amortisation, unamortised asset]. Without all three past years it is not capitalised (expensed as reported: amortisation = this year's R&D, no asset); a missing year used to be typed in as 10% below the next.
 export f_rnd(float r0, float r1, float r2, float r3) =>
-    float a1 = nz(r1, r0 * 0.9)
-    float a2 = nz(r2, a1 * 0.9)
-    float a3 = nz(r3, a2 * 0.9)
-    [(a1 + a2 + a3) / 3.0, r0 + a1 * 2.0 / 3.0 + a2 / 3.0]
+    na(r1) or na(r2) or na(r3) ? [r0, 0.0] : [(r1 + r2 + r3) / 3.0, r0 + r1 * 2.0 / 3.0 + r2 / 3.0]
+// @function Weighted mean of the values that are not na, their weights re-normalised; na when none is.
+export f_wavg(array<float> x, array<float> w) =>
+    float num = 0.0
+    float den = 0.0
+    for [i, v] in x
+        if not na(v)
+            num += v * w.get(i)
+            den += w.get(i)
+    den > 0 ? num / den : na
 // @function Full beta and downside beta from the same sampled pairs. Needs 12+ pairs.
 export f_beta_pair(array<float> ra, array<float> rb, bool downside_only) =>
     sa = 0.0
@@ -1764,7 +1770,7 @@ export tx(int id) =>
         32 => '\n\nScore is Altman Z: safe > 3.0, distress < 1.8.'
         37 => 'Justified P/B (Wilcox 1984; Ohlson 1995): (ROE - g) / (cost of equity - g), the P/B the company\'\'s own returns support.\n\nP/B now: {0,number,#.##}x\nJustified: {1,number,#.##}x\n\n5-year average ROE {2,number,#.#}% | cost of equity {3,number,#.#}% | long-run growth {4,number,#.#}% (the DCF terminal rate, at most the cost of equity - 2pp).\n\nValue trap: P/B under 1 and not below the justified P/B -- cheap on book, but its returns do not support even that price -- or a Piotroski F-score of 0-2 while the price is under the fair value (Piotroski 2000: among cheap stocks the weak scores lagged). The Value pillar then keeps a quarter of its excess over 50. Justified P/B itself is not scored.'
         38 => 'CAPM Beta: {0,number,#.##}\nDownside Beta: {1}\nRisk-free base: {2} = {3,number,#.##}%\nERP: {4,number,#.#}%\nCRP: {5,number,#.#}% (local-US spread: {6,number,#.#}%)'
-        39 => '\nCost of Debt (synthetic): {0,number,#.#}%\nEffective tax: {1,number,#.#}%\n\nMacro (manual): inflation {2,number,#.##}%, real GDP {3,number,#.##}% -> terminal growth {4,number,#.##}%.'
+        39 => '\nCost of Debt (synthetic): {0}\nEffective tax: {1,number,#.#}%\n\nMacro (manual): inflation {2,number,#.##}%, real GDP {3,number,#.##}% -> terminal growth {4,number,#.##}%.'
         40 => '\nLeverage: net debt {0,number,#.#}x EBITDA (> 4.5x).'
         41 => '\nBeneish M-score {0,number,#.##} > -1.78: earnings manipulation risk.'
         42 => '\nPiotroski F-score {0,number,#} (3 or less).'
@@ -1863,15 +1869,16 @@ export f_jpbrow(bool on, float jpb, float pb, bool trap, float roe, float coe, f
 // @function Street confidence from the analyst targets (lo, md, hi, count, date as ms, now) and ratings (strong buy, buy, hold, sell, strong sell): [agreement, depth, freshness, conviction, confidence 0-100, target age in days, buys, holds, sells, rating score 1 strong buy to 5 strong sell].
 export f_street(bool has, float lo, float md, float hi, float n, float dt, float now, float bs, float b, float h, float s, float ss) =>
     float ag = has ? math.min(math.max(1 - ((hi - lo) / md) / 0.8, 0), 1) : na
-    float dp = has ? math.min(math.max(math.sqrt(math.max(n, 1)) / math.sqrt(10), 0), 1) : na
+    float dp = has and n > 0 ? math.min(math.sqrt(n) / math.sqrt(10), 1) : na
     float age = has and not na(dt) ? (now - dt) / 86400000.0 : na
-    float fr = na(age) ? (has ? 0.5 : na) : age <= 30 ? 1.0 : math.max(1.0 - (age - 30) / 150 * 0.8, 0.2)
+    float fr = na(age) ? na : age <= 30 ? 1.0 : math.max(1.0 - (age - 30) / 150 * 0.8, 0.2)
     float rb = nz(b) + nz(bs)
     float rh = nz(h)
     float rs = nz(s) + nz(ss)
     float tot = rb + rh + rs
-    float cv = has ? (tot > 0 ? math.max(rb, rh, rs) / tot : 0.5) : na
-    [ag, dp, fr, cv, has ? 100 * (0.35 * ag + 0.20 * dp + 0.25 * fr + 0.20 * cv) : na, age, rb, rh, rs, tot > 0 ? (nz(bs) + 2 * nz(b) + 3 * rh + 4 * nz(s) + 5 * nz(ss)) / tot : na]
+    // A part with no data leaves and the rest are re-weighted (they were typed in at 0.5).
+    float cv = has and tot > 0 ? math.max(rb, rh, rs) / tot : na
+    [ag, dp, fr, cv, has ? 100 * f_wavg(array.from(ag, dp, fr, cv), array.from(0.35, 0.20, 0.25, 0.20)) : na, age, rb, rh, rs, tot > 0 ? (nz(bs) + 2 * nz(b) + 3 * rh + 4 * nz(s) + 5 * nz(ss)) / tot : na]
 
 // @function Ours vs street verdict from the two confidences (0-100) and the gap between the values.
 export f_verdict(bool has, float oc, float sc, float gap, float cut) =>
