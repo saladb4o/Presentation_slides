@@ -567,7 +567,8 @@ i_iv_projection_period = input.int(10, 'RIM Projection Period (Years)', group = 
 i_dcf_stage1_yrs = input.int(10, 'DCF: High-Growth Years (Stage 1)', group = group_iv, minval = 1, maxval = 15, tooltip = 'Used by every DCF-type model: main DCF, rNPV, AFFO DCF, Unbundled ServeCo, APV and Equity Cash Flow.')
 i_strict_cap = input.bool(true, 'Strict capital structure', group = group_iv, tooltip = "ON: minority interest and preferred equity are claims ahead of common shareholders. They are added to enterprise value and subtracted from every firm-value model (EV/EBITDA, DCF, rNPV, EPV, APV, EVA, RIM, Unbundled, Rule of 40, Acquirer's Multiple); book value is common equity (ex-MI, ex-preferred) and earnings are income attributable to common (net of preferred dividends). Preferred equity = preferred dividends capitalised at the local 10Y + 2%.")
 group_display = 'Display Options'
-i_detail = input.string('None', 'Table detail (below the summary)', options = ['None', 'Models', 'Street', 'Scorecard', 'Everything'], group = group_display, tooltip = 'The summary card is always shown. Pick one section to add below it.\n\nModels: every relative and intrinsic model.\nStreet: analyst targets, implied growth and P/E, ratings, confidence parts.\nScorecard: every quality, low-risk and value metric behind the Buffett score.\n\nEverything can run off a short chart.')
+i_detail = input.string('None', 'Table detail (below the summary)', options = ['None', 'Models', 'Monte Carlo', 'Street', 'Scorecard', 'Everything'], group = group_display, tooltip = 'The summary card is always shown. Pick one section to add below it.\n\nModels: every relative and intrinsic model.\nMonte Carlo: for each blend member and the fair value, the share of 1-year draws nearest Bear, Base and Bull, and the share above the price.\nStreet: analyst targets, implied growth and P/E, ratings, confidence parts.\nScorecard: every quality, low-risk and value metric behind the Buffett score.\n\nEverything can run off a short chart.')
+show_mc = i_detail == 'Monte Carlo' or i_detail == 'Everything'
 i_tablePos = input.string('top_right', 'Table Position', options = ['top_right', 'middle_right', 'bottom_right'], group = group_display)
 i_textSize = input.string('normal', 'Text Size', options = ['auto', 'tiny', 'small', 'normal', 'large', 'huge'], group = group_display)
 i_theme = input.string('Dark', 'Theme', options = ['Dark', 'Light'], group = group_display)
@@ -2450,10 +2451,11 @@ f_scen_col(float v, float px, bool is_base) =>
     float dev = v > 0 ? px / v - 1 : na
     na(dev) ? color_bg : color.new(math.abs(dev) <= i_scen_fair_band ? color.orange : dev > 0 ? color.red : color.green, is_base ? 15 : 40)
 // One cell of the main table in the chosen text size.
-// The fifth column holds the Monte Carlo P; elsewhere it takes the shade of the row's last cell.
+// The fifth column (shown with the Monte Carlo section) holds its P; elsewhere it takes the shade
+// of the row's last cell.
 f_cell(int col, int row, string txt, color tc, color bg, string tt = '') =>
     T.cell(col, row, txt, text_color = tc, bgcolor = bg, text_size = i_textSize, tooltip = tt)
-    if col == 3
+    if col == 3 and show_mc
         T.cell(4, row, '', bgcolor = bg, text_size = i_textSize)
 // The main table's next free row: every row helper takes it and moves it on.
 var array<int> RW = array.new_int(1, 0)
@@ -2864,7 +2866,6 @@ f_sum_val() =>
     sc_tt += str.format(FL.tx(122), MC_N, mc_q >= i_scen_min_n ? 'together' : 'each on its own', mc_rw, mc_gw, mc_kn)
     sc_tt += f_axtt('Rate', D.r_hi, D.r_lo, 0) + f_axtt('Stage-1 growth', D.g_lo, D.g_hi, 1) + f_axtt('Terminal growth', D.t_lo, D.t_hi, 2) + f_axtt('Revenue growth (Rule of 40)', D.v_lo, D.v_hi, 3)
     f_row4('Scenarios', sc_tt, 'Pos ' + ipos_txt, na(sens) ? 'Rate N/A' : 'Rate ' + (sens > 0 ? '+' : '') + str.tostring(sens * 100, '#.#') + '%', (na(att.get(top)) ? 'Bear: N/A' : 'Bear: ' + AXN.get(top)) + (n_inv > 0 ? ' !' : ''), stt = sc_tt)
-    f_mc()
     if i_show_street
         if SV_has
             f_model_row('Street PV (' + str.tostring(SV_n, '#') + ')', SV_lo, SV_md, SV_hi, str.format(FL.tx(64), SV_n, f_px(SV_lo_t), f_px(SV_md_t), f_px(SV_hi_t), cost_of_equity * 100, (na(SV_overlap) ? 'N/A' : str.format('{0,number,#}%', SV_overlap * 100))))
@@ -3015,6 +3016,8 @@ if barstate.islast
     if all_ or i_detail == 'Models'
         f_det_models()
         f_det_omni()
+    if all_ or i_detail == 'Monte Carlo'
+        f_mc()
     if i_show_street and (all_ or i_detail == 'Street')
         f_det_street()
     if all_ or i_detail == 'Scorecard'
