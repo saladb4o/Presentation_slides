@@ -1,6 +1,6 @@
 # FFVLib: companion library
 
-Publish this as a private library named FFVLib (it becomes version 2). Copy everything inside the code block into a new Pine Editor tab.
+Publish this as a private library named FFVLib (a new version each time it changes; publish FFVMC first). Copy everything inside the code block into a new Pine Editor tab.
 
 ```pine
 //@version=6

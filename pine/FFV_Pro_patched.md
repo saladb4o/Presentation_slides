@@ -1,6 +1,6 @@
 # Fundamental Fair Value Pro: full patched script (phases 0–6)
 
-Copy everything inside the code block into the Pine Editor and replace the whole script.
+Copy everything inside the code block into the Pine Editor and replace the whole script. It imports two private libraries: publish FFVMC and FFVLib first, then set your username and their version numbers on the two import lines.
 
 ```pine
 //@version=6
