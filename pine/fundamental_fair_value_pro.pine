@@ -2176,43 +2176,55 @@ om_free = is_omnibus and omni_manual and not i_omni_strict
 // last bar, below the blends. Reference rows (rNPV) run after the rows they build on. A sector
 // model runs where the framework allocates it, or where a non-strict Manual Omnibus ticks it.
 var Pos P0 = Pos.new()
-for pass = 0 to 1
+// Market-implied stage-1 growth, weekly, over the rate's span: the growth at which the DCF (banks:
+// the RIM) prices the stock at this bar's close, by bisection on [-50%, 100%] as the reverse DCF
+// readout solves it. na when that row has no positive Base value or no growth in the bracket
+// prices it. Its one-year moves set a floor on the growth axis's spread (draw block). Jobs 0-1
+// are the Base passes; on a new week, jobs 2-23 are the bisection's steps (0 and 1 price the
+// bracket's ends, and it runs on only when they straddle the price).
+var array<float> WK_G = array.new_float()
+wk_go = tw_new and time >= last_bar_time - (i_numQuarters * 13 + 1) * 604800000.0 and close > 0
+float gi = na
+Pos pw = Pos.new()
+float wa = -0.5, float wb = 1.0
+float ea = na
+wk_ok = true
+for j = 0 to (wk_go ? 23 : 1)
+    if not wk_ok
+        break
+    base = j < 2
+    int st = j - 2
     for m in MD
-        if m.eng != Eng.comp and (m.eng == Eng.ref) == (pass == 1)
-            m.fv := na
-            m.lo := na
-            m.hi := na
-            m.live := m.grp != Group.sect or m.fw or (om_free and m.tick)
+        if base ? m.eng != Eng.comp and (m.eng == Eng.ref) == (j == 1) : m.code == (use_bank_model ? 'RIM' : 'DCF') and m.live and m.fv > 0
+            if base
+                m.fv := na
+                m.lo := na
+                m.hi := na
+                m.live := m.grp != Group.sect or m.fw or (om_free and m.tick)
+            else
+                pw.g1 := st == 0 ? wa : st == 1 ? wb : (wa + wb) / 2
             if m.live
-                m.fv := f_eval(m, D, CL, P0, 0)
+                float v = f_eval(m, D, CL, base ? P0 : pw, base ? 0 : 3)
+                if base
+                    m.fv := v
+                else
+                    float e = v - close
+                    if st == 0
+                        ea := e
+                    else if st == 1
+                        wk_ok := ea * e <= 0
+                    else if e * ea > 0
+                        wa := pw.g1, ea := e
+                    else
+                        wb := pw.g1
+                    if st == 21
+                        gi := (wa + wb) / 2
             else
                 r0 = m.res.get(0)
                 r0.value := na
                 r0.why := FL.tx(11)
 float implied_exit_multiple = M_DCF.res.get(0).aux
-// Market-implied stage-1 growth, weekly, over the rate's span: the growth at which the DCF (banks:
-// the RIM) prices the stock at this bar's close, by bisection on [-50%, 100%] as the reverse DCF
-// readout solves it. na when that row has no positive Base value or no growth in the bracket
-// prices it. Its one-year moves set a floor on the growth axis's spread (draw block).
-var array<float> WK_G = array.new_float()
 if tw_new
-    float gi = na
-    if time >= last_bar_time - (i_numQuarters * 13 + 1) * 604800000.0 and close > 0
-        for m in MD
-            if m.code == (use_bank_model ? 'RIM' : 'DCF') and m.live and m.fv > 0
-                p = Pos.new(g1 = -0.5)
-                float a = -0.5, float b = 1.0
-                float ea = f_eval(m, D, CL, p, 3) - close
-                p.g1 := b
-                if ea * (f_eval(m, D, CL, p, 3) - close) <= 0
-                    for st = 2 to 21
-                        p.g1 := (a + b) / 2
-                        float e = f_eval(m, D, CL, p, 3) - close
-                        if e * ea > 0
-                            a := p.g1, ea := e
-                        else
-                            b := p.g1
-                    gi := (a + b) / 2
     WK_G.push(gi)
     if WK_G.size() > i_numQuarters * 13 + 1
         WK_G.shift()
@@ -2477,11 +2489,34 @@ if barstate.islast
     [rv, rvl] = FM.f_pool_yoy(ST.v, ST.q, i_numQuarters, Q_REV)
     AXQ.set(3, rv.size())
     mc_kn := math.max(mc_kn, f_draws(DS, 4, rv, rvl, pm, 511111111.0))
-    [rl, rh] = f_side(DS, 0)
-    [gl, gh] = f_side(DS, 1)
-    [tl, th] = f_side(DS, 2)
-    [vl, vh] = f_side(DS, 4)
-    D.r_lo := rl, D.r_hi := rh, D.g_lo := gl, D.g_hi := gh, D.t_lo := tl, D.t_hi := th, D.v_lo := vl, D.v_hi := vh
+    // Rate, growth, terminal and revenue-growth columns: Bear then Bull side of each.
+    sd = array.new_float(8, na)
+    for [i, c] in array.from(0, 1, 2, 4)
+        [lo, hi] = f_side(DS, c)
+        sd.set(2 * i, lo)
+        sd.set(2 * i + 1, hi)
+    D.r_lo := sd.get(0), D.r_hi := sd.get(1), D.g_lo := sd.get(2), D.g_hi := sd.get(3), D.t_lo := sd.get(4), D.t_hi := sd.get(5), D.v_lo := sd.get(6), D.v_hi := sd.get(7)
+// ==============================================================
+// === MONTE CARLO (last bar): how likely each scenario is ======
+// ==============================================================
+// Today's value replayed under assumption revisions the size of past years': the draws above,
+// on the joint pool only (a driver's own pool would lose the co-movement the shares measure).
+// Every discount rate moves by the draw's summed risk-free change (as the Bear/Bull rate axis
+// moves them all), stage-1 and terminal growth by their sums (Graham's growth with stage-1),
+// Rule of 40's revenue growth by its own draw, and each own multiple takes its value at the
+// draw's end quarter; Acquirer's multiple stays at Base. Earnings and cash flows stay at
+// today's. The live blend's members (and the rows they build on) are priced on the one f_eval
+// path, the blend on its Base shares, and each value counted under the scenario it lands
+// nearest (cut halfway Bear-Base and Base-Bull) and against the price. MCC: a row per model,
+// then the live blend | Bear, Base, Bull, above the price, draws priced, draws where a member
+// had no value (it keeps its Base).
+MCC = matrix.new<float>(MD.size() + 1, 6, 0.0)
+f_mc_add(int r, float v, float lo, float b, float hi) =>
+    if not na(v)
+        int c = v <= (lo + b) / 2 ? 0 : v >= (b + hi) / 2 ? 2 : 1
+        MCC.set(r, c, MCC.get(r, c) + 1)
+        MCC.set(r, 3, MCC.get(r, 3) + (v > close ? 1 : 0))
+        MCC.set(r, 4, MCC.get(r, 4) + 1)
 B = array.new_float(16, na)
 att = array.new_float(4, na)
 rdcf = array.new_float(5, na)
@@ -2501,13 +2536,31 @@ if barstate.islast
     dcf_k = -1
     for [k, m] in MD
         dcf_k := m.code == 'DCF' ? k : dcf_k
-    for j = 0 to J_RD + 5 * N_RD - 1
+    // Monte Carlo draws run as the last jobs on the same pricing path: the live blend's members
+    // and the rows they build on. Their counts wait for the final Bear / Bull below.
+    int J_MC = J_RD + 5 * N_RD
+    int nb = MD.size()
+    mc_on = mc_q >= i_scen_min_n
+    need = array.new_bool(nb, false)
+    for [k, m] in MD
+        if m.live and m.grp != Group.comp and (m.w > 0 or m.om)
+            need.set(k, true)
+            if m.src_i >= 0
+                need.set(m.src_i, true)
+    MV = matrix.new<float>(mc_on ? MC_N : 1, nb + 1, na)
+    for j = 0 to J_MC + (mc_on ? MC_N : 0) - 1
         p = Pos.new()
         int rd_i = int((j - J_RD) / N_RD)
         int rd_s = (j - J_RD) % N_RD
         float q = (ip_a + ip_b) / 2
         skip = false
-        if j < 16
+        mc = j >= J_MC
+        int qe = 0
+        if mc
+            int i = j - J_MC
+            p := Pos.new(dr = DS.get(i, 0), dg = DS.get(i, 1), dt = DS.get(i, 2), dv = nz(DS.get(i, 4)), sim = true)
+            qe := int(DS.get(i, 3))
+        else if j < 16
             int mask = j < 2 ? 15 : j - 1
             float sg = j == 1 ? -1.0 : 1.0
             p.r := sg * (mask % 2)
@@ -2527,11 +2580,13 @@ if barstate.islast
             skip := not (t > 0) or (rd_s > 1 and na(rd_va))
             p.g1 := rd_s == 0 ? rd_a : rd_s == 1 ? rd_b : (rd_a + rd_b) / 2
         if not skip
-            rd = j >= J_RD
+            rd = j >= J_RD and not mc
             vj = array.new_float(MD.size(), na)
             for pass = 0 to 1
                 for [k, m] in MD
-                    if m.live and (m.eng == Eng.ref) == (pass == 1) and (not rd or k == dcf_k)
+                    if (m.eng == Eng.ref) == (pass == 1) and (mc ? need.get(k) : m.live and (not rd or k == dcf_k))
+                        if mc
+                            m.mq := ST.at(Q_MULT + k, qe)
                         vj.set(k, f_eval(m, D, CL, p, j < 2 ? j + 1 : 3))
             if rd
                 float e = vj.get(dcf_k) - tg.get(rd_i)
@@ -2546,8 +2601,17 @@ if barstate.islast
                 if rd_s == N_RD - 1
                     rdcf.set(rd_i, (rd_a + rd_b) / 2)
             else
-                [sv, bv] = f_bv(vj, j == 1 or (j >= J_IP and q > 0))
-                if j == 0
+                [sv, bv] = f_bv(vj, not mc and (j == 1 or (j >= J_IP and q > 0)))
+                if mc
+                    nf = false
+                    for [k, m] in MD
+                        if need.get(k)
+                            float v = vj.get(k)
+                            nf := nf or (na(v) and (m.w > 0 or m.om))
+                            MV.set(j - J_MC, k, na(v) ? na : math.max(v, 0.0))
+                    MV.set(j - J_MC, nb, bv)
+                    MCC.set(nb, 5, MCC.get(nb, 5) + (nf ? 1 : 0))
+                else if j == 0
                     for [k, m] in MD
                         m.lo := m.grp == Group.comp ? sv : vj.get(k)
                     compositeLo := bv
@@ -2615,53 +2679,15 @@ if barstate.islast
                 a := AX.get(k, i) > m.fv and (a < 0 or AX.get(k, i) > AX.get(k, a)) ? i : a
             m.inv := a < 0 ? 'Bull below Base.' : 'Bear above Base on the ' + AXN.get(a) + ' axis: ' + array.get(array.from(FL.tx(13), FL.tx(14), FL.tx(15), FL.tx(16)), a)
             n_inv += (omni_active ? m.om : m.w > 0) ? 1 : 0
-// ==============================================================
-// === MONTE CARLO (last bar): how likely each scenario is ======
-// ==============================================================
-// Today's value replayed under assumption revisions the size of past years': the draws above,
-// on the joint pool only (a driver's own pool would lose the co-movement the shares measure).
-// Every discount rate moves by the draw's summed risk-free change (as the Bear/Bull rate axis
-// moves them all), stage-1 and terminal growth by their sums (Graham's growth with stage-1),
-// Rule of 40's revenue growth by its own draw, and each own multiple takes its value at the
-// draw's end quarter; Acquirer's multiple stays at Base. Earnings and cash flows stay at
-// today's. The live blend's members (and the rows they build on) are priced on the one f_eval
-// path, the blend on its Base shares, and each value counted under the scenario it lands
-// nearest (cut halfway Bear-Base and Base-Bull) and against the price. MCC: a row per model,
-// then the live blend | Bear, Base, Bull, above the price, draws priced, draws where a member
-// had no value (it keeps its Base).
-MCC = matrix.new<float>(MD.size() + 1, 6, 0.0)
-f_mc_add(int r, float v, float lo, float b, float hi) =>
-    if not na(v)
-        int c = v <= (lo + b) / 2 ? 0 : v >= (b + hi) / 2 ? 2 : 1
-        MCC.set(r, c, MCC.get(r, c) + 1)
-        MCC.set(r, 3, MCC.get(r, 3) + (v > close ? 1 : 0))
-        MCC.set(r, 4, MCC.get(r, 4) + 1)
-if barstate.islast and mc_q >= i_scen_min_n
-    int nb = MD.size()
-    need = array.new_bool(nb, false)
-    for [k, m] in MD
-        if m.live and m.grp != Group.comp and (m.w > 0 or m.om)
-            need.set(k, true)
-            if m.src_i >= 0
-                need.set(m.src_i, true)
-    for i = 0 to MC_N - 1
-        p = Pos.new(dr = DS.get(i, 0), dg = DS.get(i, 1), dt = DS.get(i, 2), dv = nz(DS.get(i, 4)), sim = true)
-        int qe = int(DS.get(i, 3))
-        vj = array.new_float(nb, na)
-        for pass = 0 to 1
-            for [k, m] in MD
-                if need.get(k) and (m.eng == Eng.ref) == (pass == 1)
-                    m.mq := ST.at(Q_MULT + k, qe)
-                    vj.set(k, f_eval(m, D, CL, p, 3))
-        nf = false
-        for [k, m] in MD
-            if need.get(k)
-                float v = vj.get(k)
-                nf := nf or (na(v) and (m.w > 0 or m.om))
-                f_mc_add(k, na(v) ? na : math.max(v, 0.0), m.lo, m.fv, m.hi)
-        [sv, bv] = f_bv(vj, false)
-        f_mc_add(nb, bv, compositeLo, finalFairValue, compositeHi)
-        MCC.set(nb, 5, MCC.get(nb, 5) + (nf ? 1 : 0))
+    if mc_on
+        for k = 0 to nb
+            float lo = compositeLo, float b = finalFairValue, float hi = compositeHi
+            if k < nb
+                m = MD.get(k)
+                lo := m.lo, b := m.fv, hi := m.hi
+            if k == nb or need.get(k)
+                for i = 0 to MC_N - 1
+                    f_mc_add(k, MV.get(i, k), lo, b, hi)
 // ==========================================
 // JUSTIFIED P/B & VALUE TRAP (Wilcox 1984; Ohlson 1995)
 // ==========================================
@@ -2828,10 +2854,11 @@ f_nr() =>
 f_model_row(string label, float lo, float base, float hi, string tt) =>
     int row = f_nr()
     float v = base > 0 ? (close / base - 1) * 100 : na
+    array<float> x = array.from(lo, base, hi)
     f_cell(0, row, label, color_text, color_bg, tt + (na(v) ? '' : '\n\nPrice vs Base: ' + (v > 0 ? '+' : '') + str.tostring(math.round(v)) + '%'))
-    f_cell(1, row, f_scen_txt(lo), color_text, f_scen_col(lo, close, false))
-    f_cell(2, row, na(base) ? 'N/A' : f_px(base), color.white, f_scen_col(base, close, true))
-    f_cell(3, row, f_scen_txt(hi), color_text, f_scen_col(hi, close, false))
+    for i = 0 to 2
+        float y = x.get(i)
+        f_cell(i + 1, row, i == 1 ? (na(y) ? 'N/A' : f_px(y)) : f_scen_txt(y), i == 1 ? color.white : color_text, f_scen_col(y, close, i == 1))
 f_mult_tt(float avgr, float cur, float plo, float phi) =>
     str.format(FL.tx(17), avgr, (na(cur) ? 'N/A' : str.format('{0,number,#.##}x', cur)), (na(plo) ? 'n/a' : str.format('{0,number,#.##}x', plo)), (na(phi) ? 'n/a' : str.format('{0,number,#.##}x', phi)))
 f_gtxt(float g) => na(g) ? '-' : str.tostring(g * 100, '#.#') + '%'
@@ -2849,18 +2876,20 @@ f_stxt(float c) => na(c) ? '-' : str.tostring(c, '#.00')
 // Section header: four grey cells, tooltip on the first.
 f_hdr(string a, string b, string c, string d, string tt) =>
     int row = f_nr()
-    f_cell(0, row, a, color_text, color_header, tt)
-    f_cell(1, row, b, color_text, color_header)
-    f_cell(2, row, c, color_text, color_header)
-    f_cell(3, row, d, color_text, color_header)
+    array<string> v = array.from(a, b, c, d)
+    for i = 0 to 3
+        f_cell(i, row, v.get(i), color_text, color_header, i == 0 ? tt : '')
 // Label + three cells; tooltips on the label and on the status cell. A colour
 // left na falls back to the theme text (c) or background (b).
 f_row4(string lbl, string ltt, string v1, string v2, string v3, color c1 = na, color b1 = na, color c2 = na, color b2 = na, color c3 = na, color b3 = na, string stt = '') =>
     int row = f_nr()
-    f_cell(0, row, lbl, color_text, color_bg, ltt)
-    f_cell(1, row, v1, na(c1) ? color_text : c1, na(b1) ? color_bg : b1)
-    f_cell(2, row, v2, na(c2) ? color_text : c2, na(b2) ? color_bg : b2)
-    f_cell(3, row, v3, na(c3) ? color_text : c3, na(b3) ? color_bg : b3, stt)
+    array<string> v = array.from(lbl, v1, v2, v3)
+    array<color> tc = array.from(color_text, c1, c2, c3)
+    array<color> bc = array.from(color_bg, b1, b2, b3)
+    for i = 0 to 3
+        color t = tc.get(i)
+        color b = bc.get(i)
+        f_cell(i, row, v.get(i), na(t) ? color_text : t, na(b) ? color_bg : b, i == 0 ? ltt : i == 3 ? stt : '')
 // White text on a status colour, the theme text colour on the plain background.
 f_on(float c) =>
     na(c) ? color_text : color.white
@@ -3180,12 +3209,26 @@ f_mc() =>
     string why = mc_q < i_scen_min_n ? str.format(FL.tx(119), i_scen_min_n, mc_q) : ''
     f_hdr('Monte Carlo (1 year)', 'Bear', 'Base', 'Bull', why != '' ? why : str.format(FL.tx(118), MC_N, mc_q, mc_b, mc_sk, mc_rw, mc_gw, mc_kn))
     f_cell(4, RW.get(0) - 1, 'P > price', color_text, color_header)
-    for [k, m] in MD
-        if m.grp != Group.comp and f_sh(m) > 0
-            bad = m.inv != '' or not (m.lo < m.fv * (1 - 1e-9) and m.hi > m.fv * (1 + 1e-9))
-            f_mc_row(m.name, k, why != '' ? why : m.code == 'ACQ' ? 'N/A: a fixed-multiple rule with no history to draw, so every draw is Base.' : na(m.lo) or na(m.hi) ? 'N/A: no Bear / Bull (too few quarters).' : bad ? 'N/A: Bear must sit below Base and Bull above it.' : '', m.lk == Lever.pctl ? FL.tx(120) : '')
-    fbad = not (compositeLo < finalFairValue * (1 - 1e-9) and compositeHi > finalFairValue * (1 + 1e-9))
-    f_mc_row('Fair value', MD.size(), why != '' ? why : fbad ? 'N/A: Bear must sit below Base and Bull above it.' : '', str.format('\n\nDraws where a member had no value (it keeps its Base value in the blend): {0}.', MCC.get(MD.size(), 5)))
+    // A row per member, then the fair value (k = MD.size()).
+    for k = 0 to MD.size()
+        string lbl = ''
+        string w = why
+        string tt = ''
+        if k == MD.size()
+            lbl := 'Fair value'
+            if w == '' and not (compositeLo < finalFairValue * (1 - 1e-9) and compositeHi > finalFairValue * (1 + 1e-9))
+                w := 'N/A: Bear must sit below Base and Bull above it.'
+            tt := str.format('\n\nDraws where a member had no value (it keeps its Base value in the blend): {0}.', MCC.get(k, 5))
+        else
+            m = MD.get(k)
+            if m.grp != Group.comp and f_sh(m) > 0
+                lbl := m.name
+                bad = m.inv != '' or not (m.lo < m.fv * (1 - 1e-9) and m.hi > m.fv * (1 + 1e-9))
+                if w == ''
+                    w := m.code == 'ACQ' ? 'N/A: a fixed-multiple rule with no history to draw, so every draw is Base.' : na(m.lo) or na(m.hi) ? 'N/A: no Bear / Bull (too few quarters).' : bad ? 'N/A: Bear must sit below Base and Bull above it.' : ''
+                tt := m.lk == Lever.pctl ? FL.tx(120) : ''
+        if lbl != ''
+            f_mc_row(lbl, k, w, tt)
 // One axis's Bear / Bull move for the Scenarios tooltip, in percentage points.
 f_pp(float x) =>
     (x > 0 ? '+' : '') + str.tostring(x * 100, '#.##') + 'pp'
@@ -3296,39 +3339,52 @@ f_det_models() =>
     // The view mix of the live blend (own history, rules, intrinsic), before the rows.
     vm = f_vmix()
     f_row4('View mix', FL.tx(73) + (i_view_cap < 1.0 ? ' Own history capped at ' + str.tostring(i_view_cap * 100, '#') + FL.tx(74) : FL.tx(75)), 'Own ' + str.tostring(vm.get(0) * 100, '#') + '%', 'Rules ' + str.tostring(vm.get(1) * 100, '#') + '%', 'Intrinsic ' + str.tostring(vm.get(2) * 100, '#') + '%')
-    f_hdr('Relative Valuation', 'Bear', 'Base', 'Bull', FL.tx(76))
-    for m in MD
-        if m.grp == Group.rel and (m.on or m.om) and (m.fv > 0 or na(m.avg))
-            float cur = f_cur(m)
-            f_model_row(m.name + (m.syn ? ' *' : '') + f_mlbl(m), m.lo, m.fv, m.hi, (m.syn ? FL.tx(77) : '') + (m.s_drv == Sx.eps_b and H_cape ? FL.tx(78) : '') + (na(m.avg) ? '' : f_mult_tt(m.avg, cur, math.min(m.plo, m.avg), math.max(m.phi, m.avg))) + f_res_tt(m))
-    f_hdr('Intrinsic Models', 'Bear', 'Base', 'Bull', '')
     // Rule of 40, or Rule of 65 once growth x 2 + FCF margin reaches 65.
     float r40_score = nz((F_rev_g + D.s.get(Sx.fcf_margin)) * 100)
     float rx_score = nz(((F_rev_g * 2.0) + D.s.get(Sx.fcf_margin)) * 100)
     super_stock = rx_score >= 65
     float ddm_yield = close > 0 and not na(F_dps) ? F_dps / close * 100 : na
     cl_txt = CL.txt()
-    // Absolute models show whenever allocated (even N/A); Acquirer's and the sector
-    // models only once they produce a value.
+    // The relative rows, then the intrinsic ones. Absolute models show whenever allocated (even
+    // N/A); Acquirer's and the sector models only once they produce a value.
+    rows = array.new<Model>()
+    for m in MD
+        if m.grp == Group.rel and (m.on or m.om) and (m.fv > 0 or na(m.avg))
+            rows.push(m)
+    int n_rel = rows.size()
     for m in f_order(FL.tx(79))
         if m.grp != Group.rel and m.grp != Group.comp and (m.on or m.om) and ((m.grp == Group.abs and m.code != 'ACQ') or not na(m.fv))
-            lbl = m.code == 'R40' ? (super_stock ? '🌟 Rule of 65 (Super Stock)' : 'Rule of 40 Value') : m.code == 'ACQ' ? "Acquirer's Mult (" + str.tostring(i_acquirer_mult) + "x EBIT)" : m.name
-            tt = switch m.code
-                'R40' => (super_stock ? 'Rule of 65 Score: ' + str.tostring(rx_score, '#.#') + FL.tx(80) : 'Rule of 40 Score: ' + (na(F_rev_g) ? FL.tx(81) : str.tostring(r40_score, '#.#') + '%')) + FL.tx(82)
-                'GRA' => FL.tx(83)
-                'ACQ' => FL.tx(84)
-                'RNPV' => FL.tx(85)
-                'UNB' => 'NetCo share ' + str.tostring(F_netco_sh * 100, '#') + FL.tx(86) + cl_txt + ', once.'
-                'DCF' => FL.tx(87) + cl_txt + FL.tx(88)
-                'RIM' => (use_bank_model ? FL.tx(89) : FL.tx(90)) + FL.tx(91) + str.tostring(i_iv_projection_period) + ' years, plus ' + (use_bank_model ? 'book value.' : 'invested capital, less ' + cl_txt + '.')
-                'ECF' => FL.tx(92) + f_gtxt(D.s.get(Sx.roe_n)) + FL.tx(93)
-                'ADCF' => FL.tx(94)
-                'APV' => FL.tx(95) + f_gtxt(D.r_unlev) + FL.tx(96) + cl_txt + '.'
-                'EPV' => FL.tx(97) + cl_txt + '.'
-                'OE' => "Buffett (Williams 1938): owner earnings discounted at the cost of equity, growing at the stage-1 rate fading to terminal, plus a terminal value. With the Companion Feed: NI + D&A + impairments - 3y avg maintenance capex - working-capital build-up; without it: OCF - maintenance capex."
-                'EVA' => FL.tx(99) + cl_txt + '.'
-                'DDM' => FL.tx(100) + str.tostring(F_dps, '#.##') + '\nYield: ' + (na(ddm_yield) ? 'N/A' : str.tostring(ddm_yield, '#.##') + '%') + '\nCost of equity: ' + str.tostring(cost_of_equity * 100, '#.#') + '%\nTerminal growth: ' + str.tostring(final_terminal_growth * 100, '#.#') + '%'
-                => ''
+            rows.push(m)
+    f_hdr('Relative Valuation', 'Bear', 'Base', 'Bull', FL.tx(76))
+    for i = 0 to rows.size()
+        if i == n_rel
+            f_hdr('Intrinsic Models', 'Bear', 'Base', 'Bull', '')
+        if i < rows.size()
+            m = rows.get(i)
+            lbl = m.name
+            tt = ''
+            if i < n_rel
+                float cur = f_cur(m)
+                lbl := m.name + (m.syn ? ' *' : '')
+                tt := (m.syn ? FL.tx(77) : '') + (m.s_drv == Sx.eps_b and H_cape ? FL.tx(78) : '') + (na(m.avg) ? '' : f_mult_tt(m.avg, cur, math.min(m.plo, m.avg), math.max(m.phi, m.avg)))
+            else
+                lbl := m.code == 'R40' ? (super_stock ? '🌟 Rule of 65 (Super Stock)' : 'Rule of 40 Value') : m.code == 'ACQ' ? "Acquirer's Mult (" + str.tostring(i_acquirer_mult) + "x EBIT)" : m.name
+                tt := switch m.code
+                    'R40' => (super_stock ? 'Rule of 65 Score: ' + str.tostring(rx_score, '#.#') + FL.tx(80) : 'Rule of 40 Score: ' + (na(F_rev_g) ? FL.tx(81) : str.tostring(r40_score, '#.#') + '%')) + FL.tx(82)
+                    'GRA' => FL.tx(83)
+                    'ACQ' => FL.tx(84)
+                    'RNPV' => FL.tx(85)
+                    'UNB' => 'NetCo share ' + str.tostring(F_netco_sh * 100, '#') + FL.tx(86) + cl_txt + ', once.'
+                    'DCF' => FL.tx(87) + cl_txt + FL.tx(88)
+                    'RIM' => (use_bank_model ? FL.tx(89) : FL.tx(90)) + FL.tx(91) + str.tostring(i_iv_projection_period) + ' years, plus ' + (use_bank_model ? 'book value.' : 'invested capital, less ' + cl_txt + '.')
+                    'ECF' => FL.tx(92) + f_gtxt(D.s.get(Sx.roe_n)) + FL.tx(93)
+                    'ADCF' => FL.tx(94)
+                    'APV' => FL.tx(95) + f_gtxt(D.r_unlev) + FL.tx(96) + cl_txt + '.'
+                    'EPV' => FL.tx(97) + cl_txt + '.'
+                    'OE' => "Buffett (Williams 1938): owner earnings discounted at the cost of equity, growing at the stage-1 rate fading to terminal, plus a terminal value. With the Companion Feed: NI + D&A + impairments - 3y avg maintenance capex - working-capital build-up; without it: OCF - maintenance capex."
+                    'EVA' => FL.tx(99) + cl_txt + '.'
+                    'DDM' => FL.tx(100) + str.tostring(F_dps, '#.##') + '\nYield: ' + (na(ddm_yield) ? 'N/A' : str.tostring(ddm_yield, '#.##') + '%') + '\nCost of equity: ' + str.tostring(cost_of_equity * 100, '#.#') + '%\nTerminal growth: ' + str.tostring(final_terminal_growth * 100, '#.#') + '%'
+                    => ''
             f_model_row(lbl + f_mlbl(m), m.lo, m.fv, m.hi, tt + f_res_tt(m))
     // Valuation assumptions: the macro inputs behind terminal growth, and the DCF's exit multiple.
     macro_src = (i_lr_infl > 0 ? 'input' : 'auto') + ' / ' + (i_lr_rgdp > 0 ? 'input' : 'auto')
