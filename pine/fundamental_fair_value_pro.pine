@@ -175,7 +175,8 @@ type KIn
     float gx = na
     float adj = na
     float ref = na
-// rate: the level's discount rate | g1: stage-1 growth | gT: terminal growth, held TCAP under
+// rate: the level's discount rate | g1: stage-1 growth (in Drv: before its limits, -5% and gcap,
+// applied after each move) | gT: terminal growth, held TCAP under
 // the rate (one margin for every engine and add-on) | yrs: explicit years |
 // cf, earn, ret, cap: cash flow, earnings, return on new capital (na: the cash flow is
 // already free), capital base | drv, drv_f, mult: a multiple's driver, next year's driver,
@@ -408,12 +409,13 @@ f_mpos(Model m, float p) =>
 f_rate0(Drv d, Level l) =>
     l == Level.firm ? d.r_firm : l == Level.unlev ? d.r_unlev : l == Level.equity ? d.r_eq : d.r_bank
 // THE ONE INPUTS PATH, for Base and every scenario alike: each quote moved along its axis
-// (rate r_lo / r_hi, floor 2% | stage-1 growth g_lo / g_hi inside -5% and the sector cap |
+// (rate r_lo / r_hi, floor 2% | stage-1 growth g_lo / g_hi on its estimate before its limits,
+// then held inside -5% and gcap (the lower of 35% and the sector cap) |
 // terminal growth t_lo / t_hi, floor 0), the one terminal cap, the row's lever and its streams.
 // A zero move returns Base exactly. Fills x in place.
 f_kin(Model m, Drv d, Pos p, KIn x) =>
     x.rate := f_mv(f_rate0(d, m.level), f_ax(p.r, d.r_lo, d.r_hi) + p.dr, 0.02, na)
-    x.g1 := nz(p.g1, f_mv(d.g1, f_ax(p.g, d.g_lo, d.g_hi) + p.dg, -0.05, d.gcap))
+    x.g1 := nz(p.g1, math.max(math.min(d.g1 + f_ax(p.g, d.g_lo, d.g_hi) + p.dg, d.gcap), -0.05))
     x.gT := math.min(f_mv(d.gT, f_ax(p.t, d.t_lo, d.t_hi) + p.dt, 0.0, na), x.rate - TCAP)
     x.yrs := m.eng == Eng.rim ? d.yrs_rim : d.yrs
     x.cf := m.s_cf == Sx.fcfe ? d.s.get(Sx.ni_ps) * (1 - x.g1 / d.s.get(Sx.roe_n)) : d.s.get(m.s_cf)
@@ -1625,12 +1627,13 @@ int w_algo = switch i_weighting_algo
     'RMSLE (Root Mean Sq Log)' => 4
     => 0
 // HIST (H_*): statistics of the stored quarters, rebuilt with the F_* values. roe_med: 5-year median ROE |
-// peq_1y: parent equity a year earlier | g1: stage-1 growth |
+// peq_1y: parent equity a year earlier | g1, g1u: stage-1 growth, and before its limits |
 // eps_b, eps_f: the P/E driver (CAPE or TTM EPS) and next year's | ebitda_f: next year's EBITDA
 // | g_fwd, g_src: the forward growth leg and its source | cape: the CAPE driver is on.
 var float H_roe_med = na
 var float H_peq_1y = na
 var float H_g1 = na
+var float H_g1u = na
 var float H_eps_b = na
 var float H_eps_f = na
 var float H_ebitda_f = na
@@ -1714,7 +1717,7 @@ if CK.dirty
     // growth combined with the LASSO's on their records against released revenue (the Omnibus
     // MALE rule); no consensus -> the LASSO alone; neither -> the leg leaves. No leg at all: no
     // stage-1 growth (N/A), so the growth-path models are N/A too.
-    [normalized_sgr, roic_sgr, fwd_growth_leg, w_las, g1, est_ebitda_fwd] = FM.f_growth(median_roe, median_op, F_tax, F_dps, F_eps, F_nopat, F_fcff, F_roic, use_bank_model, F_fwd_g, g_las, LW, sales_cagr_3y, dynamic_growth_cap, F_rev, F_rev_est, F_ebitda)
+    [normalized_sgr, roic_sgr, fwd_growth_leg, w_las, g1, est_ebitda_fwd, g1u] = FM.f_growth(median_roe, median_op, F_tax, F_dps, F_eps, F_nopat, F_fcff, F_roic, use_bank_model, F_fwd_g, g_las, LW, sales_cagr_3y, dynamic_growth_cap, F_rev, F_rev_est, F_ebitda)
     fwd_growth_src = na(fwd_growth_leg) ? 'none' : w_las == 0 ? 'Consensus sales' : w_las == 1 ? 'LASSO' : str.format('Consensus sales + LASSO ({0,number,#}%)', 100 * w_las)
     // On an advance (and on bar 0): each own-history multiple's statistics from its stored
     // quarters, and every row's track record re-scored on the stored fair values and prices
@@ -1734,6 +1737,7 @@ if CK.dirty
     H_roe_med := median_roe
     H_peq_1y := peq_1y
     H_g1 := g1
+    H_g1u := g1u
     H_eps_b := earnings_base
     H_eps_f := not na(g1) and not cape_on ? earnings_base * (1 + g1) : na
     H_ebitda_f := est_ebitda_fwd
@@ -1821,8 +1825,8 @@ f_drivers(Clock ck, Drv d, Claims c) =>
     d.r_unlev := r_unlev
     d.r_eq := coe
     d.r_bank := coe
-    d.g1 := H_g1
-    d.gcap := dynamic_growth_cap
+    d.g1 := H_g1u
+    d.gcap := math.min(0.35, dynamic_growth_cap)
     d.gT := gT
     d.yrs := i_dcf_stage1_yrs
     d.yrs_rim := i_iv_projection_period
@@ -2390,7 +2394,7 @@ valuation_status = na(finalFairValue) ? 'N/A' : close > upperBound and close > f
 rkv_trip = i_use_rkv and D.roe < rf_local_avg / 100 + 0.05
 ST.write(Q_PX, close > 0 ? close : na)
 ST.write(Q_MC, base_rf_for_calc)
-ST.write(Q_MC + 1, H_g1)
+ST.write(Q_MC + 1, H_g1u)
 ST.write(Q_MC + 2, D.gT)
 ST.write(Q_MC + 3, rf_local ? rf_src : us_src)
 ST.write(Q_MC + 4, H_gmask)

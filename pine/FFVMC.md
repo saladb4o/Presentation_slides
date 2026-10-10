@@ -1020,7 +1020,7 @@ f_las_share(float w_inc, float w_las, float x_inc, float x_las) =>
     na(x_las) ? 0.0 : na(x_inc) ? 1.0 : w_inc + w_las > 0 ? w_las / (w_inc + w_las) : 0.5
 // @function Stage-1 growth by triangulation: sustainable growth (ROE x retention) 15%, ROIC x reinvestment 40% (a bank: ROE x retention), the forward leg (the FY revenue consensus growth combined with the LASSO's on their records, Bates and Granger 1969) 15%, the 3-year sales CAGR 30%; a leg with no data leaves and the others are re-weighted. Also next year's EBITDA on the TTM margin.
 // @param lw The LASSO members' records (LASSO, consensus, CAGR).
-// @returns [sustainable growth, ROIC x reinvestment, forward leg, LASSO share of it, stage-1 growth, forward EBITDA].
+// @returns [sustainable growth, ROIC x reinvestment, forward leg, LASSO share of it, stage-1 growth, forward EBITDA, stage-1 growth before its limits].
 export f_growth(float roe_med, float op_med, float tax, float dps, float eps, float nopat, float fcff, float roic, bool bank, float fwd_g, float g_las, array<float> lw, float cagr, float gcap, float rev, float rev_est, float ebitda) =>
     float ret = 1.0
     if not na(dps) and eps > 0
@@ -1039,13 +1039,14 @@ export f_growth(float roe_med, float op_med, float tax, float dps, float eps, fl
         if not na(x)
             g_num += x * g_wt.get(i)
             g_den += g_wt.get(i)
-    float g1 = math.max(math.min(math.min(math.max(g_num / g_den, -0.10), 0.35), gcap), -0.05)
+    float g1u = g_num / g_den
+    float g1 = math.max(math.min(math.min(math.max(g1u, -0.10), 0.35), gcap), -0.05)
     // Next-year sales: the FY revenue consensus, else the sales CAGR, each combined with the LASSO.
     float s_inc = nz(rev_est, rev * (1 + cagr))
     float w_las_s = f_las_share(lw.get(not na(rev_est) ? 1 : 2), lw.get(0), s_inc, g_las)
     float sales_f1 = na(g_las) or w_las_s == 0 ? s_inc : w_las_s == 1 ? rev * (1 + g_las) : (1 - w_las_s) * s_inc + w_las_s * rev * (1 + g_las)
     float margin = rev > 0 ? ebitda / rev : na
-    [sgr, roic_sgr, leg, w_las, g1, not na(margin) ? sales_f1 * margin : na]
+    [sgr, roic_sgr, leg, w_las, g1, not na(margin) ? sales_f1 * margin : na, g1u]
 // @function Cost of capital. Equity: CAPM on the base + size, value and profitability premia (each phasing in over a band, f_band) + the liquidity premium, floored at the base + 3%. Debt: the base + the synthetic spread (+ the CRP off a local base). WACC on market weights; the unlevered cost strips only the leverage part of beta (Hamada on market leverage), floored at the cost of debt and the base. Terminal growth: long-run inflation + 0.5pt, held to 1.5-3.5%, never above nominal GDP.
 // @returns [cost of equity, cost of debt, WACC, unlevered cost, terminal growth].
 export f_coc(bool factors, float mc, float fx, float smb, float hml, float bvps, float px, float ebit, float eq, float rf, float beta, float erp, float crp, float micro, float ebit_n, float interest, bool local_base, float debt, float tax, float infl, float rgdp, float rf_avg) =>
