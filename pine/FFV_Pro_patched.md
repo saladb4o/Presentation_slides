@@ -1808,12 +1808,10 @@ float liq_usd = volume > 0 ? close * volume / fx_rate : na
 float liq_raw = liq_usd > 0 ? math.abs(ta.change(close) / nz(close[1], close)) / liq_usd * 1e6 * math.sqrt(days_per_bar) : na
 float liq_ami = math.sum(nz(liq_raw), liq_n90) / math.sum(na(liq_raw) ? 0 : 1, liq_n90)
 if i_use_factors
-    float safe_vol = nz(volume, 1.0)
-    float dollar_vol_usd = (close * safe_vol) / fx_rate
-    float bar_ret_abs = math.abs(ta.change(close) / nz(close[1], close))
-    float amihud_raw = dollar_vol_usd > 0 ? (bar_ret_abs / dollar_vol_usd) * 1e6 * math.sqrt(days_per_bar) : 0.0
-    float amihud_90d = ta.sma(amihud_raw, liq_n90)
-    float illiq_penalty = i_liq_prem * nz(f_ramp(amihud_90d, 0.1, 0.5))
+    // The premium reads the same traded-days ratio: a day without trades used to enter at 0
+    // (perfectly liquid), which understated it most for the thinnest stocks. No trade at all
+    // in 90 days (volume reported, all 0): the full premium.
+    float illiq_penalty = i_liq_prem * (na(liq_ami) ? (volume == 0 ? 1.0 : 0.0) : f_ramp(liq_ami, 0.1, 0.5))
     // ta.sma runs on every bar: inside the share-count condition it averaged only qualifying bars.
     float avg_turnover_12m = ta.sma(F_sh > 0 ? nz(volume) / F_sh : na, liq_n252) / days_per_bar
     float spec_penalty = not na(volume) and F_sh > 0 ? i_liq_prem * nz(f_ramp(avg_turnover_12m, 0.01, 0.02)) : 0.0

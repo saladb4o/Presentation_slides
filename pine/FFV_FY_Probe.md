@@ -1,0 +1,60 @@
+# FFV FY Probe
+
+One-off check: add it to a DAILY chart of HOSE:FPT with maximum history and send back a screenshot of the table. Copy everything inside the code block into a new Pine Editor tab.
+
+```pine
+//@version=6
+// FFV FY Probe: when does the fiscal-year consensus (EARNINGS_ESTIMATE / SALES_ESTIMATES, 'FY')
+// change, and which fiscal year does it describe? Run it on a DAILY chart of HOSE:FPT with as
+// much history as loads, then send back a screenshot of the table (and of the chart if the
+// lines look odd). Every value is raw request.financial output: no report lag is applied, so
+// the dates are when TradingView shows each value, not when it was published.
+// Read it as: on each row, a value changed. If the estimate steps at the same time as the FY
+// actuals and its new value is close to the NEXT year's actual, it describes the year in
+// progress (a forward estimate). If its new value equals the year that just ended, it is that
+// year's final consensus.
+indicator('FFV FY Probe', overlay = false, format = format.volume)
+
+f(string id, string per) =>
+    request.financial(syminfo.tickerid, id, per, ignore_invalid_symbol = true, currency = syminfo.currency)
+
+float eps_est = f('EARNINGS_ESTIMATE', 'FY')
+float rev_est = f('SALES_ESTIMATES', 'FY')
+float eps_fy = f('EARNINGS_PER_SHARE_DILUTED', 'FY')
+float rev_fy = f('TOTAL_REVENUE', 'FY')
+float eps_ttm = f('EARNINGS_PER_SHARE_DILUTED', 'TTM')
+float rev_ttm = f('TOTAL_REVENUE', 'TTM')
+float earn = request.earnings(syminfo.tickerid, earnings.actual, ignore_invalid_symbol = true)
+
+plot(rev_est, 'Revenue estimate FY', color.orange, 2, plot.style_stepline)
+plot(rev_fy, 'Revenue FY (actual)', color.blue, 2, plot.style_stepline)
+plot(rev_ttm, 'Revenue TTM', color.gray, 1, plot.style_stepline)
+
+ch(float x) =>
+    not na(x) and (na(x[1]) or x != x[1])
+
+bool c_est = ch(eps_est) or ch(rev_est)
+bool c_fy = ch(eps_fy) or ch(rev_fy)
+bool c_rep = ch(earn)
+
+// The last 16 events: date, what changed, and every value on that bar.
+var array<string> LOG = array.new_string()
+if c_est or c_fy or c_rep
+    string what = (c_est ? 'EST ' : '') + (c_fy ? 'FY ' : '') + (c_rep ? 'REPORT' : '')
+    LOG.push(str.format_time(time, 'yyyy-MM-dd', syminfo.timezone) + '|' + what + '|' + str.tostring(eps_est, '#.##') + '|' + str.tostring(eps_fy, '#.##') + '|' + str.tostring(eps_ttm, '#.##') + '|' + str.tostring(rev_est / 1e9, '#,###') + '|' + str.tostring(rev_fy / 1e9, '#,###') + '|' + str.tostring(rev_ttm / 1e9, '#,###'))
+    if LOG.size() > 16
+        LOG.shift()
+
+if barstate.islast
+    var table t = table.new(position.top_right, 8, 18, bgcolor = color.new(color.black, 10), border_width = 1, border_color = color.gray)
+    array<string> H = array.from('Date', 'Changed', 'EPS est FY', 'EPS FY', 'EPS TTM', 'Rev est FY (bn)', 'Rev FY (bn)', 'Rev TTM (bn)')
+    for [c, h] in H
+        t.cell(c, 0, h, text_color = color.yellow, text_size = size.small)
+    for [r, row] in LOG
+        array<string> parts = str.split(row, '|')
+        for [c, p] in parts
+            t.cell(c, r + 1, p, text_color = color.white, text_size = size.small)
+    t.cell(0, 17, syminfo.tickerid + '  currency ' + syminfo.currency, text_color = color.silver, text_size = size.small)
+    t.merge_cells(0, 17, 7, 17)
+
+```
