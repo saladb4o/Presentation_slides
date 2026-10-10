@@ -3,8 +3,8 @@ indicator('Fundamental Fair Value Pro (FF4 + McKinsey/Rev DCF) [Real-Time + Back
 // Companion library pine/ffv_lib.pine (backtester and long texts): publish it as a private
 // library named FFVLib; pine/ffv_mc.pine (Monte Carlo and forecast statistics) as a private
 // library named FFVMC. Then replace YOUR_TV_USERNAME with your TradingView username.
-import YOUR_TV_USERNAME/FFVLib/4 as FL
-import YOUR_TV_USERNAME/FFVMC/3 as FM
+import YOUR_TV_USERNAME/FFVLib/5 as FL
+import YOUR_TV_USERNAME/FFVMC/4 as FM
 // =====================================================================
 // ARCHITECTURE: one top-to-bottom pass per bar, on two clocks
 //   1. Helpers and types   pure maths, backtest state, the model stage: enums, the
@@ -516,7 +516,7 @@ i_lr_rgdp = input.float(0.0, 'Long-run real GDP growth % (0 = auto by currency)'
 i_financial_model_type = input.string('Auto (by industry)', 'Financials Valuation Model', options = ['Auto (by industry)', 'Equity Model (Bank/Insurer)', 'Entity Model (Brokerage/FinTech)'], group = group_industry, tooltip = 'Auto: banks and insurers use the Equity model (Net Income / Book); brokers, asset managers and lenders use the Entity model (NOPAT / Invested Capital).')
 group_scen = 'Scenario Analysis (Bear / Base / Bull)'
 i_scen_fair_band = input.float(15.0, 'Fair-value band +/- %', group = group_scen, minval = 0, maxval = 40, step = 1, tooltip = 'A scenario cell within this distance of the current price shades amber. Beyond it, green (price below the case) or red (price above it).\n\nSet to 0 for a hard red/green flip at the price.') / 100
-i_scen_min_n = input.int(8, 'Min quarters for Bear / Bull', group = group_scen, minval = 4, maxval = 20, tooltip = "Bear / Bull come from the stock's own stored quarters: the 25th / 75th percentile of its own multiples, and of 1,000 bootstrapped 4-quarter changes of the rate, stage-1 growth, terminal growth and (Rule of 40) revenue growth. Below this many quarters an axis does not move and shows N/A.")
+i_scen_min_n = input.int(8, 'Min quarters for Bear / Bull', group = group_scen, minval = 4, maxval = 20, tooltip = "Bear / Bull come from the stock's own stored quarters: the 25th / 75th percentile of its own multiples, and of 1,024 bootstrapped 4-quarter changes of the rate, stage-1 growth, terminal growth and (Rule of 40) revenue growth. Below this many quarters an axis does not move and shows N/A.")
 i_rab_allowed_return = input.float(0.0, 'Regulatory Allowed Return %', group = group_industry, minval = 0.0, maxval = 20.0, step = 0.25, tooltip = 'The post-tax return the regulator permits on the asset base.\n\n0 = assume the allowed return equals WACC, giving a 1.0x RAB multiple.') / 100
 group_factors = 'Factor Models (VN 5-Factor)'
 i_use_factors = input.bool(true, '✨ Use Live Index-Based Factor Premium', group = group_factors)
@@ -2081,7 +2081,7 @@ float st_hi_t = st_has ? nz(syminfo.target_price_high, st_md_t) : na
 // ==============================================================
 // Each draw is a 4-quarter path through the stored quarters of the own-multiple window, by the
 // stationary block bootstrap (FFVLib), summing each driver's quarterly changes along it. Bear /
-// Bull of each axis are the 25th / 75th percentile of its 1,000 sums (a side on the wrong side
+// Bull of each axis are the 25th / 75th percentile of its 1,024 sums (a side on the wrong side
 // of 0 gives 0), so each driver's Bear / Bull is the Monte Carlo's own 25 / 75 for it. Each
 // driver's changes are demeaned first (centred bootstrap, Hall and Wilson 1991): the draws keep
 // how far it moves, not the way it drifted over the sample, so a one-way trend in rates does
@@ -2091,7 +2091,7 @@ float st_hi_t = st_has ? nz(syminfo.target_price_high, st_md_t) : na
 // still short: that axis does not move (N/A). Rule of 40's revenue growth needs revenue 5
 // quarters back, so it always has its own pool and paths. DS: per draw | rate, growth, terminal
 // sums, end quarter, revenue-growth sum. AXQ: quarters behind each axis.
-MC_N = 1000
+MC_N = 1024
 MC_H = 4
 var matrix<float> DS = matrix.new<float>(MC_N, 5, na)
 var array<int> AXQ = array.new_int(4, 0)
