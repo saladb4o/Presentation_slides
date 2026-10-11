@@ -1237,7 +1237,6 @@ if CK.dirty
     // so an EPS growth rate would be judged on the wrong series. The EPS estimate stays in the
     // street comparison and the E/P row. ---
     float fwd_rev_growth = calc_rev > 0 and rev_est > 0 ? rev_est / calc_rev - 1 : na
-    fwd_rev_growth := na(fwd_rev_growth) ? na : math.max(math.min(fwd_rev_growth, 0.60), -0.50)
     // --- MARGIN & RETURN ADJUSTMENTS ---
     // R&D is capitalised over 3 years, straight line. Until three earlier years of R&D are
     // stored, R&D is expensed as reported (no asset): the store keeps the raw series, where
@@ -1663,6 +1662,11 @@ if CK.dirty
     f_midas_w(FM.f_one_src(WK_S) ? WK_R : array.new_float(), false, Q_L + 9)
     ST.write(Q_L + 12, F_rev > 0 and ST.at(Q_REV, 4) > 0 ? math.log(F_rev / ST.at(Q_REV, 4)) : na)
     ST.write(Q_L + 13, F_rev > 0 and ST.at(Q_REV, 1) > 0 ? math.log(F_rev / ST.at(Q_REV, 1)) : na)
+    // The consensus growth is tested against the firm's own yearly sales growth (logs, one a
+    // year, the last 10 years): outside the median +- 3 x 1.4826 x MAD (Hampel identifier, FFVMC
+    // f_hampel) it is rejected and the LASSO runs alone; under 5 years of growth it is used as
+    // reported.
+    float fwd_cg = FM.f_hampel(ST.v, ST.q, Q_L + 12, math.log(1 + F_fwd_g)) ? na : F_fwd_g
     if CK.adv
         LM := FM.f_lasso(ST.v, ST.q, Q_L, 14, Q_REV, i_scen_min_n, 40)
         // Each member's record (the Omnibus rule, MALE): its forward sales against the revenue
@@ -1682,7 +1686,7 @@ if CK.dirty
         g_las_q := math.max(math.min(math.exp(yl) - 1, 0.6), -0.5)
     float g_las = g_las_q
     ST.write(Q_L + 14, F_rev * (1 + g_las))
-    ST.write(Q_L + 15, F_rev * (1 + F_fwd_g))
+    ST.write(Q_L + 15, F_rev * (1 + fwd_cg))
     ST.write(Q_L + 16, F_rev * (1 + sales_cagr_3y))
     // [FIX SGR] Sustainable growth = ROE x retention (EBIT/equity is pre-interest and pre-tax);
     // no positive profitability on record -> no sustainable-growth leg. A bank's growth is ROE x
@@ -1690,7 +1694,7 @@ if CK.dirty
     // growth combined with the LASSO's on their records against released revenue (the Omnibus
     // MALE rule); no consensus -> the LASSO alone; neither -> the leg leaves. No leg at all: no
     // stage-1 growth (N/A), so the growth-path models are N/A too.
-    [normalized_sgr, roic_sgr, fwd_growth_leg, w_las, g1, est_ebitda_fwd, g1u] = FM.f_growth(median_roe, median_op, F_tax, F_dps, F_eps, F_nopat, F_fcff, F_roic, use_bank_model, F_fwd_g, g_las, LW, sales_cagr_3y, dynamic_growth_cap, F_rev, F_rev_est, F_ebitda)
+    [normalized_sgr, roic_sgr, fwd_growth_leg, w_las, g1, est_ebitda_fwd, g1u] = FM.f_growth(median_roe, median_op, F_tax, F_dps, F_eps, F_nopat, F_fcff, F_roic, use_bank_model, fwd_cg, g_las, LW, sales_cagr_3y, dynamic_growth_cap, F_rev, F_rev_est, F_ebitda)
     fwd_growth_src = na(fwd_growth_leg) ? 'none' : w_las == 0 ? 'Consensus sales' : w_las == 1 ? 'LASSO' : str.format('Consensus sales + LASSO ({0,number,#}%)', 100 * w_las)
     // On an advance (and on bar 0): each own-history multiple's statistics from its stored
     // quarters, and every row's track record re-scored on the stored fair values and prices
@@ -1718,7 +1722,7 @@ if CK.dirty
     H_g_src := fwd_growth_src
     // Which growth parts are in, and the forward part's source: a change in either moves the
     // estimate without any revision.
-    H_gmask := (na(normalized_sgr) ? 0 : 1) + (na(roic_sgr) ? 0 : 2) + (na(sales_cagr_3y) ? 0 : 4) + 8 * (not na(F_fwd_g) ? 1 : 2) + (w_las > 0 ? 64 : 0)
+    H_gmask := (na(normalized_sgr) ? 0 : 1) + (na(roic_sgr) ? 0 : 2) + (na(sales_cagr_3y) ? 0 : 4) + 8 * (not na(fwd_cg) ? 1 : 2) + (w_las > 0 ? 64 : 0)
     H_cape := cape_on
 // =====================================================================
 // 3.7 DRIVERS, on every bar (f_drivers): claims, rates, growth and the stream table

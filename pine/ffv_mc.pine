@@ -629,6 +629,31 @@ export f_median(array<float> a) =>
         s.sort()
         r := n % 2 == 1 ? s.get(int(n / 2)) : (s.get(int(n / 2) - 1) + s.get(int(n / 2))) / 2.0
     r
+// @function Hampel identifier (Hampel 1974; Pearson 2002): is x beyond the median +- 3 x 1.4826 x
+// MAD of the stored annual rates (1.4826 x MAD estimates the standard deviation under normality)?
+// The rates are one a year (quarters 0, 4 ... 36 back: up to 10, none overlapping), so a short
+// record cannot pass for a steady one.
+// @param v Quarter store (ring of 128 rows).
+// @param q Open quarter's index.
+// @param c Column of the annual rates.
+// @param x Value tested.
+// @returns true when x is an outlier; false when it is not, x is na or under 5 rates are stored.
+export f_hampel(matrix<float> v, int q, int c, float x) =>
+    array<float> h = array.new_float()
+    for k = 0 to 9
+        int lag = 4 * k
+        if lag <= math.min(q, 127)
+            float r = v.get((q - lag) % 128, c)
+            if not na(r)
+                h.push(r)
+    bool out = false
+    if h.size() >= 5 and not na(x)
+        float m = f_median(h)
+        array<float> d = array.new_float()
+        for r in h
+            d.push(math.abs(r - m))
+        out := math.abs(x - m) > 3 * 1.4826 * f_median(d)
+    out
 // Harmonic mean of the positive entries (na with none).
 f_harmonic_mean(array<float> a) =>
     sr = 0.0
