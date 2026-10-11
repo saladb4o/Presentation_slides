@@ -1070,7 +1070,7 @@ export f_coc(bool factors, float mc, float fx, float smb, float hml, float bvps,
     [coe, cod, wacc, math.max(coe - (beta - ub) * erp, na(cod) ? rf : math.min(cod, coe), rf), gT]
 f_clamp01(float x) =>
     na(x) ? na : math.max(math.min(x, 1.0), 0.0)
-// @function Our confidence and the range overlap with the street (ours Bear-Bull vs street Bear-Bull, 0..1). Parts: agreement (1 - model spread / 0.290; na under two weighted members) 35%, depth (models, x0.5 without a track record) 20%, record (RMS log error) 25%, quality (input tiers less the flags) 20%; a part with no data leaves and the rest are re-weighted.
+// @function Our confidence and the range overlap with the street (ours Bear-Bull vs street Bear-Bull, 0..1). Parts: agreement (1 - model spread / 0.290; na under two weighted members) 35%, depth (models, x0.5 without a track record) 20%, record (exp(-RMS log error / 0.290)) 25%, quality (input tiers less the flags) 20%; a part with no data leaves and the rest are re-weighted.
 // @returns [overlap, agreement, depth, record, quality, confidence 0-100].
 export f_our_conf(bool has, float fv, float lo, float hi, float st_lo, float st_hi, float sd, int n, bool track, float err, float tier, float flags) =>
     float our_lo = nz(lo, fv)
@@ -1080,7 +1080,8 @@ export f_our_conf(bool has, float fv, float lo, float hi, float st_lo, float st_
     // Dispersion sd / fv (Diether-Malloy-Scherbina 2002) on the scale of the forward P/E's pricing-error SD, 0.290 (Liu-Nissim-Thomas 2002, Table 2)
     float ag = fv > 0 ? f_clamp01(1 - (sd / fv) / 0.290) : na
     float dp = f_clamp01(n / 8.0) * (track ? 1.0 : 0.5)
-    float rl = math.exp(-err / 0.3)
+    // RMS log error on the same scale, the forward P/E's pricing-error SD 0.290 (Liu-Nissim-Thomas 2002)
+    float rl = math.exp(-err / 0.290)
     float ql = f_clamp01(tier - flags)
     array<float> x = array.from(ag, dp, rl, ql)
     array<float> w = array.from(0.35, 0.20, 0.25, 0.20)

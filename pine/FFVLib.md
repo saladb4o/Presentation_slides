@@ -1273,7 +1273,7 @@ export tx(int id) =>
         17 => 'Avg ratio (base): {0,number,#.##}x\nCurrent: {1}\n\nBear multiple: {2}\nBull multiple: {3}\n\nBear/Bull are percentiles of this ticker\'\'s own stored ratio history applied to the same per-share base, held at the average when a percentile sits on the wrong side of it. Blank = too few observations.\nP/E and EV/EBITDA also blend in next year\'\'s driver, discounted one year at CoE less the dividend yield.\n[xx%] = weight in the live blend.'
         18 => 'Ours: 1 - model dispersion (stdev / FV) / 0.29, the pricing-error SD of the forward P/E (Liu, Nissim & Thomas 2002); N/A under two weighted models. Street: (high - low) / median.'
         19 => '. Street: sqrt(analysts) / sqrt(10).'
-        20 => 'Ours: exp(-log error / 0.3). Street: target age '
+        20 => 'Ours: exp(-log error / 0.29), the same forward P/E pricing-error SD. Street: target age '
         21 => 'Ours: data-quality tier less 0.2 per red flag (value trap, M-score, distress, data sanity). Street: share of ratings in the largest bucket.'
         22 => 'Score 0-100 = Agreement 35% + Depth 20% + Reliability 25% + Quality 20%.\n\nComponent: ours / street'
         23 => '\n\nOur reliability is earned: composite log error vs price {0}Q later{1}. The street has no history, so FRESHNESS of the targets stands in.'
