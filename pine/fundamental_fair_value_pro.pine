@@ -1248,9 +1248,9 @@ if CK.dirty
     float fwd_rev_growth = calc_rev > 0 and rev_est > 0 ? rev_est / calc_rev - 1 : na
     fwd_rev_growth := na(fwd_rev_growth) ? na : math.max(math.min(fwd_rev_growth, 0.60), -0.50)
     // --- MARGIN & RETURN ADJUSTMENTS ---
-    // R&D is capitalised over 3 years, straight line. A year with no R&D figure (before the
-    // history, or before the field starts) is taken as 10% below the year after it, so every
-    // vintage is amortised: the store keeps the raw series, where missing is na, not 0.
+    // R&D is capitalised over 3 years, straight line. Until three earlier years of R&D are
+    // stored, R&D is expensed as reported (no asset): the store keeps the raw series, where
+    // missing is na, not 0.
     // The unamortised part is an asset: with it outside invested capital, ROIC (and EVA / RIM)
     // would count the capitalised R&D in NOPAT against a capital base that leaves it out.
     [rnd_amortization, research_asset] = FL.f_rnd(nz(rnd_ttm), Y4.get(Q_RND), Y8.get(Q_RND), Y12.get(Q_RND))
