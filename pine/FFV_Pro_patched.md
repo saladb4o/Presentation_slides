@@ -8,8 +8,8 @@ indicator('Fundamental Fair Value Pro (FF4 + McKinsey/Rev DCF) [Real-Time + Back
 // Companion library pine/ffv_lib.pine (backtester and long texts): publish it as a private
 // library named FFVLib; pine/ffv_mc.pine (Monte Carlo and forecast statistics) as a private
 // library named FFVMC. Then replace YOUR_TV_USERNAME with your TradingView username.
-import YOUR_TV_USERNAME/FFVLib/7 as FL
-import YOUR_TV_USERNAME/FFVMC/6 as FM
+import YOUR_TV_USERNAME/FFVLib/8 as FL
+import YOUR_TV_USERNAME/FFVMC/7 as FM
 // =====================================================================
 // ARCHITECTURE: one top-to-bottom pass per bar, on two clocks
 //   1. Helpers and types   pure maths, backtest state, the model stage: enums, the

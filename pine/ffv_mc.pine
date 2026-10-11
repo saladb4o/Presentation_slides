@@ -1,6 +1,6 @@
 //@version=6
 // @description Companion library for Fundamental Fair Value Pro: the Monte Carlo engine (quasi-random
-// lattice, the history pools, block length, bootstrap paths and draws) and the forecast statistics
+// lattice and Array-RQMC, the history pools, block length, bootstrap paths and draws) and the forecast statistics
 // (rate-width variance, MIDAS, LASSO). It was split out of FFVLib to keep each library under the
 // compile-size limit. Publish it as a PRIVATE library named FFVMC; after any change, publish a new
 // version and bump the number in the indicator's import line.
@@ -8,7 +8,7 @@ library('FFVMC')
 // ==========================================
 // MONTE CARLO: the lattice and its random shifts, the history pool, the block length, the paths
 // ==========================================
-// @type Wichmann-Hill (2006) generator: four multiplicative congruential generators, period about 2^121; it draws the lattice's random shift (f_lat). Plain arithmetic, so a copy in any language gives the same numbers from the same seeds.
+// @type Wichmann-Hill (2006) generator: four multiplicative congruential generators, period about 2^121; it draws the lattice's random shift (f_lat), Array-RQMC's fresh shifts (f_draws1) and the shuffle that pairs independent path sets. Plain arithmetic, so a copy in any language gives the same numbers from the same seeds.
 // @field a First state.
 // @field b Second state.
 // @field c Third state.
@@ -30,22 +30,24 @@ export method nxt(WH g) =>
     float w = g.a / 2147483579.0 + g.b / 2147483543.0 + g.c / 2147483423.0 + g.d / 2147483123.0
     w - math.floor(w)
 // @type A randomly shifted rank-1 lattice (quasi-Monte Carlo): point i's coordinate j is frac(i z_j / 1024 + shift_j), z the 1,024-point generating vector of Cools, Kuo and Nuyens (2006, order-2 weights; Kuo's lattice-22001-1024), one random shift for all points (Cranley and Patterson 1976). Each path reads 2h - 1 fixed coordinates of its point (start, then a jump and a pick per step), so the 1,024 paths are spread evenly instead of at random.
-// @field z Generating vector (28 coordinates: four paths of 7).
+// @field z Generating vector (7 coordinates: the joint path's 2h - 1, h = 4).
 // @field sh The shift, one per coordinate.
 // @field i The point (the draw).
 // @field j The next coordinate.
+// @field r The generator the shift came from, which goes on to draw Array-RQMC's shifts and the shuffles (f_draws1).
 export type LP
     array<float> z
     array<float> sh
     int i = 0
     int j = 0
+    WH r
 // @function The lattice for the draws: the shift from the Wichmann-Hill generator at its fixed seeds, so a reload gives the same points.
 export f_lat() =>
     g = WH.new()
     sh = array.new_float()
-    for j = 1 to 28
+    for j = 1 to 7
         sh.push(g.nxt())
-    LP.new(array.from(1.0, 275, 451, 245, 215, 367, 247, 363, 491, 143, 269, 359, 397, 187, 497, 221, 225, 393, 91, 185, 395, 87, 335, 179, 299, 125, 193, 457), sh)
+    LP.new(array.from(1.0, 275, 451, 245, 215, 367, 247), sh, r = g)
 // @function The current point's next coordinate, in [0, 1).
 export method nxt(LP p) =>
     float x = p.i * p.z.get(p.j) / 1024.0 + p.sh.get(p.j)
@@ -130,19 +132,6 @@ export f_next(array<int> lg) =>
     for i = 0 to n - 1
         nx.push(i + 1 < n and lg.get(i + 1) == lg.get(i) - 1 ? i + 1 : -1)
     nx
-// @function One stationary-bootstrap path (Politis and Romano 1994) of h positions in a pool (successors nx, f_next) from lattice point g.i, coordinates g.j on: a random start, then each step either moves to the next quarter or, with probability 1 / blen or where there is no next quarter (f_next), jumps to a new random quarter. Each step reads its jump and pick coordinates whether it jumps or not, so every path uses the same 2h - 1 coordinates.
-export f_path(LP g, array<int> nx, float blen, int h) =>
-    out = array.new_int()
-    int n = nx.size()
-    int i = int(math.floor(g.nxt() * n))
-    out.push(i)
-    if h > 1
-        for s = 2 to h
-            float uj = g.nxt()
-            float up = g.nxt()
-            i := uj < 1.0 / blen or nx.get(i) < 0 ? int(math.floor(up * n)) : nx.get(i)
-            out.push(i)
-    out
 // @function One driver's own pool, for when the joint pool is too short: the quarterly changes of column c over the n quarters before the open one (oldest first), where c is known at that quarter and the one before and the switch column cs (rate source or growth parts) did not change between them.
 // @returns [changes, their lags].
 export f_pool1(matrix<float> hm, int hq, int n, int c, int cs) =>
@@ -198,7 +187,7 @@ export f_cum(array<float> w) =>
         s += y
         cw.push(s)
     cw
-// @function A stationary-bootstrap path whose start and each jump (including where there is no next quarter, f_next) fall on a quarter with probability its weight (cumulative weights cw); otherwise as f_path (the same fixed coordinates).
+// @function One stationary-bootstrap path (Politis and Romano 1994) of h positions in a pool (successors nx, f_next) from lattice point g.i, coordinates g.j on: the start and each jump (with probability 1 / blen, or where there is no next quarter) fall on a quarter with probability its weight (cumulative weights cw); otherwise a step moves to the next quarter. Each step reads its jump and pick coordinates whether it jumps or not, so every path uses the same 2h - 1 coordinates.
 export f_wpath(LP g, array<float> cw, array<int> nx, float blen, int h) =>
     out = array.new_int()
     int i = f_pick(cw, g.nxt())
@@ -238,21 +227,61 @@ export f_wdemean(array<float> x, array<float> w, array<int> nx, float blen, int 
     for v in x
         out.push(v - mu)
     out
-// @function nd draws of one driver on its own: the changes centred on their mean under the paths (f_wdemean, equal weights), each draw the sum along an h-step stationary-bootstrap path (f_path; draw i on lattice point i from coordinate j0), the block length that series' own optimal one.
+// @function nd draws of one driver on its own: the changes centred on their mean under the paths (f_wdemean, equal weights), each draw the sum along an h-step stationary-bootstrap path (every quarter equally likely to start a block or be jumped to; the block length that series' own optimal one), the paths run side by side by Array-RQMC (L'Ecuyer, Lécot and Tuffin 2008). Before each step the paths are sorted on their sum so far plus its expected sum over the steps still to come, and the step's points, a rank-1 lattice (f_lat's generating vector) under a fresh random shift (g.r), are sorted on their first coordinate; the k-th path then takes the k-th point's other two for its jump and its pick. Paths that stand close get points spread evenly among them at every step, where the plain lattice spreads only the whole paths. The draws come out in an order that follows their values, so they are shuffled (Fisher-Yates) before a draw row pairs them with another set's: the sets stay independent, as they are drawn.
 // @param lg The changes' lags (oldest first), for the pool's gaps (f_next).
-// @returns The nd sums, in draw order.
-export f_draws1(LP g, int j0, array<float> ch, array<int> lg, int nd, int h) =>
-    out = array.new_float()
+// @returns The nd sums, in random order.
+export f_draws1(LP g, array<float> ch, array<int> lg, int nd, int h) =>
+    int n = ch.size()
     float bl = f_blen(ch, ch, ch)
     nx = f_next(lg)
-    x = f_wdemean(ch, array.new_float(ch.size(), 1.0), nx, bl, h)
-    for i = 0 to nd - 1
-        g.i := i, g.j := j0
-        float s = 0.0
-        for j in f_path(g, nx, bl, h)
-            s += x.get(j)
-        out.push(s)
-    out
+    x = f_wdemean(ch, array.new_float(n, 1.0), nx, bl, h)
+    // Expected sum of the steps still to come from each quarter after t steps (column t - 1; none
+    // after the last): a jump to any quarter with probability 1 / bl (always where there is no next
+    // quarter), else the next quarter.
+    rem = matrix.new<float>(n, h, 0.0)
+    if h > 1
+        for t = h - 1 to 1
+            float jm = 0.0
+            for i = 0 to n - 1
+                jm += (x.get(i) + rem.get(i, t)) / n
+            for i = 0 to n - 1
+                int k = nx.get(i)
+                rem.set(i, t - 1, k < 0 ? jm : jm / bl + (1 - 1 / bl) * (x.get(k) + rem.get(k, t)))
+    sm = array.new_float()
+    pos = array.new_int()
+    float u0 = g.r.nxt()
+    for k = 0 to nd - 1
+        float u = float(k) / nd + u0
+        int i = int(math.floor((u - math.floor(u)) * n))
+        pos.push(i)
+        sm.push(x.get(i))
+    if h > 1
+        for t = 1 to h - 1
+            km = array.new_float()
+            for k = 0 to nd - 1
+                km.push(sm.get(k) + rem.get(pos.get(k), t - 1) + k * 1e-13)
+            float s0 = g.r.nxt()
+            float s1 = g.r.nxt()
+            float s2 = g.r.nxt()
+            p0 = array.new_float()
+            for k = 0 to nd - 1
+                float y = k * g.z.get(0) / 1024.0 + s0
+                p0.push(y - math.floor(y))
+            po = p0.sort_indices()
+            for [r, k] in km.sort_indices()
+                int p = po.get(r)
+                float uj = p * g.z.get(1) / 1024.0 + s1
+                float up = p * g.z.get(2) / 1024.0 + s2
+                int i = pos.get(k)
+                i := uj - math.floor(uj) < 1.0 / bl or nx.get(i) < 0 ? int(math.floor((up - math.floor(up)) * n)) : nx.get(i)
+                pos.set(k, i)
+                sm.set(k, sm.get(k) + x.get(i))
+    for k = nd - 1 to 1
+        int j = int(math.floor(g.r.nxt() * (k + 1)))
+        float y = sm.get(k)
+        sm.set(k, sm.get(j))
+        sm.set(j, y)
+    sm
 // @function Variance of a weekly series' one-year (q-week) change, from overlapping windows with the Lo and MacKinlay (1988) small-sample correction: the changes are centred on their mean (as the bootstrap's are) and the sum of squares divided by m (1 - q / T), m windows from T weekly steps. A window whose two ends carry a different source code, or a stand-in code (2, 4), is left out, as the quarterly pool skips a source switch.
 // @returns [variance of the one-year change (na under q windows), windows used].
 export f_yvar(array<float> x, array<float> s, int q) =>
@@ -595,10 +624,10 @@ export f_pct_rank(array<float> a, float x) =>
 // ==========================================
 // THE SCENARIO DRAWS: Bear / Bull of each axis and the Monte Carlo's draws
 // ==========================================
-// One driver's draws on its own into column c, on the lattice's coordinates from j0.
-f_draws(matrix<float> ds, int c, array<float> ch, array<int> lg, LP g, int j0, int nmin, int nd, int h) =>
+// One driver's draws on its own into column c, by Array-RQMC (f_draws1).
+f_draws(matrix<float> ds, int c, array<float> ch, array<int> lg, LP g, int nmin, int nd, int h) =>
     if ch.size() >= nmin
-        for [i, v] in f_draws1(g, j0, ch, lg, nd, h)
+        for [i, v] in f_draws1(g, ch, lg, nd, h)
             ds.set(i, c, v)
 // [25th percentile, at most 0 | 75th, at least 0] of a draw column (na without draws).
 f_side(matrix<float> ds, int c) =>
@@ -610,7 +639,7 @@ f_side(matrix<float> ds, int c) =>
         lo := math.min(f_pct_sorted(s, 0.25), 0.0)
         hi := math.max(f_pct_sorted(s, 0.75), 0.0)
     [lo, hi]
-// @function The scenario draws: nd (1,024, the lattice's points; h = 4) h-quarter stationary-bootstrap sums on the lattice's points, every quarter equally likely to start a block, of the rate, stage-1 growth and terminal growth changes (joint pool from column qmc; each driver on its own pool when the joint one is under nmin quarters), the rate draws rescaled to the weekly one-year rate moves (wkr, sources wks) and the growth draws widened to the implied-growth moves (wkg), plus the revenue-growth draws (column qrev).
+// @function The scenario draws: nd (1,024, the lattice's points; h = 4) h-quarter stationary-bootstrap sums, every quarter equally likely to start a block (the joint path on the lattice's points, a driver on its own by Array-RQMC, f_draws1), of the rate, stage-1 growth and terminal growth changes (joint pool from column qmc; each driver on its own pool when the joint one is under nmin quarters), the rate draws rescaled to the weekly one-year rate moves (wkr, sources wks) and the growth draws widened to the implied-growth moves (wkg), plus the revenue-growth draws (column qrev).
 // @param v Quarter store matrix.
 // @param q Quarters stored.
 // @param nq Quarters in the own-multiple window.
@@ -622,11 +651,10 @@ export f_scen_draws(matrix<float> v, int q, int nq, int qmc, int qrev, int nmin,
     [lg, cr0, cg0, ct0, sk] = f_pool(v, q, nq, qmc)
     cr = f_demean(cr0), cg = f_demean(cg0), ct = f_demean(ct0)
     int mc_q = lg.size()
-    // One lattice for every path set: the joint path (or the rate, growth and
-    // terminal ones each on its own) and the revenue-growth one read their own 2h - 1 coordinates of
-    // each point.
+    // The joint path reads the lattice's 2h - 1 coordinates of each point; a driver on its own (the
+    // rate, growth and terminal ones when the joint pool is short, and revenue growth) runs by
+    // Array-RQMC on the generator's next shifts (f_draws1).
     g = f_lat()
-    int dh = 2 * h - 1
     if mc_q >= nmin
         mc_b := f_blen(cr, cg, ct)
         // Every quarter equally likely to start a block; the changes centred on the paths' mean.
@@ -652,7 +680,7 @@ export f_scen_draws(matrix<float> v, int q, int nq, int qmc, int qrev, int nmin,
         for c = 0 to 2
             [ch, cl] = f_pool1(v, q, nq, qmc + c, qmc + (c == 1 ? 4 : 3))
             axq.set(c, ch.size())
-            f_draws(ds, c, ch, cl, g, c * dh, nmin, nd, h)
+            f_draws(ds, c, ch, cl, g, nmin, nd, h)
     // The rate draws keep their paths but are rescaled to the spread of the rate's weekly one-year
     // moves; under 52 windows they stay as drawn.
     [yv, yn] = f_yvar(wkr, wks, 52)
@@ -673,7 +701,7 @@ export f_scen_draws(matrix<float> v, int q, int nq, int qmc, int qrev, int nmin,
                 ds.set(i, 1, ds.get(i, 1) * gk)
     [rv, rvl] = f_pool_yoy(v, q, nq, qrev)
     axq.set(3, rv.size())
-    f_draws(ds, 4, rv, rvl, g, 3 * dh, nmin, nd, h)
+    f_draws(ds, 4, rv, rvl, g, nmin, nd, h)
     sd = array.new_float(8, na)
     for [i, c] in array.from(0, 1, 2, 4)
         [lo, hi] = f_side(ds, c)
