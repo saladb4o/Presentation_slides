@@ -1431,12 +1431,32 @@ var float raw_beta_s = na
 if beta_sample
     raw_beta_s := FL.f_beta_pair(beta_ra, beta_rb, false)
     downside_beta := FL.f_beta_pair(beta_ra, beta_rb, true)
+// ERP sums: the VN-Index's return over each regression period less the local 10Y for it (set at
+// the period's start), over the full history (FM.f_erp). Price index: no dividends.
+var float E_n = 0.0
+var float E_s = 0.0
+var float E_ss = 0.0
+var float E_y = 0.0
+var float E_p = na
+var float E_t = na
+var float E_r = na
+if beta_sample and mkt_bench_p > 0
+    float dt = (time - E_t) / 31557600000.0
+    float x = mkt_bench_p / E_p - 1 - E_r / 100 * dt
+    if not na(x)
+        E_n += 1
+        E_s += x
+        E_ss += x * x
+        E_y += dt
+    E_p := mkt_bench_p
+    E_t := time
+    E_r := rf_local_avg
 // ==========================================
 // AUTO-PREMIUM CALCULATION
 // ==========================================
 // Annualised over the window actually used: up to 5 years, less where the series starts later
 // (or an intraday chart caps it), at least a year. Under a year of history: N/A (it was a
-// typed 8%), so the auto ERP and the cost of equity are N/A until a year has loaded.
+// typed 8%), so the size premium is N/A until a year has loaded.
 f_get_cagr_optimized(float src, int bars_back_5y) =>
     var int b0 = na
     if na(b0) and src > 0
@@ -1512,12 +1532,10 @@ ST.write(Q_MC + 5, KC_V)
 ST.write(Q_MC + 6, KC_T)
 ST.write(Q_MC + 7, KC_H)
 ST.write(Q_MC + 8, KC_X)
-// Trailing returns run high after bull markets, the opposite of forward returns: half the
-// 5-year excess return of the VN-Index over the VN 10Y plus half a 5% long-run anchor, held
-// to 4.5-8%. The premium then sits on the local base rate.
-float erp_rf = rf_local_avg
-float auto_erp = math.min(math.max(0.5 * (cagr_mkt - erp_rf / 100) + 0.025, 0.045), 0.08)
-float calc_erp = auto_erp
+// ERP: the full-history mean excess return shrunk toward a 5% prior by its own precision
+// (Jorion 1986): a short or noisy history stays near 5%, a long, steady one keeps its mean. It
+// replaces half the 5-year return + half 5%, held to 4.5-8%. It sits on the local base rate.
+float calc_erp = FM.f_erp(E_n, E_s, E_ss, E_y, 0.05)
 // Beta (sampled pairs, see FIX BETA-ALIGN) with the Blume adjustment.
 // Under 12 pairs: no beta (N/A, it was 1.0), so no cost of equity.
 float beta_mkt = (0.67 * raw_beta_s) + 0.33

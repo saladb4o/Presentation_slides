@@ -1287,7 +1287,7 @@ export tx(int id) =>
         31 => "\n\nScore is Z''-EM: safe > 5.85, distress < 4.35."
         32 => '\n\nScore is Altman Z: safe > 3.0, distress < 1.8.'
         37 => 'Justified P/B (Wilcox 1984; Ohlson 1995): (ROE - g) / (cost of equity - g), the P/B the company\'\'s own returns support.\n\nP/B now: {0,number,#.##}x\nJustified: {1,number,#.##}x\n\n5-year average ROE {2,number,#.#}% | cost of equity {3,number,#.#}% | long-run growth {4,number,#.#}% (the DCF terminal rate, at most the cost of equity - 2pp).\n\nValue trap: P/B under 1 and not below the justified P/B -- cheap on book, but its returns do not support even that price -- or a Piotroski F-score of 0-2 while the price is under the fair value (Piotroski 2000: among cheap stocks the weak scores lagged). The Value pillar then keeps a quarter of its excess over 50. Justified P/B itself is not scored.'
-        38 => 'CAPM Beta: {0,number,#.##}\nDownside Beta: {1}\nRisk-free: local 10Y, 90-day average = {2,number,#.##}% (country risk is inside it)\nERP: {3,number,#.#}%'
+        38 => 'CAPM Beta: {0,number,#.##}\nDownside Beta: {1}\nRisk-free: local 10Y, 90-day average = {2,number,#.##}% (country risk is inside it)\nERP: {3,number,#.#}% (VN-Index full-history excess return, shrunk to a 5% prior: Jorion 1986)'
         39 => '\nCost of Debt (synthetic): {0}\nEffective tax: {1,number,#.#}%\n\nMacro (manual): inflation {2,number,#.##}% -> terminal growth {3,number,#.##}%.'
         40 => '\nLeverage: net debt {0,number,#.#}x EBITDA (> 4.5x).'
         41 => '\nBeneish M-score {0,number,#.##} > -1.78: earnings manipulation risk.'
