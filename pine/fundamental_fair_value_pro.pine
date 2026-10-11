@@ -545,7 +545,7 @@ i_numQuarters = input.int(20, 'Number of Quarters to Average', minval = 4, maxva
 i_useMean = input.bool(true, 'Use Mean Instead of Median', group = group_calc)
 i_ratioCap = input.float(200.0, 'Maximum Ratio Cap', minval = 50, group = group_calc)
 i_useBeneishCheck = input.bool(true, '🕵️ Apply Beneish M-Score (Fraud Check)', group = group_calc)
-i_use_rkv = input.bool(true, '💎 Value-trap filter (justified P/B)', group = group_calc, tooltip = 'Justified P/B = (ROE - g) / (cost of equity - g) on the 5-year average ROE (Wilcox 1984; Ohlson 1995). A value trap is a P/B under 1 that is not below that: cheap on book, but the returns do not support even that price. Also a Piotroski F-score of 0-2 while the price is under the fair value (Piotroski 2000; not banks). Flags it, takes 0.2 off our confidence and puts a soft ceiling on the scorecard\'s Value pillar (over 50 it keeps a quarter of its excess). Also drops quarters with ROE under the 10Y + 5% from the P/B history average.')
+i_use_rkv = input.bool(true, '💎 Value-trap filter (justified P/B)', group = group_calc, tooltip = 'Justified P/B = (ROE - g) / (cost of equity - g) on the 5-year average ROE (Wilcox 1984; Ohlson 1995). A value trap is a P/B under 1 that is not below that: cheap on book, but the returns do not support even that price. Also a Piotroski F-score of 0-2 while the price is under the fair value (Piotroski 2000; not banks). Flags it, takes 0.2 off our confidence and puts a soft ceiling on the scorecard\'s Value pillar (over 50 it keeps a quarter of its excess). Also drops quarters with P/B under 1 and ROE under the cost of equity from the P/B history average.')
 i_flow_ttm = input.bool(true, 'Request flows as TTM', group = group_calc, tooltip = 'Income and cash-flow items are requested as TTM directly instead of summing four FQ values. Interest and R&D have no TTM field, so they are always summed from FQ.')
 group_iv = 'Intrinsic Value Models (Automated)'
 group_street = 'Street Consensus (analyst targets)'
@@ -2341,10 +2341,11 @@ float fv_band = math.max(nz(finalFairValue) * 0.03, 0.0)
 valuation_status = na(finalFairValue) ? 'N/A' : close > upperBound and close > finalFairValue + fv_band ? 'Very Overvalued' : close > finalFairValue + fv_band ? 'Overvalued' : close < lowerBound and close < finalFairValue - fv_band ? 'Very Undervalued' : close < finalFairValue - fv_band ? 'Undervalued' : 'Fairly Valued'
 // CLOSE columns, on every bar, so a closed quarter keeps its last bar: the price, the value
 // shown (Omnibus or Standard, which the confidence score grades), each row's fair value (its
-// track record) and each own multiple's observation (its ratio history). [FIX RKV-FLOOR] A low
-// P/B earned by sub-CoE returns (CoE proxy: the local 10Y + 5%) is a deserved discount: the
-// observation is dropped (flooring it at 1.0 pushed the average P/B UP).
-rkv_trip = i_use_rkv and D.roe < rf_local_avg / 100 + 0.05
+// track record) and each own multiple's observation (its ratio history). [FIX RKV-FLOOR] A P/B
+// under 1 earned by ROE under the cost of equity is a deserved discount (Wilcox 1984; Ohlson
+// 1995: P/B < 1 exactly when ROE < CoE): the observation is dropped (flooring it at 1.0 pushed
+// the average P/B UP). Unknown CoE: kept.
+rkv_trip = i_use_rkv and D.roe < cost_of_equity
 ST.write(Q_PX, close > 0 ? close : na)
 ST.write(Q_MC, base_rf_for_calc)
 ST.write(Q_MC + 1, H_g1u)
@@ -2361,7 +2362,7 @@ for [k, m] in MD
     ST.write(Q_FV + k, m.fv > 0 ? m.fv : na)
     if m.lk == Lever.pctl
         float r = f_cur(m)
-        if m.rkv and rkv_trip and r < 1.2
+        if m.rkv and rkv_trip and r < 1
             r := na
         ST.write(Q_MULT + k, r > 0 ? math.min(r, i_ratioCap) : na)
 // ==============================================================
