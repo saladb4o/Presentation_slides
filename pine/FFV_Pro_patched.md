@@ -560,7 +560,7 @@ i_iv_projection_period = input.int(10, 'RIM Projection Period (Years)', group = 
 i_dcf_stage1_yrs = input.int(10, 'DCF: High-Growth Years (Stage 1)', group = group_iv, minval = 1, maxval = 15, tooltip = 'Used by every DCF-type model: main DCF, rNPV, AFFO DCF, Unbundled ServeCo, APV and Equity Cash Flow.')
 i_strict_cap = input.bool(true, 'Strict capital structure', group = group_iv, tooltip = "ON: minority interest and preferred equity are claims ahead of common shareholders. They are added to enterprise value and subtracted from every firm-value model (EV/EBITDA, DCF, rNPV, EPV, APV, EVA, RIM, Unbundled, Rule of 40, Acquirer's Multiple); book value is common equity (ex-MI, ex-preferred) and earnings are income attributable to common (net of preferred dividends). Preferred equity = preferred dividends capitalised at the local 10Y + 2%.")
 group_display = 'Display Options'
-i_detail = input.string('None', 'Table detail (below the summary)', options = ['None', 'Models', 'Monte Carlo', 'Street', 'Scorecard', 'Everything'], group = group_display, tooltip = 'The summary card is always shown. Pick one section to add below it.\n\nModels: every relative and intrinsic model.\nMonte Carlo: for each blend member and the fair value, the share of 1-year draws nearest Bear, Base and Bull, and the share above the price.\nStreet: analyst targets, implied growth and P/E, ratings, confidence parts.\nScorecard: every quality, low-risk and value metric behind the Buffett score.\n\nEverything can run off a short chart.')
+i_detail = input.string('None', 'Table detail (below the summary)', options = ['None', 'Models', 'Monte Carlo', 'Street', 'Scorecard', 'Everything'], group = group_display, tooltip = 'The summary card is always shown. Pick one section to add below it.\n\nModels: every relative and intrinsic model.\nMonte Carlo: for each model the Models view lists and the fair value, the share of 1-year draws nearest Bear, Base and Bull, and the share above the price.\nStreet: analyst targets, implied growth and P/E, ratings, confidence parts.\nScorecard: every quality, low-risk and value metric behind the Buffett score.\n\nEverything can run off a short chart.')
 i_tablePos = input.string('top_right', 'Table Position', options = ['top_right', 'middle_right', 'bottom_right'], group = group_display)
 i_textSize = input.string('normal', 'Text Size', options = ['auto', 'tiny', 'small', 'normal', 'large', 'huge'], group = group_display)
 i_theme = input.string('Dark', 'Theme', options = ['Dark', 'Light'], group = group_display)
@@ -2140,14 +2140,14 @@ if barstate.islast
     dcf_k = -1
     for [k, m] in MD
         dcf_k := m.code == 'DCF' ? k : dcf_k
-    // Monte Carlo draws run as the last jobs on the same pricing path: the live blend's members
+    // Monte Carlo draws run as the last jobs on the same pricing path: every allocated model
     // and the rows they build on. Their counts wait for the final Bear / Bull below.
     int J_MC = J_RD + 5 * N_RD
     int nb = MD.size()
     mc_on = mc_q >= i_scen_min_n
     need = array.new_bool(nb, false)
     for [k, m] in MD
-        if m.live and m.grp != Group.comp and (m.w > 0 or m.om)
+        if m.live and m.grp != Group.comp and (m.on or m.om)
             need.set(k, true)
             if m.src_i >= 0
                 need.set(m.src_i, true)
@@ -2642,6 +2642,24 @@ f_members_tt() =>
         if sh > 0
             t += str.format(FL.tx(49), m.name, f_px(m.fv), sh * 100, f_px(m.fv * sh))
     str.format(FL.tx(50), t, vm.get(0) * 100, vm.get(1) * 100, vm.get(2) * 100, (i_view_cap < 1.0 ? str.format(FL.tx(51), i_view_cap * 100) : '.'))
+// The rows (MD indices) in a display order given by their codes; rows the list leaves out
+// follow in declaration order, so a new model shows without editing the list.
+f_order(string codes) =>
+    out = array.new<int>()
+    for c in str.split(codes, ' ')
+        for [k, m] in MD
+            if m.code == c
+                out.push(k)
+    for [k, m] in MD
+        if not str.contains(' ' + codes + ' ', ' ' + m.code + ' ')
+            out.push(k)
+    out
+// The rows the Models view lists (relative with a value or no history; intrinsic whenever
+// allocated, Acquirer's and the sector models once they have a value) and their labels.
+f_shown(Model m) =>
+    (m.on or m.om) and (m.grp == Group.rel ? m.fv > 0 or na(m.avg) : m.grp != Group.comp and ((m.grp == Group.abs and m.code != 'ACQ') or not na(m.fv)))
+f_rlbl(Model m) =>
+    (m.code == 'R40' ? (nz((F_rev_g * 2.0 + D.s.get(Sx.fcf_margin)) * 100) >= 65 ? '🌟 Rule of 65 (Super Stock)' : 'Rule of 40 Value') : m.code == 'ACQ' ? "Acquirer's Mult (" + str.tostring(i_acquirer_mult) + "x EBIT)" : m.name + (m.syn and m.grp == Group.rel ? ' *' : '')) + f_mlbl(m)
 // One Monte Carlo row: the share of draws nearest Bear, Base and Bull, and above the price. The
 // likeliest scenario is shaded; each cell's tooltip carries its 95% error.
 f_mc_row(string lbl, int r, string why, string tt) =>
@@ -2660,26 +2678,23 @@ f_mc() =>
     string why = mc_q < i_scen_min_n ? str.format(FL.tx(119), i_scen_min_n, mc_q) : ''
     f_hdr('Monte Carlo (1 year)', 'Bear', 'Base', 'Bull', why != '' ? why : str.format(FL.tx(118), MC_N, mc_q, mc_b, mc_sk, mc_rw, mc_gw, mc_kn))
     f_cell(4, RW.get(0) - 1, 'P > price', color_text, color_header)
-    // A row per member, then the fair value (k = MD.size()).
-    for k = 0 to MD.size()
-        string lbl = ''
-        string w = why
-        string tt = ''
-        if k == MD.size()
-            lbl := 'Fair value'
-            if w == '' and not (compositeLo < finalFairValue * (1 - 1e-9) and compositeHi > finalFairValue * (1 + 1e-9))
-                w := 'N/A: Bear must sit below Base and Bull above it.'
-            tt := str.format('\n\nDraws where a member had no value (it keeps its Base value in the blend): {0}.', MCC.get(k, 5))
-        else
-            m = MD.get(k)
-            if m.grp != Group.comp and f_sh(m) > 0
-                lbl := m.name
-                bad = m.inv != '' or not (m.lo < m.fv * (1 - 1e-9) and m.hi > m.fv * (1 + 1e-9))
-                if w == ''
-                    w := m.code == 'ACQ' ? 'N/A: a fixed-multiple rule with no history to draw, so every draw is Base.' : na(m.lo) or na(m.hi) ? 'N/A: no Bear / Bull (too few quarters).' : bad ? 'N/A: Bear must sit below Base and Bull above it.' : ''
-                tt := m.lk == Lever.pctl ? FL.tx(120) : ''
-        if lbl != ''
-            f_mc_row(lbl, k, w, tt)
+    // The Models view's rows in its order (relative, then intrinsic), then the fair value.
+    ord = f_order(FL.tx(79))
+    for p = 0 to 2
+        for k in (p < 2 ? ord : array.from(MD.size()))
+            string w = why
+            string tt = ''
+            if p == 2
+                if w == '' and not (compositeLo < finalFairValue * (1 - 1e-9) and compositeHi > finalFairValue * (1 + 1e-9))
+                    w := 'N/A: Bear must sit below Base and Bull above it.'
+                f_mc_row('Fair value', k, w, str.format('\n\nDraws where a member had no value (it keeps its Base value in the blend): {0}.', MCC.get(k, 5)))
+            else
+                m = MD.get(k)
+                if (m.grp == Group.rel) == (p == 0) and f_shown(m)
+                    bad = m.inv != '' or not (m.lo < m.fv * (1 - 1e-9) and m.hi > m.fv * (1 + 1e-9))
+                    if w == ''
+                        w := m.code == 'ACQ' ? 'N/A: a fixed-multiple rule with no history to draw, so every draw is Base.' : na(m.lo) or na(m.hi) ? 'N/A: no Bear / Bull (too few quarters).' : bad ? 'N/A: Bear must sit below Base and Bull above it.' : ''
+                    f_mc_row(f_rlbl(m), k, w, m.lk == Lever.pctl ? FL.tx(120) : '')
 // One axis's Bear / Bull move for the Scenarios tooltip, in percentage points.
 f_pp(float x) =>
     (x > 0 ? '+' : '') + str.tostring(x * 100, '#.##') + 'pp'
@@ -2772,18 +2787,6 @@ f_res_tt(Model m) =>
         t += str.format(FL.tx(71), (firm ? 'firm value ' : 'equity value '), f_big(r.core), (r.add != 0 ? str.format(' + {0} {1}', str.tostring(m.addon), f_big(r.add)) : ''), (firm ? ' - ' + f_claims_brk() : ''), f_big(r.sh), f_px(r.spot), (na(r.fwd) ? '' : str.format(FL.tx(72), f_px(r.fwd), f_px(r.value))))
     disc = m.eng == Eng.vdcf or m.eng == Eng.rim or m.eng == Eng.eva or m.eng == Eng.perp or m.eng == Eng.gperp
     t + (disc and not na(r.value) ? ' Rate (' + str.tostring(m.level) + ') ' + f_gtxt(x.rate) + (m.eng == Eng.perp ? '' : ', growth ' + f_gtxt(x.g1) + ' fading to ' + f_gtxt(x.gT)) + '.' : '') + (m.inv != '' ? '\n\n! ' + m.inv : '')
-// The rows in a display order given by their codes; rows the list leaves out follow in
-// declaration order, so a new model shows without editing the list.
-f_order(string codes) =>
-    out = array.new<Model>()
-    for c in str.split(codes, ' ')
-        for m in MD
-            if m.code == c
-                out.push(m)
-    for m in MD
-        if not str.contains(' ' + codes + ' ', ' ' + m.code + ' ')
-            out.push(m)
-    out
 // ---------- detail sections ----------
 f_det_models() =>
     // The view mix of the live blend (own history, rules, intrinsic), before the rows.
@@ -2791,9 +2794,9 @@ f_det_models() =>
     f_row4('View mix', FL.tx(73) + (i_view_cap < 1.0 ? ' Own history capped at ' + str.tostring(i_view_cap * 100, '#') + FL.tx(74) : FL.tx(75)), 'Own ' + str.tostring(vm.get(0) * 100, '#') + '%', 'Rules ' + str.tostring(vm.get(1) * 100, '#') + '%', 'Intrinsic ' + str.tostring(vm.get(2) * 100, '#') + '%')
     f_hdr('Relative Valuation', 'Bear', 'Base', 'Bull', FL.tx(76))
     for m in MD
-        if m.grp == Group.rel and (m.on or m.om) and (m.fv > 0 or na(m.avg))
+        if m.grp == Group.rel and f_shown(m)
             float cur = f_cur(m)
-            f_model_row(m.name + (m.syn ? ' *' : '') + f_mlbl(m), m.lo, m.fv, m.hi, (m.syn ? FL.tx(77) : '') + (m.s_drv == Sx.eps_b and H_cape ? FL.tx(78) : '') + (na(m.avg) ? '' : f_mult_tt(m.avg, cur, math.min(m.plo, m.avg), math.max(m.phi, m.avg))) + f_res_tt(m))
+            f_model_row(f_rlbl(m), m.lo, m.fv, m.hi, (m.syn ? FL.tx(77) : '') + (m.s_drv == Sx.eps_b and H_cape ? FL.tx(78) : '') + (na(m.avg) ? '' : f_mult_tt(m.avg, cur, math.min(m.plo, m.avg), math.max(m.phi, m.avg))) + f_res_tt(m))
     f_hdr('Intrinsic Models', 'Bear', 'Base', 'Bull', '')
     // Rule of 40, or Rule of 65 once growth x 2 + FCF margin reaches 65.
     float r40_score = nz((F_rev_g + D.s.get(Sx.fcf_margin)) * 100)
@@ -2803,9 +2806,9 @@ f_det_models() =>
     cl_txt = CL.txt()
     // Absolute models show whenever allocated (even N/A); Acquirer's and the sector
     // models only once they produce a value.
-    for m in f_order(FL.tx(79))
-        if m.grp != Group.rel and m.grp != Group.comp and (m.on or m.om) and ((m.grp == Group.abs and m.code != 'ACQ') or not na(m.fv))
-            lbl = m.code == 'R40' ? (super_stock ? '🌟 Rule of 65 (Super Stock)' : 'Rule of 40 Value') : m.code == 'ACQ' ? "Acquirer's Mult (" + str.tostring(i_acquirer_mult) + "x EBIT)" : m.name
+    for k in f_order(FL.tx(79))
+        m = MD.get(k)
+        if m.grp != Group.rel and f_shown(m)
             tt = switch m.code
                 'R40' => (super_stock ? 'Rule of 65 Score: ' + str.tostring(rx_score, '#.#') + FL.tx(80) : 'Rule of 40 Score: ' + (na(F_rev_g) ? FL.tx(81) : str.tostring(r40_score, '#.#') + '%')) + FL.tx(82)
                 'GRA' => FL.tx(83)
@@ -2822,7 +2825,7 @@ f_det_models() =>
                 'EVA' => FL.tx(99) + cl_txt + '.'
                 'DDM' => FL.tx(100) + str.tostring(F_dps, '#.##') + '\nYield: ' + (na(ddm_yield) ? 'N/A' : str.tostring(ddm_yield, '#.##') + '%') + '\nCost of equity: ' + str.tostring(cost_of_equity * 100, '#.#') + '%\nTerminal growth: ' + str.tostring(final_terminal_growth * 100, '#.#') + '%'
                 => ''
-            f_model_row(lbl + f_mlbl(m), m.lo, m.fv, m.hi, tt + f_res_tt(m))
+            f_model_row(f_rlbl(m), m.lo, m.fv, m.hi, tt + f_res_tt(m))
     // Valuation assumptions: the macro inputs behind terminal growth, and the DCF's exit multiple.
     f_row4('Macro (manual)', FL.tx(112), 'Infl ' + str.tostring(lr_infl * 100, '#.##') + '%', i_lr_infl > 0 ? 'input' : 'auto', 'Terminal g ' + str.tostring(final_terminal_growth * 100, '#.##') + '%', b1 = color_value)
     is_crazy_exit = implied_exit_multiple > 30.0
@@ -2926,7 +2929,8 @@ if barstate.islast and i_show_bt
     bt_hidden = 0
     bn = array.new_string()
     bs = array.new<FL.ModelStats>()
-    for m in f_order(BT_ORDER)
+    for k in f_order(BT_ORDER)
+        m = MD.get(k)
         eligible = m.grp != Group.sect or m.fw or m.bt.is_stats.total > 0 or m.bt.oos_stats.total > 0
         if i_bt_all ? eligible : m.fw
             bn.push((m.fw ? '' : '· ') + m.bt_name)
