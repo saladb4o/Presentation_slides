@@ -84,7 +84,7 @@ enum AddOn
     pipeline = 'pipeline'
     netco = 'NetCo'
     shield = 'tax shield'
-// pipeline: rNPV, 5x annual R&D at 15% | NetCo: Unbundled, the network at a RAB multiple |
+// pipeline: rNPV, 5x annual R&D at 15% (N/A without R&D) | NetCo: Unbundled, the network at a RAB multiple |
 // tax shield: APV, on permanent debt. An add-on is a total, added before the claims.
 enum Lever
     none = 'none'
@@ -1357,7 +1357,8 @@ if CK.dirty
     F_netco_rab := netco_sh * invested_capital_adj
     F_oe_ps := oe_per_share
     F_t_oe := t_oe
-    F_pipe := nz(rnd_ttm) * 5.0 * 0.15
+    // No R&D reported (or none spent): no pipeline to value, so rNPV is N/A (it was the DCF + 0).
+    F_pipe := rnd_ttm > 0 ? rnd_ttm * 5.0 * 0.15 : na
     F_shield := nz(total_debt_latest) * effective_tax
     F_rev_g := rev_growth
     F_asset_g := asset_growth

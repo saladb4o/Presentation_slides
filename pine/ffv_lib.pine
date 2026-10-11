@@ -1329,7 +1329,7 @@ export tx(int id) =>
         82 => '\n\nASSUMPTION: fixed EV/Sales rule -- 1x + 0.25x per Rule-of-40 point (floor 1.5x); the Rule-of-X multiple (12x + 0.3x per point above 65, never below that base) phases in as Rule-of-X goes from 55 to 65; capped at 25x.'
         83 => 'Needs positive EPS. Growth is the stage-1 growth, held to 0-15%, so Bear/Bull move it with the growth axis (at the 15% cap they equal Base); the 4.4/Y bond-yield factor is capped at 1.0.'
         84 => 'Bear/Bull N/A: a fixed EBIT multiple has no history to draw a move from. Its Base stays in the blend, and in the blend\'s Bear/Bull.'
-        85 => 'ASSUMPTION (not fitted, no trial-outcome data): pipeline = 5x annual R&D, 15% risk-adjusted, added to the DCF firm value. In the Omnibus it replaces the DCF, which it contains.'
+        85 => 'ASSUMPTION (not fitted, no trial-outcome data): pipeline = 5x annual R&D, 15% risk-adjusted, added to the DCF firm value; N/A without reported R&D. In the Omnibus it replaces the DCF, which it contains.'
         86 => '% = net PPE / invested capital (30-90%). NetCo = that share of invested capital (the network) at a RAB multiple; ServeCo = the rest of the unlevered FCF and NOPAT through the DCF at WACC. Less '
         87 => 'Unlevered FCF (FCF + after-tax interest) and NOPAT at WACC, less '
         88 => '. Over stage 1, FCF moves from the current cash flow to what is left after the reinvestment next-year growth needs, NOPAT x (1 - g / RONIC); RONIC moves from the current ROIC to a terminal ROIC capped at 20% (never below WACC).\n\nBear/Bull move the discount rate, terminal growth AND stage-1 growth.'
