@@ -514,7 +514,6 @@ group_industry = 'Industry-Specific Valuation'
 i_industry = input.string('Auto-Detect', 'Valuation Framework', options =['Auto-Detect', 'Technology', 'Healthcare (Pharma/Biotech)', 'Financials (Bank/Insurance)', 'REITs', 'Energy/Materials', 'Capital Goods/Industrials', 'Consumer Discretionary', 'Consumer Staples', 'Telecom', 'Utilities', 'General/Diversified'], group = group_industry, tooltip = 'Auto-Detect maps syminfo.sector (and syminfo.industry for Finance) to a framework.\nGeneral/Diversified enables every model.')
 i_rf_ticker_manual = input.symbol('', 'Manual Risk-Free Rate Ticker (Optional)', group = group_industry, tooltip = 'If set, overrides the Auto-Detect logic. Use TVC Bond Yield tickers (e.g. TVC:VN10Y).')
 i_lr_infl = input.float(0.0, 'Long-run inflation % (0 = auto by currency)', minval = 0, maxval = 15, step = 0.25, group = group_industry, tooltip = 'Replaces the CPI feed. Drives terminal growth and the CAPE inflation adjustment. 0 uses the per-currency default in the code.') / 100
-i_lr_rgdp = input.float(0.0, 'Long-run real GDP growth % (0 = auto by currency)', minval = 0, maxval = 10, step = 0.25, group = group_industry, tooltip = 'Replaces the GDP feed. Only used in the nominal-growth ceiling on terminal growth.') / 100
 i_financial_model_type = input.string('Auto (by industry)', 'Financials Valuation Model', options = ['Auto (by industry)', 'Equity Model (Bank/Insurer)', 'Entity Model (Brokerage/FinTech)'], group = group_industry, tooltip = 'Auto: banks and insurers use the Equity model (Net Income / Book); brokers, asset managers and lenders use the Entity model (NOPAT / Invested Capital).')
 group_scen = 'Scenario Analysis (Bear / Base / Bull)'
 i_scen_fair_band = input.float(15.0, 'Fair-value band +/- %', group = group_scen, minval = 0, maxval = 40, step = 1, tooltip = 'A scenario cell within this distance of the current price shades amber. Beyond it, green (price below the case) or red (price above it).\n\nSet to 0 for a hard red/green flip at the price.') / 100
@@ -1406,13 +1405,11 @@ if na(local_rf_raw)
     local_rf_raw := rf_local_avg
 if na(us10y_true_raw)
     us10y_true_raw := rf_local_avg
-// MACRO ASSUMPTIONS (replace the CPI + GDP requests, 0 slots): terminal growth is a long-run
+// MACRO ASSUMPTIONS (replace the CPI request, 0 slots): terminal growth is a long-run
 // assumption, so a stable input is more defensible than last year's CPI print. Defaults are
 // starting points: review them for your market.
 float dflt_infl = curr == 'VND' ? 0.035 : curr == 'INR' ? 0.045 : curr == 'JPY' ? 0.010 : curr == 'EUR' ? 0.020 : curr == 'CNY' or curr == 'HKD' ? 0.020 : curr == 'CAD' ? 0.020 : 0.025
-float dflt_rgdp = curr == 'VND' ? 0.060 : curr == 'INR' ? 0.060 : curr == 'CNY' or curr == 'HKD' ? 0.045 : curr == 'JPY' ? 0.007 : curr == 'EUR' ? 0.012 : curr == 'GBP' ? 0.013 : curr == 'AUD' ? 0.023 : 0.018
 float lr_infl = i_lr_infl > 0 ? i_lr_infl : dflt_infl
-float lr_rgdp = i_lr_rgdp > 0 ? i_lr_rgdp : dflt_rgdp
 // Dividend yield on the trailing DPS, carried while the price or DPS is missing.
 float div_yield = f_locf(close > 0 and not na(F_dps) ? F_dps / close : na)
 // === MARKET DATA FETCHING ===
@@ -1779,7 +1776,7 @@ f_drivers(Clock ck, Drv d, Claims c) =>
     // phasing in over a band (B/M moves with the price on every bar, so a step made the fair
     // value jump). [FIX CRP-2] CRP is charged once, in the cost of equity; debt = the same base +
     // a synthetic spread from interest cover. With debt, an unknown cost of debt makes WACC N/A.
-    [coe, cod, wacc, r_unlev, gT] = FM.f_coc(i_use_factors, mc, fx_rate, live_smb_spread, live_hml_spread, bvps, close, F_ebit, F_eq, base_rf_for_calc, beta_mkt, calc_erp, calc_crp, microstructure_premium, F_ebit_n, F_interest, i_rf_base == 'Local 10Y', F_debt, F_tax, lr_infl, lr_rgdp, rf_local_avg)
+    [coe, cod, wacc, r_unlev, gT] = FM.f_coc(i_use_factors, mc, fx_rate, live_smb_spread, live_hml_spread, bvps, close, F_ebit, F_eq, base_rf_for_calc, beta_mkt, calc_erp, calc_crp, microstructure_premium, F_ebit_n, F_interest, i_rf_base == 'Local 10Y', F_debt, F_tax, lr_infl)
     int cap = ck.cap
     int te = math.min(F_t_eps, cap)
     int tr = math.min(F_t_rev, cap)
@@ -2557,7 +2554,7 @@ if barstate.islast
     // Discount rate (+ the macro assumptions behind terminal growth)
     // No WACC (a bank, whose cost of debt is N/A; or no cost of equity yet): no flag either.
     wacc_flag = na(final_discount_rate) ? 'N/A' : final_discount_rate < 0.05 ? 'Too Low' : final_discount_rate > 0.20 ? 'Extreme' : 'Normal'
-    wacc_tt = str.format(FL.tx(38), beta_mkt, (na(downside_beta) ? 'N/A' : str.tostring(downside_beta, '#.##')), i_rf_base, base_rf_for_calc * 100, calc_erp * 100, calc_crp * 100, auto_crp_raw * 100) + str.format(FL.tx(39), na(D.cod) ? 'N/A' : str.tostring(D.cod * 100, '#.#') + '%', F_tax * 100, lr_infl * 100, lr_rgdp * 100, final_terminal_growth * 100)
+    wacc_tt = str.format(FL.tx(38), beta_mkt, (na(downside_beta) ? 'N/A' : str.tostring(downside_beta, '#.##')), i_rf_base, base_rf_for_calc * 100, calc_erp * 100, calc_crp * 100, auto_crp_raw * 100) + str.format(FL.tx(39), na(D.cod) ? 'N/A' : str.tostring(D.cod * 100, '#.#') + '%', F_tax * 100, lr_infl * 100, final_terminal_growth * 100)
     // Red flags: one list, short names for the cell, full text for the tooltip (FFVLib).
     // Piotroski's tests are skipped for banks and VN brokers, as in the value-trap test.
     [n_flags, severe, flag1, flags_tt] = FL.f_flags(nd, is_distress, HV_dz, zm_on, zm_txt, i_useBeneishCheck and F_manip, F_m_score, i_cf_on and not cf_ok, use_bank_model or vn_broker ? na : F_pio, inv_txt, F_inv_dummy or F_deter,
@@ -2842,8 +2839,7 @@ f_det_models() =>
                 => ''
             f_model_row(lbl + f_mlbl(m), m.lo, m.fv, m.hi, tt + f_res_tt(m))
     // Valuation assumptions: the macro inputs behind terminal growth, and the DCF's exit multiple.
-    macro_src = (i_lr_infl > 0 ? 'input' : 'auto') + ' / ' + (i_lr_rgdp > 0 ? 'input' : 'auto')
-    f_row4('Macro (manual)', FL.tx(112), 'Infl ' + str.tostring(lr_infl * 100, '#.##') + '% | GDP ' + str.tostring(lr_rgdp * 100, '#.##') + '%', macro_src, 'Terminal g ' + str.tostring(final_terminal_growth * 100, '#.##') + '%', b1 = color_value)
+    f_row4('Macro (manual)', FL.tx(112), 'Infl ' + str.tostring(lr_infl * 100, '#.##') + '%', i_lr_infl > 0 ? 'input' : 'auto', 'Terminal g ' + str.tostring(final_terminal_growth * 100, '#.##') + '%', b1 = color_value)
     is_crazy_exit = implied_exit_multiple > 30.0
     f_row4('Implied exit EV/NOPAT (Yr' + str.tostring(i_dcf_stage1_yrs) + ')', FL.tx(114), f_petxt(implied_exit_multiple), 'Sanity Check', is_crazy_exit ? 'High' : 'Safe', b1 = color_value, c3 = is_crazy_exit ? color.red : color.green)
 f_det_omni() =>
