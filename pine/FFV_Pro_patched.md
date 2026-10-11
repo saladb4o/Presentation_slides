@@ -8,8 +8,8 @@ indicator('Fundamental Fair Value Pro (FF4 + McKinsey/Rev DCF) [Real-Time + Back
 // Companion library pine/ffv_lib.pine (backtester and long texts): publish it as a private
 // library named FFVLib; pine/ffv_mc.pine (Monte Carlo and forecast statistics) as a private
 // library named FFVMC. Then replace YOUR_TV_USERNAME with your TradingView username.
-import YOUR_TV_USERNAME/FFVLib/6 as FL
-import YOUR_TV_USERNAME/FFVMC/5 as FM
+import YOUR_TV_USERNAME/FFVLib/7 as FL
+import YOUR_TV_USERNAME/FFVMC/6 as FM
 // =====================================================================
 // ARCHITECTURE: one top-to-bottom pass per bar, on two clocks
 //   1. Helpers and types   pure maths, backtest state, the model stage: enums, the
@@ -940,14 +940,13 @@ int Q_MULT = Q_FV + MD.size()
 // net income and operating cash flow (TTM), days inventory and days payable.
 int Q_X = Q_MULT + MD.size()
 // Monte Carlo history (CLOSE): the risk-free rate, stage-1 growth, terminal growth, then which
-// rate source and which growth parts were in use (a change across a switch is skipped), then the
-// four conditions the draws' kNN start weights match on (FFVLib f_cond).
+// rate source and which growth parts were in use (a change across a switch is skipped).
 int Q_MC = Q_X + 15
 // Forward sales (RELEASE): the LASSO's 14 features (MIDAS summaries of the last 13 weekly changes
 // of the stock, its sector index, the market and the rate, 3 each, then revenue growth over 4
 // quarters and over 1), then the forward sales each forward-growth member stood for (LASSO,
 // consensus, sales CAGR), scored against the revenue released 4 quarters later.
-int Q_L = Q_MC + 9
+int Q_L = Q_MC + 5
 var QStore ST = QStore.new(matrix.new<float>(128, Q_L + 17, na))
 // FIRM (F_*): report data, rebuilt when the clock marks it dirty. Solved items (sh ... nd) with their
 // tiers before the staleness cap (Drivers caps them), the released fields read later, then the
@@ -1518,19 +1517,6 @@ if tw_new and timeframe.in_seconds() <= 604800 and close[1] > 0
         TW_M.shift()
         TW_A.shift()
         TW_W.shift()
-// The Monte Carlo's kNN conditions, refreshed with the weekly closes and stored per quarter.
-var float KC_V = na
-var float KC_T = na
-var float KC_H = na
-var float KC_X = na
-if tw_new and timeframe.in_seconds() <= 604800 and close[1] > 0
-    [kv, kt, kh, kx] = FM.f_cond(TW_S, TW_X, TW_A)
-    KC_V := kv, KC_T := kt, KC_H := kh, KC_X := kx
-// Written now, not with the other CLOSE columns below, so the draws see this quarter's conditions.
-ST.write(Q_MC + 5, KC_V)
-ST.write(Q_MC + 6, KC_T)
-ST.write(Q_MC + 7, KC_H)
-ST.write(Q_MC + 8, KC_X)
 // ERP: the full-history mean excess return shrunk toward a 5% prior by its own precision
 // (Jorion 1986): a short or noisy history stays near 5%, a long, steady one keeps its mean. It
 // replaces half the 5-year return + half 5%, held to 4.5-8%. It sits on the local base rate.
@@ -2085,7 +2071,6 @@ int mc_sk = 0
 int mc_rw = 0
 float mc_b = na
 int mc_gw = 0
-int mc_kn = 0
 // Whether a row has an axis to move on: an own multiple its percentiles, Graham stage-1 growth, Rule of 40 revenue growth, Acquirer's none, any other row the
 // rate, growth or terminal axis. A row with none shows Bear / Bull N/A.
 f_moves(Model m) =>
@@ -2096,9 +2081,9 @@ f_moves(Model m) =>
         Lever.fixed => false
         => not na(D.r_lo) or not na(D.g_lo) or not na(D.t_lo)
 if barstate.islast
-    [x_ds, x_axq, sd, x_q, x_sk, x_rw, x_b, x_gw, x_kn] = FM.f_scen_draws(ST.v, ST.q, i_numQuarters, Q_MC, Q_REV, i_scen_min_n, WK_R, WK_S, WK_G, MC_N, MC_H)
+    [x_ds, x_axq, sd, x_q, x_sk, x_rw, x_b, x_gw] = FM.f_scen_draws(ST.v, ST.q, i_numQuarters, Q_MC, Q_REV, i_scen_min_n, WK_R, WK_S, WK_G, MC_N, MC_H)
     DS := x_ds, AXQ := x_axq
-    mc_q := x_q, mc_sk := x_sk, mc_rw := x_rw, mc_b := x_b, mc_gw := x_gw, mc_kn := x_kn
+    mc_q := x_q, mc_sk := x_sk, mc_rw := x_rw, mc_b := x_b, mc_gw := x_gw
     D.r_lo := sd.get(0), D.r_hi := sd.get(1), D.g_lo := sd.get(2), D.g_hi := sd.get(3), D.t_lo := sd.get(4), D.t_hi := sd.get(5), D.v_lo := sd.get(6), D.v_hi := sd.get(7)
 // ==============================================================
 // === MONTE CARLO (last bar): how likely each scenario is ======
@@ -2676,7 +2661,7 @@ f_mc_row(string lbl, int r, string why, string tt) =>
 // below Base and Bull above it (the cuts sit halfway between them).
 f_mc() =>
     string why = mc_q < i_scen_min_n ? str.format(FL.tx(119), i_scen_min_n, mc_q) : ''
-    f_hdr('Monte Carlo (1 year)', 'Bear', 'Base', 'Bull', why != '' ? why : str.format(FL.tx(118), MC_N, mc_q, mc_b, mc_sk, mc_rw, mc_gw, mc_kn))
+    f_hdr('Monte Carlo (1 year)', 'Bear', 'Base', 'Bull', why != '' ? why : str.format(FL.tx(118), MC_N, mc_q, mc_b, mc_sk, mc_rw, mc_gw))
     f_cell(4, RW.get(0) - 1, 'P > price', color_text, color_header)
     // The Models view's rows in its order (relative, then intrinsic), then the fair value.
     ord = f_order(FL.tx(79))
@@ -2728,7 +2713,7 @@ f_sum_val() =>
     for a = 0 to 3
         sc_tt += str.format('\n{0}: {1}', AXN.get(a), (na(att.get(a)) ? 'N/A' : str.format('{0,number,#.#}pp', att.get(a) / finalFairValue * 100)))
     sc_tt += n_inv > 0 ? str.format(FL.tx(63), str.tostring(n_inv)) : ''
-    sc_tt += str.format(FL.tx(122), MC_N, mc_q >= i_scen_min_n ? 'together' : 'each on its own', mc_rw, mc_gw, mc_kn)
+    sc_tt += str.format(FL.tx(122), MC_N, mc_q >= i_scen_min_n ? 'together' : 'each on its own', mc_rw, mc_gw)
     sc_tt += f_axtt('Rate', D.r_hi, D.r_lo, 0) + f_axtt('Stage-1 growth', D.g_lo, D.g_hi, 1) + f_axtt('Terminal growth', D.t_lo, D.t_hi, 2) + f_axtt('Revenue growth (Rule of 40)', D.v_lo, D.v_hi, 3)
     f_row4('Scenarios', sc_tt, 'Pos ' + ipos_txt, na(sens) ? 'Rate N/A' : 'Rate ' + (sens > 0 ? '+' : '') + str.tostring(sens * 100, '#.#') + '%', (na(att.get(top)) ? 'Bear: N/A' : 'Bear: ' + AXN.get(top)) + (n_inv > 0 ? ' !' : ''), stt = sc_tt)
     if i_show_street
