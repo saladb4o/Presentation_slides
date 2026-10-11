@@ -521,17 +521,9 @@ i_scen_min_n = input.int(8, 'Min quarters for Bear / Bull', group = group_scen, 
 i_rab_allowed_return = input.float(0.0, 'Regulatory Allowed Return %', group = group_industry, minval = 0.0, maxval = 20.0, step = 0.25, tooltip = 'The post-tax return the regulator permits on the asset base.\n\n0 = assume the allowed return equals WACC, giving a 1.0x RAB multiple.') / 100
 group_factors = 'Factor Models (VN 5-Factor)'
 i_use_factors = input.bool(true, '✨ Use Live Index-Based Factor Premium', group = group_factors)
-i_small_etf = input.symbol('IJR', 'Small Cap ETF (SMB Proxy)', group = group_factors, tooltip = "IJR (S&P 600) is preferred over IWM (Russell 2000) due to its profitability filter, yielding a truer size premium.")
-i_value_etf = input.symbol('VTV', 'Value ETF (HML Proxy)', group = group_factors)
-i_growth_etf = input.symbol('VUG', 'Growth ETF', group = group_factors)
 i_liq_prem = input.float(2.0, 'Max Liquidity Premium %', group = group_factors) / 100
 group_risk = 'Cost of Equity (CAPM)'
-i_auto_calc_erp_crp = input.bool(true, '✨ Auto-Calculate Risk Premiums', group = group_risk, tooltip = 'ERP: half the market proxy 5-year return over its own currency 10Y (US 10Y for SPY, VN 10Y for VNINDEX) plus half a 5% long-run anchor, held to 4.5-8% (trailing returns alone overshoot after bull markets). CRP: the local-minus-US sovereign spread.')
-i_erp_manual = input.float(5.0, 'Manual ERP %', group = group_risk) / 100
-i_crp_manual = input.float(3.5, 'Manual Country Risk %', group = group_risk) / 100
-i_rf_base = input.string('Local 10Y', 'Risk-free base', options = ['Local 10Y', 'US 10Y + CRP'], group = group_risk, tooltip = 'Local 10Y: discount local-currency cash flows at the local sovereign yield. Country risk is already inside that yield, so auto-CRP is 0 (manual CRP is still added when Auto is off).\n\nUS 10Y + CRP: a USD build -- US yield plus the local-minus-US spread (or the manual CRP). Use it when the local curve is thin or administered.')
-group_proxies = 'Market Proxy (Used for Beta & Auto-ERP)'
-i_mkt_bench = input.symbol('SPY', 'Market Proxy', group = group_proxies, tooltip = 'Beta is regressed on this proxy. Auto-ERP reads it as a USD index and pairs it with the US 10Y. VND charts use VNINDEX and the VN 10Y instead.')
+group_proxies = 'Market Proxy (VN-Index: beta and ERP)'
 i_beta_lookback = input.int(104, 'Regression Lookback (periods of the timeframe below)', minval = 30, group = group_proxies)
 i_beta_tf = input.timeframe('W', 'Regression Timeframe', group = group_proxies)
 i_sector_idx = input.symbol('', 'Sector index for Timing (VND, blank = auto)', group = group_proxies, tooltip = 'The Timing row (display only) compares the sector index with VNAllShare, its parent index (VN-Index if VNAllShare does not load). Blank: the index for a manually chosen Valuation Framework; with Auto-Detect, Energy/Materials or General, the VNAllShare index for TradingView\'s sector and industry fields (GICS; none for telecom). Set it when HOSE classifies the stock differently.')
@@ -811,10 +803,10 @@ method cagr(QStore s, int c, float cur, int yrs) =>
 // =====================================================================
 // REQUEST LEDGER (hard cap = 40 per script)
 // request.financial     : 32 (one wrapper, see 3.2)
-// request.security      : 6  (US10Y, local 10Y, benchmark, small-cap, value, growth ETF)
+// request.security      : 5  (local 10Y, VN-Index, VNSML, sector index, VNAllShare)
 // request.currency_rate : 1
 // request.earnings      : 1  (report dates)
-// TOTAL                 : 40 -> full
+// TOTAL                 : 39 (1 free)
 // RULES
 // R1. request.security() accepts TUPLES -> unlimited series per slot.
 // R2. request.financial() does NOT -> never spend a slot on anything an
@@ -1385,26 +1377,13 @@ if CK.dirty
 // =====================================================================
 // 3.5 MARKET: every request and ta.*, on every bar
 // =====================================================================
-// >>> SECURITY SLOT 1/6 : US risk-free curve (spot, 90-day average), tuple-packed
-[us_spot_r, us_sm_r] = request.security('TVC:US10Y', 'D', [close, ta.sma(close, 90)], ignore_invalid_symbol = true)
-float us10y_true_raw = f_locf(us_spot_r)
-float us10y_smooth = f_locf(us_sm_r)
-// >>> SECURITY SLOT 2/6 : Local risk-free curve
+// >>> SECURITY SLOT 1/5 : local risk-free curve (spot, 90-day average, in %), carried over gaps.
+// The spot print stands in while the 90-day average forms. No US 10Y stand-in: a USD yield is
+// not a rate for VND cash flows, so before the local curve's first print the rate is N/A.
 [rf_spot_r, rf_sm_r] = request.security(final_rf_ticker, 'D', [close, ta.sma(close, 90)], ignore_invalid_symbol = true)
-float local_rf_raw = f_locf(rf_spot_r)
-float rf_local_avg = f_locf(rf_sm_r) // 90-day average of the LOCAL 10Y yield, in %
-// The rate source before the cascade (0 local, 1 US 10Y, 2 none | 3 US, 4 local or none).
-int rf_src = na(rf_local_avg) ? (na(us10y_smooth) ? 2 : 1) : 0
-int us_src = na(us10y_true_raw) ? 4 : 3
-// Cascade: thin sovereign curves (VN10Y etc.) frequently print nothing.
-if na(local_rf_raw)
-    local_rf_raw := us10y_true_raw
-if na(rf_local_avg)
-    rf_local_avg := nz(us10y_smooth, local_rf_raw)
-if na(local_rf_raw)
-    local_rf_raw := rf_local_avg
-if na(us10y_true_raw)
-    us10y_true_raw := rf_local_avg
+float rf_local_avg = nz(f_locf(rf_sm_r), f_locf(rf_spot_r))
+// The rate source (0 local, 2 none), as read by FFVMC f_one_src.
+int rf_src = na(rf_local_avg) ? 2 : 0
 // MACRO ASSUMPTIONS (replace the CPI request, 0 slots): terminal growth is a long-run
 // assumption, so a stable input is more defensible than last year's CPI print. Defaults are
 // starting points: review them for your market.
@@ -1413,7 +1392,7 @@ float lr_infl = i_lr_infl > 0 ? i_lr_infl : dflt_infl
 // Dividend yield on the trailing DPS, carried while the price or DPS is missing.
 float div_yield = f_locf(close > 0 and not na(F_dps) ? F_dps / close : na)
 // === MARKET DATA FETCHING ===
-final_mkt_bench = (curr == 'VND') ? 'HOSE:VNINDEX' : i_mkt_bench
+final_mkt_bench = 'HOSE:VNINDEX'
 // [FIX BETA-ALIGN] Both legs are sampled on the SAME bar: the first chart bar
 // of each new beta-timeframe period, holding the PREVIOUS period's close.
 // Before, the stock leg updated on the first bar of the week and the benchmark
@@ -1422,7 +1401,7 @@ final_mkt_bench = (curr == 'VND') ? 'HOSE:VNINDEX' : i_mkt_bench
 beta_tf = timeframe.in_seconds(i_beta_tf) <= timeframe.in_seconds(timeframe.period) ? timeframe.period : i_beta_tf
 beta_sample = ta.change(time(beta_tf)) != 0
 float asset_p = f_locf(close[1])
-// >>> SECURITY SLOT 3/6 : benchmark, non-repainting (close[1] + lookahead_on)
+// >>> SECURITY SLOT 2/5 : benchmark, non-repainting (close[1] + lookahead_on)
 float bench_c = request.security(final_mkt_bench, beta_tf, close[1], lookahead = barmerge.lookahead_on, ignore_invalid_symbol = true)
 float mkt_bench_p = f_locf(bench_c)
 max_bars_back(asset_p, 5000)
@@ -1461,21 +1440,16 @@ f_get_cagr_optimized(float src, int bars_back_5y) =>
     src > 0 and p_old > 0 ? math.pow(src / p_old, bpy / float(k)) - 1.0 : na
 int bars_in_5y = math.min(5 * bpy, 4900)
 cagr_mkt = f_get_cagr_optimized(mkt_bench_p, bars_in_5y)
-auto_small_etf = (curr == 'VND') ? 'HOSE:VNSML' : i_small_etf
-// >>> SECURITY SLOT 4/6 : size factor
-float small_c = request.security(auto_small_etf, i_beta_tf, close, ignore_invalid_symbol = true)
+// >>> SECURITY SLOT 3/5 : size factor
+float small_c = request.security('HOSE:VNSML', i_beta_tf, close, ignore_invalid_symbol = true)
 float small_p = f_locf(small_c)
 max_bars_back(small_p, 5000)
 cagr_small = f_get_cagr_optimized(small_p, bars_in_5y)
 // No small-cap or market CAGR: no size premium (it was a typed 2%).
 float live_smb_spread = cagr_small - cagr_mkt
 live_smb_spread := math.max(math.min(live_smb_spread, 0.05), -0.02)
-// [FIX HML] HML from the value and growth ETFs (the old line reused the SMB
-// spread). Value-vs-market is roughly half the value-vs-growth spread.
-// No VN value/growth proxy exists, so VND has no value premium (it was a typed 1.5%); nor does
-// any chart where either ETF is missing.
-// >>> SECURITY SLOTS 5-6/6 : value and growth ETFs
-// On VND charts the value slot loads the sector index for the Timing row instead (display only).
+// >>> SECURITY SLOTS 4-5/5 : the sector index and VNAllShare, for the Timing row (display only).
+// No VN value/growth proxy exists, so there is no value premium.
 // A manually chosen framework names the index; Auto-Detect, Energy/Materials (VNENE or VNMAT)
 // and General read TradingView's sector and industry fields.
 string sec_auto = switch i_industry
@@ -1492,18 +1466,9 @@ string sec_auto = switch i_industry
 string sec_idx = curr != 'VND' ? '' : i_sector_idx != '' ? i_sector_idx : sec_auto != '' ? 'HOSE:' + sec_auto : ''
 // VND: sampled like the market leg (last period's close, lookahead on), so both hold last week's close on every bar of this week.
 bool tw_vn = curr == 'VND'
-float value_c = request.security(tw_vn ? (sec_idx != '' ? sec_idx : final_mkt_bench) : i_value_etf, tw_vn ? beta_tf : i_beta_tf, tw_vn ? close[1] : close, lookahead = tw_vn ? barmerge.lookahead_on : barmerge.lookahead_off, ignore_invalid_symbol = true)
-// VND: the growth slot loads VNAllShare, the parent of the sector indices, for the Timing sector comparison (same sampling).
-float growth_r = request.security(tw_vn ? 'HOSE:VNALLSHARE' : i_growth_etf, tw_vn ? beta_tf : i_beta_tf, tw_vn ? close[1] : close, lookahead = tw_vn ? barmerge.lookahead_on : barmerge.lookahead_off, ignore_invalid_symbol = true)
-float growth_c = tw_vn ? na : growth_r
-float value_p = f_locf(curr == 'VND' ? na : value_c)
-float growth_p = f_locf(growth_c)
-max_bars_back(value_p, 5000)
-max_bars_back(growth_p, 5000)
-float cagr_value = f_get_cagr_optimized(value_p, bars_in_5y)
-float cagr_growth = f_get_cagr_optimized(growth_p, bars_in_5y)
-float live_hml_spread = (cagr_value - cagr_growth) * 0.5
-live_hml_spread := math.max(math.min(live_hml_spread, 0.05), -0.02)
+float value_c = request.security(sec_idx != '' ? sec_idx : final_mkt_bench, beta_tf, close[1], lookahead = barmerge.lookahead_on, ignore_invalid_symbol = true)
+// VNAllShare, the parent of the sector indices, for the Timing sector comparison (same sampling).
+float growth_r = request.security('HOSE:VNALLSHARE', beta_tf, close[1], lookahead = barmerge.lookahead_on, ignore_invalid_symbol = true)
 // Timing (display only): weekly closes of the stock, the sector index and the market, taken on
 // the first bar of each week like the beta legs (the bar before holds last week's close), 3 years.
 var array<float> TW_S = array.new_float(0)
@@ -1542,25 +1507,17 @@ ST.write(Q_MC + 6, KC_T)
 ST.write(Q_MC + 7, KC_H)
 ST.write(Q_MC + 8, KC_X)
 // Trailing returns run high after bull markets, the opposite of forward returns: half the
-// 5-year excess return plus half a 5% long-run anchor, held to 4.5-8%. The excess is over
-// the proxy's OWN currency's 10Y (VNINDEX: VN 10Y; the default SPY: US 10Y): a USD return
-// less a local yield overstated the premium in low-yield currencies and understated it in
-// high-yield ones. The premium then sits on the local base rate.
-float erp_rf = curr == 'VND' ? rf_local_avg : nz(us10y_smooth, us10y_true_raw)
+// 5-year excess return of the VN-Index over the VN 10Y plus half a 5% long-run anchor, held
+// to 4.5-8%. The premium then sits on the local base rate.
+float erp_rf = rf_local_avg
 float auto_erp = math.min(math.max(0.5 * (cagr_mkt - erp_rf / 100) + 0.025, 0.045), 0.08)
-float auto_crp_raw = local_rf_raw > us10y_true_raw ? (local_rf_raw - us10y_true_raw) / 100 : 0.0
-rf_local = i_rf_base == 'Local 10Y'
-// [FIX CRP-1] In the local build the spread is already inside the base rate.
-float auto_crp = (curr == 'USD' or rf_local) ? 0.0 : auto_crp_raw
-float calc_erp = i_auto_calc_erp_crp ? auto_erp : i_erp_manual
-float calc_crp = i_auto_calc_erp_crp ? auto_crp : i_crp_manual
+float calc_erp = auto_erp
 // Beta (sampled pairs, see FIX BETA-ALIGN) with the Blume adjustment.
 // Under 12 pairs: no beta (N/A, it was 1.0), so no cost of equity.
 float beta_mkt = (0.67 * raw_beta_s) + 0.33
-// [FIX RF] One base: local 10Y (90d avg) for local-currency cash flows, or US 10Y + CRP. Both
-// legs take the 90-day average (the US leg read the spot print); the spot stands in only
-// while the average has not formed.
-float base_rf_for_calc = rf_local ? rf_local_avg / 100 : nz(us10y_smooth, us10y_true_raw) / 100
+// [FIX RF] One base: the local 10Y (90-day average) for local-currency cash flows. Country risk
+// is already inside that yield, so there is no separate CRP.
+float base_rf_for_calc = rf_local_avg / 100
 // The rate base and its source code, sampled on the first bar of each week over the own-multiple
 // span (13 weeks a quarter): the rate axis takes its spread from these one-year moves (FFVLib
 // f_yvar), as the rate is a market series with far more history than the stock's quarters.
@@ -1568,7 +1525,7 @@ var array<float> WK_R = array.new_float()
 var array<float> WK_S = array.new_float()
 if ta.change(time('W')) != 0
     WK_R.push(base_rf_for_calc)
-    WK_S.push(rf_local ? rf_src : us_src)
+    WK_S.push(rf_src)
     if WK_R.size() > i_numQuarters * 13 + 1
         WK_R.shift()
         WK_S.shift()
@@ -1772,11 +1729,10 @@ f_drivers(Clock ck, Drv d, Claims c) =>
         book += (F_ni - nz(F_dps) * F_sh) * math.min(ck.since / float(ck.bpy), 0.5)
     float bvps = F_sh > 0 ? book / F_sh : na
     float roe = f_roe(peq, H_peq_1y)
-    // COST OF EQUITY: CAPM on the base + size, value, profitability and liquidity premia, each
-    // phasing in over a band (B/M moves with the price on every bar, so a step made the fair
-    // value jump). [FIX CRP-2] CRP is charged once, in the cost of equity; debt = the same base +
-    // a synthetic spread from interest cover. With debt, an unknown cost of debt makes WACC N/A.
-    [coe, cod, wacc, r_unlev, gT] = FM.f_coc(i_use_factors, mc, fx_rate, live_smb_spread, live_hml_spread, bvps, close, F_ebit, F_eq, base_rf_for_calc, beta_mkt, calc_erp, calc_crp, microstructure_premium, F_ebit_n, F_interest, i_rf_base == 'Local 10Y', F_debt, F_tax, lr_infl)
+    // COST OF EQUITY: CAPM on the local base + size, profitability and liquidity premia, each
+    // phasing in over a band. Debt = the same base + a synthetic spread from interest cover.
+    // With debt, an unknown cost of debt makes WACC N/A.
+    [coe, cod, wacc, r_unlev, gT] = FM.f_coc(i_use_factors, mc, fx_rate, live_smb_spread, F_ebit, F_eq, base_rf_for_calc, beta_mkt, calc_erp, microstructure_premium, F_ebit_n, F_interest, F_debt, F_tax, lr_infl)
     int cap = ck.cap
     int te = math.min(F_t_eps, cap)
     int tr = math.min(F_t_rev, cap)
@@ -2393,7 +2349,7 @@ ST.write(Q_PX, close > 0 ? close : na)
 ST.write(Q_MC, base_rf_for_calc)
 ST.write(Q_MC + 1, H_g1u)
 ST.write(Q_MC + 2, D.gT)
-ST.write(Q_MC + 3, rf_local ? rf_src : us_src)
+ST.write(Q_MC + 3, rf_src)
 ST.write(Q_MC + 4, H_gmask)
 ST.write(Q_FFV, finalFairValue > 0 ? finalFairValue : na)
 if CK.adv
@@ -2554,7 +2510,7 @@ if barstate.islast
     // Discount rate (+ the macro assumptions behind terminal growth)
     // No WACC (a bank, whose cost of debt is N/A; or no cost of equity yet): no flag either.
     wacc_flag = na(final_discount_rate) ? 'N/A' : final_discount_rate < 0.05 ? 'Too Low' : final_discount_rate > 0.20 ? 'Extreme' : 'Normal'
-    wacc_tt = str.format(FL.tx(38), beta_mkt, (na(downside_beta) ? 'N/A' : str.tostring(downside_beta, '#.##')), i_rf_base, base_rf_for_calc * 100, calc_erp * 100, calc_crp * 100, auto_crp_raw * 100) + str.format(FL.tx(39), na(D.cod) ? 'N/A' : str.tostring(D.cod * 100, '#.#') + '%', F_tax * 100, lr_infl * 100, final_terminal_growth * 100)
+    wacc_tt = str.format(FL.tx(38), beta_mkt, (na(downside_beta) ? 'N/A' : str.tostring(downside_beta, '#.##')), base_rf_for_calc * 100, calc_erp * 100) + str.format(FL.tx(39), na(D.cod) ? 'N/A' : str.tostring(D.cod * 100, '#.#') + '%', F_tax * 100, lr_infl * 100, final_terminal_growth * 100)
     // Red flags: one list, short names for the cell, full text for the tooltip (FFVLib).
     // Piotroski's tests are skipped for banks and VN brokers, as in the value-trap test.
     [n_flags, severe, flag1, flags_tt] = FL.f_flags(nd, is_distress, HV_dz, zm_on, zm_txt, i_useBeneishCheck and F_manip, F_m_score, i_cf_on and not cf_ok, use_bank_model or vn_broker ? na : F_pio, inv_txt, F_inv_dummy or F_deter,

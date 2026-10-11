@@ -1047,21 +1047,18 @@ export f_growth(float roe_med, float op_med, float tax, float dps, float eps, fl
     float sales_f1 = na(g_las) or w_las_s == 0 ? s_inc : w_las_s == 1 ? rev * (1 + g_las) : (1 - w_las_s) * s_inc + w_las_s * rev * (1 + g_las)
     float margin = rev > 0 ? ebitda / rev : na
     [sgr, roic_sgr, leg, w_las, g1, not na(margin) ? sales_f1 * margin : na, g1u]
-// @function Cost of capital. Equity: CAPM on the base + size, value and profitability premia (each phasing in over a band, f_band) + the liquidity premium, floored at the base + 3%. Debt: the base + the synthetic spread (+ the CRP off a local base). WACC on market weights; the unlevered cost strips only the leverage part of beta (Hamada on market leverage), floored at the cost of debt and the base. Terminal growth: long-run inflation + 0.5pt, held to 1.5-3.5%.
+// @function Cost of capital. Equity: CAPM on the local base + size and profitability premia (each phasing in over a band, f_band) + the liquidity premium, floored at the base + 3%. Debt: the base + the synthetic spread. WACC on market weights; the unlevered cost strips only the leverage part of beta (Hamada on market leverage), floored at the cost of debt and the base. Terminal growth: long-run inflation + 0.5pt, held to 1.5-3.5%.
 // @returns [cost of equity, cost of debt, WACC, unlevered cost, terminal growth].
-export f_coc(bool factors, float mc, float fx, float smb, float hml, float bvps, float px, float ebit, float eq, float rf, float beta, float erp, float crp, float micro, float ebit_n, float interest, bool local_base, float debt, float tax, float infl) =>
+export f_coc(bool factors, float mc, float fx, float smb, float ebit, float eq, float rf, float beta, float erp, float micro, float ebit_n, float interest, float debt, float tax, float infl) =>
     size_p = 0.0
-    hml_p = 0.0
     rmw_p = 0.0
     if factors
         float mc_usd_b = mc / fx / 1e9
         size_p := na(smb) or na(mc_usd_b) ? 0.0 : mc_usd_b < 1.0 ? smb : mc_usd_b < 4.0 ? smb * (1.0 - ((mc_usd_b - 1.0) / 3.0)) : 0.0
-        float bm = not na(bvps) and px > 0 ? bvps / px : 0.0
-        hml_p := nz(hml * math.min(bm, 2.0) / 2 * f_band(bm, 0.7, 0.9))
         float op = not na(ebit) and eq > 0 ? ebit / eq : 0.0
         rmw_p := 0.015 * (f_band(op, 0.175, 0.225) - f_band(-op, -0.075, -0.025))
-    float coe = math.max(rf + (beta * erp) + crp + size_p + hml_p + rmw_p + micro, rf + 0.03)
-    float cod = rf + f_synthetic_spread(ebit_n, interest) + (local_base ? 0.0 : crp)
+    float coe = math.max(rf + (beta * erp) + size_p + rmw_p + micro, rf + 0.03)
+    float cod = rf + f_synthetic_spread(ebit_n, interest)
     float ew = mc + debt > 0 ? mc / (mc + debt) : 1.0
     float wacc = ew == 1.0 ? coe : ew * coe + (1.0 - ew) * cod * (1 - tax)
     float de = nz(debt) / (mc > 0 ? mc : math.max(nz(eq), 1.0))
