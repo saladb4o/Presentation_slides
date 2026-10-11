@@ -185,8 +185,8 @@ export f_demean(array<float> x) =>
     for v in x
         out.push(v - mu)
     out
-// @function The conditions the bootstrap matches on, from weekly closes (oldest first): 13-week volatility of log returns, the 40-week trend (log of the price over its 40-week average), the distance below the 52-week high, and the sector's 13-week log return over its parent's (na when the sector or parent series is missing).
-// @returns [volatility, trend, distance from high, sector strength].
+// @function The conditions the bootstrap matches on, from weekly closes (oldest first): 13-week volatility of log returns, the 40-week trend (log of the price over its 40-week average), 6-1 momentum (the log return from 26 to 4 weeks ago, Jegadeesh and Titman 1993; part of what it predicts is later earnings news, Chan, Jegadeesh and Lakonishok 1996), and the sector's 13-week log return over its parent's (na when the sector or parent series is missing).
+// @returns [volatility, trend, 6-1 momentum, sector strength].
 export f_cond(array<float> s, array<float> x, array<float> a) =>
     int n = s.size()
     float v = na, float t = na, float h = na, float k = na
@@ -197,10 +197,10 @@ export f_cond(array<float> s, array<float> x, array<float> a) =>
         v := r.stdev()
         float x0 = x.get(n - 14), float x1 = x.last(), float a0 = a.get(n - 14), float a1 = a.last()
         k := x0 > 0 and x1 > 0 and a0 > 0 and a1 > 0 ? math.log(x1 / x0) - math.log(a1 / a0) : na
+    if n >= 27
+        h := math.log(s.get(n - 5) / s.get(n - 27))
     if n >= 40
         t := math.log(s.last() / s.slice(n - 40, n).avg())
-    if n >= 52
-        h := s.last() / s.slice(n - 52, n).max() - 1
     [v, t, h, k]
 // @function Each condition (columns c0 .. c0 + nf - 1) as its percentile within the stock's stored quarters (mid-rank of ties), row = lag (0 the open quarter).
 // @returns A 128 x nf matrix, na where a quarter has no value.
@@ -224,7 +224,7 @@ export f_pctl(matrix<float> hm, int hq, int c0, int nf) =>
                         eq += z == y ? 1 : 0
                     pm.set(lag, f, (lo + 0.5 * eq) / nv)
     pm
-// @function kNN weights for where the bootstrap's blocks start (Lall and Sharma 1996). A change at lag L is matched by the conditions at the start of its 4-quarter window (lags L + 1 .. L + 3) against the conditions now (lags 0 .. 2), on the percentiles pm, with the Lorentzian distance, the sum of log(1 + |x - y|). A condition-quarter with no value now is left out; a change missing one that is kept cannot be a neighbour. The k = round(sqrt(n)) nearest of the n that can, at least 4 quarters apart, get weights 1, 1/2, 1/3 ... and the rest 0.
+// @function kNN weights for where the bootstrap's blocks start (Lall and Sharma 1996). A change at lag L is matched by the conditions at the start of its 4-quarter window (lags L + 1 .. L + 3) against the conditions now (lags 0 .. 2), on the percentiles pm (so each condition is on the same scale), by the Euclidean distance over the conditions known now (Lall and Sharma's distance); a change missing one of them cannot be a neighbour. The k = round(sqrt(n)) nearest of the n that can, at least 4 quarters apart, get weights 1, 1/2, 1/3 ... and the rest 0.
 // @returns The weights, one per change; empty (equal weights) when the effective number of neighbours (sum w)^2 / sum w^2 is under 3 or no condition is known now.
 export f_knn(matrix<float> pm, array<int> lg) =>
     int nf = pm.columns()
@@ -244,7 +244,7 @@ export f_knn(matrix<float> pm, array<int> lg) =>
                     for f = 0 to nf - 1
                         float q = pm.get(t, f)
                         if not na(q)
-                            d += math.log(1 + math.abs(q - pm.get(l0 + t, f)))
+                            d += math.pow(q - pm.get(l0 + t, f), 2)
                 dist.set(j, d)
                 ne += na(d) ? 0 : 1
     w = array.new_float(n, 0.0)
