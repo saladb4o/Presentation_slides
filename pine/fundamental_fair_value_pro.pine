@@ -261,7 +261,7 @@ type Model
 // driver, next year's driver, a rule's growth and second input) | need1/2: streams that must
 // be positive for a value (a relative multiple is off without them) | t1/t2: tier sources (the row takes the worse tier) | src: the
 // row a reference row builds on | lk: the lever |
-// m0: a rule multiple's target | tick: listed in Omnibus Members (bar 0) | rkv: P/B drops value-trap quarters. Derived on bar 0: src_i, held_by (the
+// m0: a rule multiple's target | tick: ticked under Omnibus: Members (bar 0) | rkv: P/B drops value-trap quarters. Derived on bar 0: src_i, held_by (the
 // row that holds this one: rNPV holds the DCF, P/FCF holds P/AFFO), ps (per-share streams).
 enum Claim
     netdebt = 'net debt'
@@ -537,9 +537,32 @@ is_omnibus = i_blend_mode == 'Omnibus (All Available Models)'
 // === OMNIBUS MEMBERSHIP (only read when Blend Mode = Omnibus) ==
 // ==============================================================
 group_omni = 'Omnibus: Selection'
-i_omni_mode = input.string('Auto (Framework Allocation)', 'Member Selection', options = ['Auto (Framework Allocation)', 'Manual (Members List)'], group = group_omni, tooltip = 'Auto: every model the sector framework enables, each a member in its own right.\n\nManual: the models listed in Members. Every model is listed by default, so Manual starts equal to Auto; delete a code to remove a model.\n\nEither way rNPV replaces the DCF it contains, P/AFFO (an FCF proxy) gives way to P/FCF, and a member is dropped if its model returns na or a non-positive value. The table row "Omnibus Members" reports what survived.')
-i_omni_strict = input.bool(true, 'Manual: still require framework approval', group = group_omni, tooltip = 'ON (default): a listed model is used only if the sector framework ALSO enables it.\n\nOFF: the list overrides the framework; a listed sector model is computed even outside its sector.')
-i_om_codes = input.string('PE PS FCF PB TBV EV CF AFFO RNPV ECF ADCF UNB APV EVA DDM DCF RIM EPV GRA R40 ACQ OE', 'Members (Manual)', group = group_omni, tooltip = 'Model codes separated by spaces, used when Member Selection is Manual.\n\nRelative: PE P/E, PS P/S, FCF P/FCF, PB P/B, TBV P/TBV, EV EV/EBITDA, CF P/CF, AFFO P/AFFO.\nSector: RNPV rNPV, ECF Equity Cash Flow, ADCF AFFO DCF, UNB Unbundled, APV Adjusted PV, EVA Economic Value Added, DDM Dividend Discount.\nAbsolute: DCF, RIM Residual Income, EPV Greenwald, GRA Graham, R40 Rule of 40, ACQ Acquirer\'s Multiple, OE Owners\' Earnings.\n\nCOMP = the whole Standard blend as a SINGLE member (not listed by default: Standard and Omnibus are alternatives). WARNING: it already contains the relative multiples and sector models, plus the absolute models the framework is named after (Technology: DCF, RIM, Rule of 40; Financials: RIM). Listing it alongside any of them counts those models twice. The Omnibus Members row flags this as DOUBLE-COUNT.')
+i_omni_mode = input.string('Auto (Framework Allocation)', 'Member Selection', options = ['Auto (Framework Allocation)', 'Manual (Tick Models Below)'], group = group_omni, tooltip = 'Auto: every model the sector framework enables, each a member in its own right.\n\nManual: the models ticked below. Every model is ticked by default, so Manual starts equal to Auto; untick a model to remove it.\n\nEither way rNPV replaces the DCF it contains, P/AFFO (an FCF proxy) gives way to P/FCF, and a member is dropped if its model returns na or a non-positive value. The table row "Omnibus Members" reports what survived.')
+i_omni_strict = input.bool(true, 'Manual: still require framework approval', group = group_omni, tooltip = 'ON (default): a ticked model is used only if the sector framework ALSO enables it.\n\nOFF: the ticks override the framework; a ticked sector model is computed even outside its sector.')
+// Ticks in model order (MD): the Standard Composite, then each row, read on bar 0 by m.tick.
+OM_TICK = array.from(input.bool(false, 'Standard Composite (the whole Standard blend)', group = 'Omnibus: Members (Manual)', tooltip = 'The whole Standard blend as a SINGLE member (off by default: Standard and Omnibus are alternatives). WARNING: it already contains the relative multiples and sector models, plus the absolute models the framework is named after (Technology: DCF, RIM, Rule of 40; Financials: RIM). Ticking it alongside any of them counts those models twice. The Omnibus Members row flags this as DOUBLE-COUNT.'),
+     input.bool(true, "P/E", group = 'Omnibus: Members (Manual)', inline = 'm0'),
+     input.bool(true, "P/S", group = 'Omnibus: Members (Manual)', inline = 'm0'),
+     input.bool(true, "P/FCF", group = 'Omnibus: Members (Manual)', inline = 'm0'),
+     input.bool(true, "P/B", group = 'Omnibus: Members (Manual)', inline = 'm1'),
+     input.bool(true, "P/TBV", group = 'Omnibus: Members (Manual)', inline = 'm1'),
+     input.bool(true, "EV/EBITDA", group = 'Omnibus: Members (Manual)', inline = 'm1'),
+     input.bool(true, "P/CF", group = 'Omnibus: Members (Manual)', inline = 'm2'),
+     input.bool(true, "P/AFFO", group = 'Omnibus: Members (Manual)', inline = 'm2'),
+     input.bool(true, "rNPV", group = 'Omnibus: Members (Manual)', inline = 'm2'),
+     input.bool(true, "Equity Cash Flow", group = 'Omnibus: Members (Manual)', inline = 'm3'),
+     input.bool(true, "AFFO DCF", group = 'Omnibus: Members (Manual)', inline = 'm3'),
+     input.bool(true, "Unbundled", group = 'Omnibus: Members (Manual)', inline = 'm3'),
+     input.bool(true, "Adjusted PV", group = 'Omnibus: Members (Manual)', inline = 'm4'),
+     input.bool(true, "EVA", group = 'Omnibus: Members (Manual)', inline = 'm4'),
+     input.bool(true, "DDM", group = 'Omnibus: Members (Manual)', inline = 'm4'),
+     input.bool(true, "DCF", group = 'Omnibus: Members (Manual)', inline = 'm5'),
+     input.bool(true, "RIM", group = 'Omnibus: Members (Manual)', inline = 'm5'),
+     input.bool(true, "EPV (Greenwald)", group = 'Omnibus: Members (Manual)', inline = 'm5'),
+     input.bool(true, "Graham", group = 'Omnibus: Members (Manual)', inline = 'm6'),
+     input.bool(true, "Rule of 40", group = 'Omnibus: Members (Manual)', inline = 'm6'),
+     input.bool(true, "Acquirer's Multiple", group = 'Omnibus: Members (Manual)', inline = 'm6'),
+     input.bool(true, "Owners' Earnings", group = 'Omnibus: Members (Manual)', inline = 'm7'))
 i_omni_sanity_x = input.float(10.0, 'Drop members beyond Nx / (1/N)x price', minval = 0, maxval = 50, step = 1, group = group_omni, tooltip = 'A member whose fair value exceeds N times the current price, or falls below 1/N of it, is excluded.\n\n0 = off. The Standard Composite member is never dropped by this test.')
 i_numQuarters = input.int(20, 'Number of Quarters to Average', minval = 4, maxval = 60, group = group_calc)
 i_useMean = input.bool(true, 'Use Mean Instead of Median', group = group_calc)
@@ -717,14 +740,14 @@ var Model M_OE = f_add(Model.new('OE', "Owners' Earnings", "Owners' Earnings", l
 // Bar 0: what the framework allocates, the Standard scope (every allocated multiple and
 // sector model, plus the absolute models the framework is named after), then the row checks.
 if barstate.isfirst
-    for m in MD
+    for [k, m] in MD
         m.res := array.from(Res.new(KIn.new()), Res.new(KIn.new()), Res.new(KIn.new()), Res.new(KIn.new()))
         m.hist := array.new_float()
         m.bt := FL.newModel()
         FAM.push(m.fam)
         m.fw := m.grp == Group.comp or str.contains(fw_codes, ' ' + m.code + ' ')
         m.on := m.fw
-        m.tick := str.contains(' ' + str.upper(i_om_codes) + ' ', ' ' + m.code + ' ')
+        m.tick := OM_TICK.get(k)
         m.std := m.fw and m.grp != Group.comp and (m.grp != Group.abs or str.contains(fw_named, ' ' + m.code + ' '))
         // Tier source left unset: the row's first stream (driver, else cash flow, else earnings).
         if m.t1 == Sx.none
@@ -1843,7 +1866,7 @@ float z_gold_cut = z_is_em ? 5.85 : 3.0
 // ==============================================================
 // === THE MODEL STAGE: every row on one path (the stream table is Drivers', 3.7)
 // ==============================================================
-omni_manual = i_omni_mode == 'Manual (Members List)'
+omni_manual = i_omni_mode == 'Manual (Tick Models Below)'
 om_free = is_omnibus and omni_manual and not i_omni_strict
 // Every row through f_eval at Base, on every bar; Bear, Bull and the readouts run once, on the
 // last bar, below the blends. Reference rows (rNPV) run after the rows they build on. A sector
