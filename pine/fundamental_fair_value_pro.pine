@@ -231,6 +231,7 @@ type Model
     Lever lk = Lever.none
     float m0 = na
     bool tick = true
+    bool pick = false
     bool rkv = false
     int src_i = -1
     int held_by = -1
@@ -689,6 +690,11 @@ fw_codes = ' ' + fw_parts.get(1) + ' '
 fw_named = ' ' + (fw_parts.size() > 2 ? fw_parts.get(2) : '') + ' '
 use_cape = str.contains(fw_codes, ' CAPE ')
 show_sloan = str.contains(fw_codes, ' SLN ')
+// The 18-month sector picks (VND, Auto-Detect; tested as Batch C): the Standard blend takes these
+// models instead of the framework's. Industrial parks keep the default.
+_pk_ind = syminfo.industry
+string pick_codes = syminfo.currency == 'VND' and i_industry == 'Auto-Detect' and not str.contains(' BCM KBC SZC SIP LHG D2D TIP SZL ITA IDV IDC NTC VGC ', ' ' + syminfo.ticker + ' ') ? (selected_industry == 'Capital Goods/Industrials' ? ' TBV PB ACQ DDM UNB PS PE APV EV ' : selected_industry == 'Utilities' ? ' PB TBV ' : selected_industry == 'Financials (Bank/Insurance)' and str.contains(_pk_ind, 'Broker') and not (str.contains(_pk_ind, 'Bank') and not str.contains(_pk_ind, 'Invest')) ? ' EPV EVA ACQ ' : '') : ''
+pick_on = pick_codes != ''
 is_financial_sector = selected_industry == 'Financials (Bank/Insurance)'
 // Banks and insurers use the Equity models (RIM: NI / book at CoE; growth from ROE), the
 // rest the Entity models (RIM: NOPAT / invested capital at WACC; growth from ROIC).
@@ -748,6 +754,7 @@ if barstate.isfirst
         m.fw := m.grp == Group.comp or str.contains(fw_codes, ' ' + m.code + ' ')
         m.on := m.fw
         m.tick := OM_TICK.get(k)
+        m.pick := pick_on and str.contains(pick_codes, ' ' + m.code + ' ')
         m.std := m.fw and m.grp != Group.comp and (m.grp != Group.abs or str.contains(fw_named, ' ' + m.code + ' '))
         // Tier source left unset: the row's first stream (driver, else cash flow, else earnings).
         if m.t1 == Sx.none
@@ -1898,7 +1905,7 @@ for j = 0 to (wk_go ? 23 : 1)
                 m.fv := na
                 m.lo := na
                 m.hi := na
-                m.live := m.grp != Group.sect or m.fw or (om_free and m.tick)
+                m.live := m.grp != Group.sect or m.fw or (om_free and m.tick) or m.pick
             else
                 pw.g1 := st == 0 ? wa : st == 1 ? wb : (wa + wb) / 2
             if m.live
@@ -1950,12 +1957,12 @@ for m in MD
 // share (m.w, or m.om / m.om_w) and returns [value, band half-width, members, equal-weighted,
 // members that also hold a Standard share, own-history share].
 f_blend(bool omni) =>
-    sane = omni and i_omni_sanity_x >= 1.5 and close > 0
+    sane = (omni or pick_on) and i_omni_sanity_x >= 1.5 and close > 0
     p = array.new_float(0)
     tot = 0.0
     for m in MD
         comp = m.grp == Group.comp
-        ok = (omni ? (omni_manual ? m.tick and (not i_omni_strict or m.on) : not comp and m.on) : not comp and m.on and m.std) and m.fv > 0
+        ok = (omni ? (omni_manual ? m.tick and (not i_omni_strict or m.on) : not comp and m.on) : not comp and (pick_on ? m.pick : m.on and m.std)) and m.fv > 0
         ok := ok and (not sane or comp or (m.fv <= close * i_omni_sanity_x and m.fv * i_omni_sanity_x >= close))
         p.push(ok ? m.trk * f_tier_q(m.tier) : -1.0)
         tot += ok ? p.last() : 0.0
@@ -2936,9 +2943,9 @@ if barstate.islast and i_show_bt
     bs = array.new<FL.ModelStats>()
     for k in f_order(BT_ORDER)
         m = MD.get(k)
-        eligible = m.grp != Group.sect or m.fw or m.bt.is_stats.total > 0 or m.bt.oos_stats.total > 0
-        if i_bt_all ? eligible : m.fw
-            bn.push((m.fw ? '' : '· ') + m.bt_name)
+        eligible = m.grp != Group.sect or (m.fw or m.pick) or m.bt.is_stats.total > 0 or m.bt.oos_stats.total > 0
+        if i_bt_all ? eligible : (m.fw or m.pick)
+            bn.push(((m.fw or m.pick) ? '' : '· ') + m.bt_name)
             bs.push(m.bt)
         else if eligible
             bt_hidden += 1
