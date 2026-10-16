@@ -528,7 +528,7 @@ group_factors = 'Factor Models (VN 5-Factor)'
 i_use_factors = input.bool(true, '✨ Use Live Index-Based Factor Premium', group = group_factors)
 i_liq_prem = input.float(2.0, 'Max Liquidity Premium %', group = group_factors) / 100
 group_risk = 'Cost of Equity (CAPM)'
-group_proxies = 'Market Proxy (VN-Index: beta and ERP)'
+group_proxies = 'Market Proxy (VN-Index, IDR: IDX Composite; beta and ERP)'
 i_beta_lookback = input.int(104, 'Regression Lookback (periods of the timeframe below)', minval = 30, group = group_proxies)
 i_beta_tf = input.timeframe('W', 'Regression Timeframe', group = group_proxies)
 i_sector_idx = input.symbol('', 'Sector index for Timing (VND, blank = auto)', group = group_proxies, tooltip = 'The Timing row (display only) compares the sector index with VNAllShare, its parent index (VN-Index if VNAllShare does not load). Blank: the index for a manually chosen Valuation Framework; with Auto-Detect, Energy/Materials or General, the VNAllShare index for TradingView\'s sector and industry fields (GICS; none for telecom). Set it when HOSE classifies the stock differently.')
@@ -831,7 +831,7 @@ method cagr(QStore s, int c, float cur, int yrs) =>
 // =====================================================================
 // REQUEST LEDGER (hard cap = 40 per script)
 // request.financial     : 32 (one wrapper, see 3.2)
-// request.security      : 5  (local 10Y, VN-Index, VNSML, sector index, VNAllShare)
+// request.security      : 5  (local 10Y, VN-Index or IDX Composite, VNSML, sector index, VNAllShare)
 // request.currency_rate : 1
 // request.earnings      : 1  (report dates)
 // TOTAL                 : 39 (1 free)
@@ -859,6 +859,7 @@ report_bar = f_fresh(earn_raw)
 curr = syminfo.currency
 rf_ticker_auto = switch curr
     'VND' => 'TVC:VN10Y'
+    'IDR' => 'TVC:ID10Y'
     'EUR' => 'TVC:DE10Y'
     'GBP' => 'TVC:GB10Y'
     'JPY' => 'TVC:JP10Y'
@@ -1414,12 +1415,13 @@ int rf_src = na(rf_local_avg) ? 2 : 0
 // MACRO ASSUMPTIONS (replace the CPI request, 0 slots): terminal growth is a long-run
 // assumption, so a stable input is more defensible than last year's CPI print. Defaults are
 // starting points: review them for your market.
-float dflt_infl = curr == 'VND' ? 0.035 : curr == 'INR' ? 0.045 : curr == 'JPY' ? 0.010 : curr == 'EUR' ? 0.020 : curr == 'CNY' or curr == 'HKD' ? 0.020 : curr == 'CAD' ? 0.020 : 0.025
+// IDR: Bank Indonesia's 2024-27 inflation target, 2.5% +/- 1.
+float dflt_infl = curr == 'VND' ? 0.035 : curr == 'IDR' ? 0.025 : curr == 'INR' ? 0.045 : curr == 'JPY' ? 0.010 : curr == 'EUR' ? 0.020 : curr == 'CNY' or curr == 'HKD' ? 0.020 : curr == 'CAD' ? 0.020 : 0.025
 float lr_infl = i_lr_infl > 0 ? i_lr_infl : dflt_infl
 // Dividend yield on the trailing DPS, carried while the price or DPS is missing.
 float div_yield = f_locf(close > 0 and not na(F_dps) ? F_dps / close : na)
 // === MARKET DATA FETCHING ===
-final_mkt_bench = 'HOSE:VNINDEX'
+final_mkt_bench = curr == 'IDR' ? 'IDX:COMPOSITE' : 'HOSE:VNINDEX'
 // [FIX BETA-ALIGN] Both legs are sampled on the SAME bar: the first chart bar
 // of each new beta-timeframe period, holding the PREVIOUS period's close.
 // Before, the stock leg updated on the first bar of the week and the benchmark
@@ -2611,7 +2613,7 @@ if barstate.islast
          card_mnp, card_pnc, is_value_trap, card_dz, wg,
          ST.v, ST.q, array.from(Q_X, Q_X + 1, Q_ROE, Q_ROA, Q_GM), beta_ra, beta_rb, bsec >= 604800 ? 31557600 / bsec : trading_days * (bsec >= 86400 ? 86400 : session_sec) / bsec,
          pbh, pb, close, sell_zone_line, finalFairValue, buy_zone_line, compositeLo, ov, n_mem >= 2 and finalFairValue > 0 ? fv_stddev / finalFairValue : float(na), F_ebitda_g)
-    CARD := FL.f_timing(CARD, TW_S, TW_X, TW_M, TW_A, rf_local_avg / 100, sec_idx == '' ? '' : i_sector_idx != '' ? i_sector_idx : sec_auto, curr == 'VND' ? 'VN-Index' : final_mkt_bench, TW_W, tw_vn ? (syminfo.prefix == 'HNX' ? 0.10 : syminfo.prefix == 'UPCOM' ? 0.15 : 0.07) : na, card_mnp or card_pnc or card_dz != '' or is_value_trap)
+    CARD := FL.f_timing(CARD, TW_S, TW_X, TW_M, TW_A, rf_local_avg / 100, sec_idx == '' ? '' : i_sector_idx != '' ? i_sector_idx : sec_auto, curr == 'VND' ? 'VN-Index' : curr == 'IDR' ? 'IDX Composite' : final_mkt_bench, TW_W, tw_vn ? (syminfo.prefix == 'HNX' ? 0.10 : syminfo.prefix == 'UPCOM' ? 0.15 : 0.07) : na, card_mnp or card_pnc or card_dz != '' or is_value_trap)
     CARD_INFO := FL.f_grow(ST.v, ST.q, Q_REV, Q_ROA, Q_AS, i_flow_ttm ? -1 : Q_FLOW, i_flow_ttm ? -1 : Q_FLOW + 13)
     CARD_INFO.concat(ccc_row)
     CARD_INFO.concat(FL.f_jpbrow(i_use_rkv, jpb, current_pb_val, trap_pb, jpb_roe, cost_of_equity, jpb_g))
