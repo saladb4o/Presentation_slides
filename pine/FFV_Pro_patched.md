@@ -838,7 +838,7 @@ method cagr(QStore s, int c, float cur, int yrs) =>
 // =====================================================================
 // REQUEST LEDGER (hard cap = 40 per script)
 // request.financial     : 32 (one wrapper, see 3.2)
-// request.security      : 5  (local 10Y, VN-Index or IDX Composite, VNSML, sector index, VNAllShare)
+// request.security      : 5  (local 10Y, VN-Index or IDX Composite, VNSMALLCAP, sector index, VNAllShare)
 // request.currency_rate : 1
 // request.earnings      : 1  (report dates)
 // TOTAL                 : 39 (1 free)
@@ -1497,7 +1497,7 @@ f_get_cagr_optimized(float src, int bars_back_5y) =>
 int bars_in_5y = math.min(5 * bpy, 4900)
 cagr_mkt = f_get_cagr_optimized(mkt_bench_p, bars_in_5y)
 // >>> SECURITY SLOT 3/5 : size factor
-float small_c = request.security('HOSE:VNSML', i_beta_tf, close, ignore_invalid_symbol = true)
+float small_c = request.security('HOSE:VNSMALLCAP', i_beta_tf, close, ignore_invalid_symbol = true)
 float small_p = f_locf(small_c)
 max_bars_back(small_p, 5000)
 cagr_small = f_get_cagr_optimized(small_p, bars_in_5y)
@@ -2138,6 +2138,34 @@ f_mc_add(int r, float v, float lo, float b, float hi) =>
         MCC.set(r, c, MCC.get(r, c) + 1)
         MCC.set(r, 3, MCC.get(r, 3) + (v > close ? 1 : 0))
         MCC.set(r, 4, MCC.get(r, 4) + 1)
+// The fair value's calibrated 1-year distribution (normalized split conformal: Lei, G'Sell,
+// Rinaldo, Tibshirani & Wasserman 2018; two-tailed signed scores, Linusson et al. 2014): the
+// blend draws' median times e^(rho x z). rho: the mean |log 1-year move| of the fair value over
+// all past calendar quarters (each quarter's first bar, UTC), 8 moves at least. z: the signed
+// scores' 5/10/25/50/75/90/95th percentiles, fit on Vietnamese stocks' realized 1-year fair
+// values (8,387 outcomes; on 2024-25 as-of dates the 50/80/90% ranges held 55/85/93%).
+// Degenerate draws (p95 <= p05 or p75 <= p25) or too few moves: N/A. CQ: the 7 quantiles.
+var array<float> FVQ = array.new_float()
+qn = year(time, 'UTC') * 4 + math.floor((month(time, 'UTC') - 1) / 3)
+if qn != qn[1]
+    FVQ.push(finalFairValue > 0 ? finalFairValue : na)
+LV = array.from(0.05, 0.10, 0.25, 0.50, 0.75, 0.90, 0.95)
+CQ = array.new_float(7, na)
+string mc_cw = ''
+float mc_rho = na
+int mc_nm = 0
+// Its CDF: piecewise linear through CQ, the tails spread to 0 / 1 at the p05-p10 / p90-p95 slope.
+f_cdf(float y) =>
+    float p = na
+    if y <= CQ.get(0)
+        p := math.max(0.0, 0.05 - 0.05 * (CQ.get(0) - y) / (CQ.get(1) - CQ.get(0)))
+    else if y >= CQ.get(6)
+        p := math.min(1.0, 0.95 + 0.05 * (y - CQ.get(6)) / (CQ.get(6) - CQ.get(5)))
+    else
+        for i = 0 to 5
+            if na(p) and y <= CQ.get(i + 1)
+                p := LV.get(i) + (LV.get(i + 1) - LV.get(i)) * (y - CQ.get(i)) / (CQ.get(i + 1) - CQ.get(i))
+    p
 B = array.new_float(16, na)
 att = array.new_float(4, na)
 rdcf = array.new_float(5, na)
@@ -2309,6 +2337,29 @@ if barstate.islast
             if k == nb or need.get(k)
                 for i = 0 to MC_N - 1
                     f_mc_add(k, MV.get(i, k), lo, b, hi)
+        // The fair value row's shares from the calibrated distribution (see FVQ).
+        cb = array.new_float()
+        for i = 0 to MC_N - 1
+            if not na(MV.get(i, nb))
+                cb.push(MV.get(i, nb))
+        cb.sort()
+        float csm = 0.0
+        for i = 4 to math.max(FVQ.size() - 1, 4)
+            if i < FVQ.size() and FVQ.get(i) > 0 and FVQ.get(i - 4) > 0
+                csm += math.abs(math.log(FVQ.get(i) / FVQ.get(i - 4)))
+                mc_nm += 1
+        mc_rho := mc_nm >= 8 and csm > 0 ? csm / mc_nm : na
+        int cn = cb.size()
+        array<float> cp = array.new_float()
+        for pc in array.from(0.05, 0.25, 0.5, 0.75, 0.95)
+            cp.push(cn > 0 ? cb.get(math.max(math.ceil(pc * cn) - 1, 0)) : na)
+        mc_cw := cn == 0 or cp.get(4) <= cp.get(0) or cp.get(3) <= cp.get(1) ? 'N/A: the draws have no spread to calibrate.' : na(mc_rho) ? str.format('N/A: {0} past 1-year fair value moves, 8 needed.', mc_nm) : ''
+        if mc_cw == ''
+            for [i, z] in array.from(-1.661, -1.151, -0.498, 0.021, 0.572, 1.205, 1.74)
+                CQ.set(i, cp.get(2) * math.exp(mc_rho * z))
+            float cpb = f_cdf((compositeLo + finalFairValue) / 2), float cpu = 1 - f_cdf((finalFairValue + compositeHi) / 2)
+            for [c, x] in array.from(cpb, 1 - cpb - cpu, cpu, 1 - f_cdf(close))
+                MCC.set(nb, c, x * cn)
 // ==========================================
 // JUSTIFIED P/B & VALUE TRAP (Wilcox 1984; Ohlson 1995)
 // ==========================================
@@ -2688,13 +2739,13 @@ f_mc_row(string lbl, int r, string why, string tt) =>
     for c = 0 to 3
         float x = MCC.get(r, c) / n
         color bg = not ok ? color_bg : c == 3 ? (x >= 0.5 ? color_under : color_over) : c == top ? color.new(c == 0 ? color.red : c == 1 ? color.orange : color.green, 40) : color_bg
-        f_cell(c + 1, row, ok ? str.tostring(x * 100, '#') + '%' : 'N/A', color_text, bg, ok ? str.format('{0,number,#.#}% +/- {1,number,#.#} pts (95%)', x * 100, 196 * math.sqrt(x * (1 - x) / n)) : '')
+        f_cell(c + 1, row, ok ? str.tostring(x * 100, '#') + '%' : 'N/A', color_text, bg, ok and r < MD.size() ? str.format('{0,number,#.#}% +/- {1,number,#.#} pts (95%)', x * 100, 196 * math.sqrt(x * (1 - x) / n)) : '')
 // The Monte Carlo block: the live blend's members, then the fair value. A row needs its Bear
 // below Base and Bull above it (the cuts sit halfway between them).
 f_mc() =>
     string why = mc_q < i_scen_min_n ? str.format(FL.tx(119), i_scen_min_n, mc_q) : ''
     f_hdr('Monte Carlo (1 year)', 'Bear', 'Base', 'Bull', why != '' ? why : str.format(FL.tx(118), MC_N, mc_q, mc_b, mc_sk, mc_rw, mc_gw))
-    f_cell(4, RW.get(0) - 1, 'P > price', color_text, color_header)
+    f_cell(4, RW.get(0) - 1, 'FV > price', color_text, color_header, "Share of fair-value outcomes above today's price: not a chance the price rises.")
     // The Models view's rows in its order (relative, then intrinsic), then the fair value.
     ord = f_order(FL.tx(79))
     for p = 0 to 2
@@ -2702,9 +2753,10 @@ f_mc() =>
             string w = why
             string tt = ''
             if p == 2
+                w := w == '' ? mc_cw : w
                 if w == '' and not (compositeLo < finalFairValue * (1 - 1e-9) and compositeHi > finalFairValue * (1 + 1e-9))
                     w := 'N/A: Bear must sit below Base and Bull above it.'
-                f_mc_row('Fair value', k, w, str.format('\n\nDraws where a member had no value (it keeps its Base value in the blend): {0}.', MCC.get(k, 5)))
+                f_mc_row('Fair value', k, w, str.format('\n\nShares from the calibrated 1-year range (normalized conformal; median of draws x e^(rho x z), rho {0,number,#.#}% over {1} past 1-year moves): 50% {2,number,#.##} - {3,number,#.##}, 90% {4,number,#.##} - {5,number,#.##}. Model rows: raw draw shares, not calibrated.\n\nDraws where a member had no value (it keeps its Base value in the blend): {6}.', mc_rho * 100, mc_nm, CQ.get(2), CQ.get(4), CQ.get(0), CQ.get(6), MCC.get(k, 5)))
             else
                 m = MD.get(k)
                 if (m.grp == Group.rel) == (p == 0) and f_shown(m)
