@@ -1,6 +1,6 @@
 # FFV Companion Feed
 
-Add this to the same chart as Fundamental Fair Value Pro, then link its 17 plots in the main script's Companion Feed settings. Copy everything inside the code block into a new Pine Editor tab.
+Add this to the same chart as Fundamental Fair Value Pro, then link its 19 plots in the main script's Companion Feed settings. Copy everything inside the code block into a new Pine Editor tab.
 
 ```pine
 //@version=6

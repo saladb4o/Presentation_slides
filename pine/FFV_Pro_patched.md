@@ -1,6 +1,6 @@
-# Fundamental Fair Value Pro: full patched script (phases 0–6)
+# Fundamental Fair Value Pro: full patched script
 
-Copy everything inside the code block into the Pine Editor and replace the whole script. It imports two private libraries: publish FFVMC and FFVLib first, then set your username and their version numbers on the two import lines.
+Copy everything inside the code block into the Pine Editor and replace the whole script. It imports two private libraries, FFVLib/15 and FFVMC/5: publish FFVLib (version 15) first (FFVMC/5 is already published), then set your username on the two import lines.
 
 ```pine
 //@version=6
@@ -8,7 +8,7 @@ indicator('Fundamental Fair Value Pro (FF4 + McKinsey/Rev DCF) [Real-Time + Back
 // Companion library pine/ffv_lib.pine (backtester and long texts): publish it as a private
 // library named FFVLib; pine/ffv_mc.pine (Monte Carlo and forecast statistics) as a private
 // library named FFVMC. Then replace YOUR_TV_USERNAME with your TradingView username.
-import YOUR_TV_USERNAME/FFVLib/14 as FL
+import YOUR_TV_USERNAME/FFVLib/15 as FL
 import YOUR_TV_USERNAME/FFVMC/5 as FM
 // =====================================================================
 // ARCHITECTURE: one top-to-bottom pass per bar, on two clocks
@@ -584,7 +584,7 @@ i_iv_projection_period = input.int(10, 'RIM Projection Period (Years)', group = 
 i_dcf_stage1_yrs = input.int(10, 'DCF: High-Growth Years (Stage 1)', group = group_iv, minval = 1, maxval = 15, tooltip = 'Used by every DCF-type model: main DCF, rNPV, AFFO DCF, Unbundled ServeCo, APV and Equity Cash Flow.')
 i_strict_cap = input.bool(true, 'Strict capital structure', group = group_iv, tooltip = "ON: minority interest and preferred equity are claims ahead of common shareholders. They are added to enterprise value and subtracted from every firm-value model (EV/EBITDA, DCF, rNPV, EPV, APV, EVA, RIM, Unbundled, Rule of 40, Acquirer's Multiple); book value is common equity (ex-MI, ex-preferred) and earnings are income attributable to common (net of preferred dividends). Preferred equity = preferred dividends capitalised at the local 10Y + 2%.")
 group_display = 'Display Options'
-i_detail = input.string('None', 'Table detail (below the summary)', options = ['None', 'Models', 'Monte Carlo', 'Street', 'Scorecard', 'Everything'], group = group_display, tooltip = 'The summary card is always shown. Pick one section to add below it.\n\nModels: every relative and intrinsic model.\nMonte Carlo: for each model the Models view lists and the fair value, the share of 1-year draws nearest Bear, Base and Bull, and the share above the price.\nStreet: analyst targets, implied growth and P/E, ratings, confidence parts.\nScorecard: every quality, low-risk and value metric behind the Buffett score.\n\nEverything can run off a short chart.')
+i_detail = input.string('None', 'Table detail (below the summary)', options = ['None', 'Models', 'Monte Carlo', 'Street', 'Scorecard', 'Everything'], group = group_display, tooltip = 'The summary card is always shown. Pick one section to add below it.\n\nModels: every relative and intrinsic model.\nMonte Carlo: for each model the Models view lists and the fair value, the share of 1-year draws nearest Bear, Base and Bull, and the share above the price (FV > price). The fair value row is calibrated to its own past 1-year moves; the model rows are raw draw shares.\nStreet: analyst targets, implied growth and P/E, ratings, confidence parts.\nScorecard: every quality, low-risk and value metric behind the Buffett score.\n\nEverything can run off a short chart.')
 i_tablePos = input.string('top_right', 'Table Position', options = ['top_right', 'middle_right', 'bottom_right'], group = group_display)
 i_textSize = input.string('normal', 'Text Size', options = ['auto', 'tiny', 'small', 'normal', 'large', 'huge'], group = group_display)
 i_theme = input.string('Dark', 'Theme', options = ['Dark', 'Light'], group = group_display)
@@ -1496,13 +1496,14 @@ f_get_cagr_optimized(float src, int bars_back_5y) =>
     src > 0 and p_old > 0 ? math.pow(src / p_old, bpy / float(k)) - 1.0 : na
 int bars_in_5y = math.min(5 * bpy, 4900)
 cagr_mkt = f_get_cagr_optimized(mkt_bench_p, bars_in_5y)
-// >>> SECURITY SLOT 3/5 : size factor
-float small_c = request.security('HOSE:VNSMALLCAP', i_beta_tf, close, ignore_invalid_symbol = true)
+// >>> SECURITY SLOT 3/5 : size factor, sampled like the market leg (last period's close, lookahead on)
+float small_c = request.security('HOSE:VNSMALLCAP', beta_tf, close[1], lookahead = barmerge.lookahead_on, ignore_invalid_symbol = true)
 float small_p = f_locf(small_c)
 max_bars_back(small_p, 5000)
 cagr_small = f_get_cagr_optimized(small_p, bars_in_5y)
-// No small-cap or market CAGR: no size premium (it was a typed 2%).
-float live_smb_spread = cagr_small - cagr_mkt
+// No small-cap or market CAGR: no size premium (it was a typed 2%). VND only: VNSMALLCAP is a
+// Vietnamese index (another market would mix it with its own benchmark).
+float live_smb_spread = curr == 'VND' ? cagr_small - cagr_mkt : na
 live_smb_spread := math.max(math.min(live_smb_spread, 0.05), -0.02)
 // >>> SECURITY SLOTS 4-5/5 : the sector index and VNAllShare, for the Timing row (display only).
 // No VN value/growth proxy exists, so there is no value premium.
@@ -2186,13 +2187,13 @@ if barstate.islast
     for [k, m] in MD
         dcf_k := m.code == 'DCF' ? k : dcf_k
     // Monte Carlo draws run as the last jobs on the same pricing path: every allocated model
-    // and the rows they build on. Their counts wait for the final Bear / Bull below.
+    // (sector picks included) and the rows they build on. Their counts wait for the final Bear / Bull below.
     int J_MC = J_RD + 5 * N_RD
     int nb = MD.size()
     mc_on = mc_q >= i_scen_min_n
     need = array.new_bool(nb, false)
     for [k, m] in MD
-        if m.live and m.grp != Group.comp and (m.on or m.om)
+        if m.live and m.grp != Group.comp and (m.on or m.om or m.pick)
             need.set(k, true)
             if m.src_i >= 0
                 need.set(m.src_i, true)
@@ -2498,7 +2499,7 @@ f_scen_col(float v, float px, bool is_base) =>
     float dev = v > 0 ? px / v - 1 : na
     na(dev) ? color_bg : color.new(math.abs(dev) <= i_scen_fair_band ? color.orange : dev > 0 ? color.red : color.green, is_base ? 15 : 40)
 // One cell of the main table in the chosen text size.
-// Only the Monte Carlo section writes the fifth column (its P > price), so it shows with it alone.
+// Only the Monte Carlo section writes the fifth column (its FV > price), so it shows with it alone.
 f_cell(int col, int row, string txt, color tc, color bg, string tt = '') =>
     T.cell(col, row, txt, text_color = tc, bgcolor = bg, text_size = i_textSize, tooltip = tt)
 // The main table's next free row: every row helper takes it and moves it on.
@@ -2723,9 +2724,9 @@ f_order(string codes) =>
             out.push(k)
     out
 // The rows the Models view lists (relative with a value or no history; intrinsic whenever
-// allocated, Acquirer's and the sector models once they have a value) and their labels.
+// allocated or a sector pick, Acquirer's and the sector models once they have a value) and their labels.
 f_shown(Model m) =>
-    (m.on or m.om) and (m.grp == Group.rel ? m.fv > 0 or na(m.avg) : m.grp != Group.comp and ((m.grp == Group.abs and m.code != 'ACQ') or not na(m.fv)))
+    (m.on or m.om or m.pick) and (m.grp == Group.rel ? m.fv > 0 or na(m.avg) : m.grp != Group.comp and ((m.grp == Group.abs and m.code != 'ACQ') or not na(m.fv)))
 f_rlbl(Model m) =>
     (m.code == 'R40' ? (nz((F_rev_g * 2.0 + D.s.get(Sx.fcf_margin)) * 100) >= 65 ? '🌟 Rule of 65 (Super Stock)' : 'Rule of 40 Value') : m.code == 'ACQ' ? "Acquirer's Mult (" + str.tostring(i_acquirer_mult) + "x EBIT)" : m.name + (m.syn and m.grp == Group.rel ? ' *' : '')) + f_mlbl(m)
 // One Monte Carlo row: the share of draws nearest Bear, Base and Bull, and above the price. The

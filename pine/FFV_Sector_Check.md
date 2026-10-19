@@ -1,6 +1,6 @@
 # FFV Sector Check
 
-One-off check for the Timing row: add it to a daily chart of a Vietnamese stock and send back the table. It imports FFVLib (use the same version as FFV Pro). Copy everything inside the code block into a new Pine Editor tab.
+One-off check for the Timing row: add it to a daily chart of a Vietnamese stock and send back the table. It imports FFVLib/3 (the version FFV Pro imports works too). Copy everything inside the code block into a new Pine Editor tab.
 
 ```pine
 //@version=6

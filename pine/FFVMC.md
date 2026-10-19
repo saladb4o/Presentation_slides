@@ -1,6 +1,6 @@
 # FFVMC: Monte Carlo library
 
-Publish this as a new version of your private library FFVMC (version 2: it now also holds the statistics helpers and the scenario draws moved out of FFV Pro), then republish FFV Pro, which imports FFVMC/2. Copy everything inside the code block over the library in the Pine Editor.
+Your private library FFVMC. FFV Pro imports FFVMC/5, the version already published from this code: republish it only if this file changes (then raise the version on the FFVMC import line of FFV Pro). Copy everything inside the code block over the library in the Pine Editor.
 
 ```pine
 //@version=6
